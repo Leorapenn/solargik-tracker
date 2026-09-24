@@ -27,5 +27,5 @@ Schema, seed, `createProject` service, monday.com importer, read-only `/import` 
 
 - `/projects` (list) and `/projects/[id]` (detail) — browse projects and update `Phase`/`SubStage` status (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via server actions. No gating between phases.
 - Still no authentication — single-user internal tool.
-- `/import` stays read-only for now; turning it into an alias-resolution flow is explicitly out of scope until asked for.
+- `/import` supports resolving a review item into an existing or new `Customer` (creating a `CustomerAlias` from the raw reference so future imports resolve automatically). Resolving deletes the `ImportReviewItem` — the fix takes effect on the next importer run, not retroactively.
 - No styling framework — keep it plain/functional, consistent with Stage 1.
