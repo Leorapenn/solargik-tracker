@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PhaseName {
+  INITIATION
+  DESIGN
+  SUPPLY
+  CONSTRUCTION
+  COMMISSIONING
+  OM
+}
+
+enum Department {
+  FINANCE
+  DESIGN
+  SUPPLY
+  LOGISTICS
+  CONSTRUCTION
+  COMMISSIONING
+}
+
+enum StageStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+model Customer {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  mondayItemId String?         @unique
+  aliases      CustomerAlias[]
+  projects     Project[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model CustomerAlias {
+  id         String   @id @default(cuid())
+  alias      String   @unique
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+}
+
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  mondayItemId  String    @unique
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id])
+  contractValue Decimal?
+  capacityMw    Decimal?
+  country       String?
+  phases        Phase[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Phase {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      PhaseName
+  status    StageStatus @default(NOT_STARTED)
+  order     Int
+  subStages SubStage[]
+
+  @@unique([projectId, name])
+}
+
+model SubStageTemplate {
+  id         String     @id @default(cuid())
+  phase      PhaseName
+  department Department
+  name       String
+  order      Int
+  active     Boolean    @default(true)
+  subStages  SubStage[]
+
+  @@unique([phase, name])
+}
+
+model SubStage {
+  id         String           @id @default(cuid())
+  phaseId    String
+  phase      Phase            @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  templateId String
+  template   SubStageTemplate @relation(fields: [templateId], references: [id])
+  name       String
+  department Department
+  status     StageStatus      @default(NOT_STARTED)
+  order      Int
+}
+
+model ImportReviewItem {
+  id             String   @id @default(cuid())
+  boardId        String
+  mondayItemId   String
+  itemName       String
+  rawCustomerRef String
+  reason         String
+  createdAt      DateTime @default(now())
+
+  @@unique([boardId, mondayItemId])
+}
