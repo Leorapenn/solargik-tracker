@@ -6,6 +6,14 @@ import {
   resolveWithExistingCustomer,
   resolveWithNewCustomer,
 } from "@/server/actions/resolveImportReviewItem";
+import { BORDER, NAVY } from "@/lib/theme";
+
+const fieldStyle = {
+  border: `1px solid ${BORDER}`,
+  borderRadius: 6,
+  padding: "0.35rem 0.5rem",
+  fontSize: "0.85rem",
+};
 
 export function ResolveReviewItem({
   reviewItemId,
@@ -48,7 +56,12 @@ export function ResolveReviewItem({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", minWidth: 260 }}>
       <div style={{ display: "flex", gap: "0.4rem", alignItems: "center", flexWrap: "wrap" }}>
-        <select value={mode} onChange={(e) => setMode(e.target.value as "existing" | "new")} disabled={isPending}>
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "existing" | "new")}
+          disabled={isPending}
+          style={fieldStyle}
+        >
           <option value="existing">Link to existing customer</option>
           <option value="new">Create new customer</option>
         </select>
@@ -58,6 +71,7 @@ export function ResolveReviewItem({
             value={selectedCustomerId}
             onChange={(e) => setSelectedCustomerId(e.target.value)}
             disabled={isPending || customers.length === 0}
+            style={fieldStyle}
           >
             {customers.length === 0 && <option value="">No customers yet</option>}
             {customers.map((customer) => (
@@ -73,13 +87,44 @@ export function ResolveReviewItem({
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             disabled={isPending}
+            style={fieldStyle}
           />
         )}
 
-        <button type="button" onClick={handleResolve} disabled={isPending}>
+        <button
+          type="button"
+          onClick={handleResolve}
+          disabled={isPending}
+          style={{
+            backgroundColor: NAVY,
+            color: "#fff",
+            border: "none",
+            borderRadius: 6,
+            padding: "0.4rem 0.75rem",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            cursor: isPending ? "default" : "pointer",
+            opacity: isPending ? 0.6 : 1,
+          }}
+        >
           Resolve
         </button>
-        <button type="button" onClick={handleDismiss} disabled={isPending}>
+        <button
+          type="button"
+          onClick={handleDismiss}
+          disabled={isPending}
+          style={{
+            backgroundColor: "transparent",
+            color: NAVY,
+            border: `1px solid ${BORDER}`,
+            borderRadius: 6,
+            padding: "0.4rem 0.75rem",
+            fontSize: "0.85rem",
+            fontWeight: 600,
+            cursor: isPending ? "default" : "pointer",
+            opacity: isPending ? 0.6 : 1,
+          }}
+        >
           Dismiss
         </button>
       </div>
