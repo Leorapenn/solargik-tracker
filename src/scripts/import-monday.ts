@@ -172,7 +172,8 @@ async function main() {
     const capacityKwp = controlRow
       ? parseNumeric(getColumnText(controlRow, CONTROL_TABLE_COLUMN_IDS.capacity))
       : null;
-    const capacityMw = capacityKwp !== null ? capacityKwp / 1000 : null;
+    // Round to avoid storing binary floating-point noise (kW precision is plenty for MW figures).
+    const capacityMw = capacityKwp !== null ? Math.round((capacityKwp / 1000) * 1000) / 1000 : null;
     const country = controlRow ? getColumnText(controlRow, CONTROL_TABLE_COLUMN_IDS.country) : null;
 
     const existing = await prisma.project.findUnique({ where: { mondayItemId: projectItem.id } });

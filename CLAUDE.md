@@ -19,7 +19,13 @@ Hard rules for this repo. These apply to everything below, not just the code tha
 - Contract value, capacity, and country are read directly from the Control Table board (`5738893445`), not from mirror columns on Supply Projects — those mirror columns are not readable through the monday API (they return as an unsupported type).
 - Customer name resolution goes through `Customer.name` and `CustomerAlias` only. Anything that doesn't resolve creates an `ImportReviewItem` and must **not** create a new `Customer` row.
 
-## Scope for this session (Stage 1)
+## Stage 1 (done)
 
-- No UI beyond what's needed to verify the import worked (`/import`, read-only).
-- Don't add authentication, editing, or additional pages beyond what's described in the task.
+Schema, seed, `createProject` service, monday.com importer, read-only `/import` review page. No UI beyond that was in scope.
+
+## Stage 2 (current)
+
+- `/projects` (list) and `/projects/[id]` (detail) — browse projects and update `Phase`/`SubStage` status (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via server actions. No gating between phases.
+- Still no authentication — single-user internal tool.
+- `/import` stays read-only for now; turning it into an alias-resolution flow is explicitly out of scope until asked for.
+- No styling framework — keep it plain/functional, consistent with Stage 1.
