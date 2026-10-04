@@ -27,7 +27,7 @@ Schema, seed, `createProject` service, monday.com importer, read-only `/import` 
 
 - Navigation follows the Solargik 360 mockup (`Solargik 360.pdf` in Leora's OneDrive Documents folder): tabs are **Customers → Projects → Phases**. `/` redirects to `/customers`.
   - `/customers`: customer roll-up (project count, phase spread, editable `Customer.importance`, flags derived from aliases and blocked phases). `/customers/[id]`: that customer's projects plus Commercial / Name variants cards.
-  - `/projects` and `/projects/[id]` (breadcrumb Customers › customer › project): browse projects and update `Phase`/`SubStage` status (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via server actions. No gating between phases.
+  - `/projects` and `/projects/[id]` (breadcrumb Customers › customer › project): people edit **sub-stage** status only (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via a server action. **Phase status is derived, never edited by hand**: `derivePhaseStatus` in `src/lib/phaseStatus.ts` (all done → DONE; any blocked → BLOCKED; any started/done → IN_PROGRESS; else NOT_STARTED) and is recomputed in the same locked transaction as every sub-stage change. Phases still don't gate each other. `npm run phases:sync [-- --dry-run]` re-derives every phase after a rule change.
   - `/phases`: read-only matrix of every project × the six phases, with a summary card per phase.
   - `/search?q=`: name search over customers (incl. aliases) and projects, from the top-bar box.
   - `/import` (review queue) is no longer a tab; it is reached from the "Missing customer link" tile / banner on `/customers`.

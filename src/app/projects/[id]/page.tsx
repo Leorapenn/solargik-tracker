@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
-import { updatePhaseStatus, updateSubStageStatus } from "@/server/actions/updateStatus";
+import { updateSubStageStatus } from "@/server/actions/updateStatus";
 import { StatusSelect } from "@/components/StatusSelect";
 import { PhaseCard } from "@/components/PhaseCard";
 import { phaseLabel } from "@/lib/phases";
@@ -65,13 +65,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             key={phase.id}
             name={phase.name}
             status={phase.status}
-            onChange={updatePhaseStatus.bind(null, phase.id)}
+            done={phase.subStages.filter((s) => s.status === "DONE").length}
+            total={phase.subStages.length}
           />
         ))}
       </div>
       <p style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: "0.6rem" }}>
-        Each phase tracks its own status independently — a later phase can be in progress while an earlier
-        one is still open or blocked.
+        Phase status updates automatically from its sub-stages: Done when all are done, Blocked if any is blocked,
+        In progress once any has started. Phases don&apos;t wait for each other, so a later phase can be running
+        while an earlier one is still open.
       </p>
 
       <div

@@ -1,26 +1,23 @@
 import type { PhaseName, StageStatus } from "@prisma/client";
-import { StatusSelect } from "./StatusSelect";
-import { STATUS_COLORS } from "@/lib/statusColors";
+import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import { phaseLabel } from "@/lib/phases";
 import { BORDER, TEXT_MUTED } from "@/lib/theme";
 
-const PROGRESS_FRACTION: Record<StageStatus, number> = {
-  NOT_STARTED: 0,
-  IN_PROGRESS: 0.5,
-  BLOCKED: 0.5,
-  DONE: 1,
-};
-
+// Display only: the status is derived from the phase's sub-stages (see
+// derivePhaseStatus), so it can't be edited here.
 export function PhaseCard({
   name,
   status,
-  onChange,
+  done,
+  total,
 }: {
   name: PhaseName;
   status: StageStatus;
-  onChange: (status: StageStatus) => Promise<void>;
+  done: number;
+  total: number;
 }) {
   const color = STATUS_COLORS[status];
+  const { bg, text } = STATUS_PILL_STYLES[status];
   const highlighted = status === "IN_PROGRESS" || status === "BLOCKED";
 
   return (
@@ -46,9 +43,24 @@ export function PhaseCard({
       >
         {phaseLabel(name)}
       </div>
-      <StatusSelect value={status} onChange={onChange} />
+      <span
+        style={{
+          alignSelf: "flex-start",
+          background: bg,
+          color: text,
+          borderRadius: 999,
+          padding: "0.3rem 0.75rem",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+        }}
+      >
+        {STATUS_LABELS[status]}
+      </span>
       <div style={{ height: 4, borderRadius: 2, background: "#eee", overflow: "hidden" }}>
-        <div style={{ width: `${PROGRESS_FRACTION[status] * 100}%`, height: "100%", background: color }} />
+        <div style={{ width: total ? `${(done / total) * 100}%` : 0, height: "100%", background: color }} />
+      </div>
+      <div style={{ fontSize: "0.75rem", color: TEXT_MUTED }}>
+        {done} of {total} done
       </div>
     </div>
   );

@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "import:monday": "tsx src/scripts/import-monday.ts",
+    "phases:sync": "tsx src/scripts/sync-phase-statuses.ts",
     "monday:inspect-columns": "tsx src/monday/inspectColumns.ts"
   },
   "prisma": {
