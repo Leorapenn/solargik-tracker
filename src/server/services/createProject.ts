@@ -1,3 +1,4 @@
+import type { ProjectLifecycle } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { PHASE_ORDER } from "@/lib/phases";
 
@@ -10,6 +11,9 @@ export type CreateProjectInput = {
   contractValue?: number | null;
   capacityMw?: number | null;
   country?: string | null;
+  lifecycle?: ProjectLifecycle;
+  mondayStage?: string | null;
+  mondayStatus?: string | null;
 };
 
 export async function createProject(input: CreateProjectInput) {
@@ -22,6 +26,9 @@ export async function createProject(input: CreateProjectInput) {
         contractValue: input.contractValue ?? null,
         capacityMw: input.capacityMw ?? null,
         country: input.country ?? null,
+        lifecycle: input.lifecycle ?? "ACTIVE",
+        mondayStage: input.mondayStage ?? null,
+        mondayStatus: input.mondayStatus ?? null,
       },
     });
 

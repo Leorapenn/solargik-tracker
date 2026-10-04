@@ -7,6 +7,8 @@ import { updateSubStageStatus } from "@/server/actions/updateStatus";
 import { StatusSelect } from "@/components/StatusSelect";
 import { PhaseCard } from "@/components/PhaseCard";
 import { phaseLabel } from "@/lib/phases";
+import { LIFECYCLE_NOTES, LIFECYCLE_STYLES } from "@/lib/lifecycle";
+import { LifecycleBadge } from "@/components/LifecycleBadge";
 import { BORDER, NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +47,43 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         › {project.name}
       </div>
 
-      <h1 style={{ ...pageTitleStyle, marginTop: -8 }}>{project.name}</h1>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: -8 }}>
+        <h1
+          style={{
+            ...pageTitleStyle,
+            textDecoration: project.lifecycle === "CANCELLED" ? "line-through" : "none",
+          }}
+        >
+          {project.name}
+        </h1>
+        <LifecycleBadge lifecycle={project.lifecycle} stage={project.mondayStage} status={project.mondayStatus} />
+      </div>
+
+      {LIFECYCLE_NOTES[project.lifecycle] && (
+        <div
+          style={{
+            background: LIFECYCLE_STYLES[project.lifecycle].bg,
+            color: LIFECYCLE_STYLES[project.lifecycle].text,
+            borderRadius: 10,
+            padding: "12px 18px",
+            fontSize: 14,
+            fontWeight: 600,
+            marginTop: -4,
+          }}
+        >
+          {LIFECYCLE_NOTES[project.lifecycle]}
+          {(project.mondayStage || project.mondayStatus) && (
+            <span style={{ fontWeight: 400 }}>
+              {" "}
+              (monday.com — {[project.mondayStage && `Stage: ${project.mondayStage}`, project.mondayStatus && `Status: ${project.mondayStatus}`]
+                .filter(Boolean)
+                .join(" · ")}
+              )
+            </span>
+          )}
+        </div>
+      )}
+
       <p style={{ color: TEXT_MUTED, marginTop: -12 }}>
         Customer <strong style={{ color: NAVY }}>{project.customer.name}</strong> · {project.country ?? "—"} ·{" "}
         {project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"} MW ·{" "}

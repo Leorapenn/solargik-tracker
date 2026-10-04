@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { phaseSpread } from "@/lib/phaseSpread";
 import { SpreadBar } from "@/components/SpreadBar";
+import { LifecycleBadge } from "@/components/LifecycleBadge";
 import {
   NAVY,
   ORANGE,
@@ -74,7 +75,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
-                  {["Project", "Phase spread", "Capacity (MW)", "Contract value", ""].map((heading) => (
+                  {["Project", "Status", "Phase spread", "Capacity (MW)", "Contract value", ""].map((heading) => (
                     <th key={heading} style={headCell}>
                       {heading}
                     </th>
@@ -83,11 +84,24 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
               </thead>
               <tbody>
                 {customer.projects.map((project) => (
-                  <tr key={project.id} style={{ borderBottom: `1px solid ${ROW_DIVIDER}` }}>
+                  <tr
+                    key={project.id}
+                    style={{ borderBottom: `1px solid ${ROW_DIVIDER}`, opacity: project.lifecycle === "CANCELLED" ? 0.6 : 1 }}
+                  >
                     <td style={{ ...bodyCell, fontWeight: 700 }}>
-                      <Link href={`/projects/${project.id}`} style={{ color: NAVY }}>
+                      <Link
+                        href={`/projects/${project.id}`}
+                        style={{ color: NAVY, textDecoration: project.lifecycle === "CANCELLED" ? "line-through" : "none" }}
+                      >
                         {project.name}
                       </Link>
+                    </td>
+                    <td style={bodyCell}>
+                      <LifecycleBadge
+                        lifecycle={project.lifecycle}
+                        stage={project.mondayStage}
+                        status={project.mondayStatus}
+                      />
                     </td>
                     <td style={{ ...bodyCell, width: 220 }}>
                       <SpreadBar segments={phaseSpread([project])} />
@@ -105,7 +119,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                 ))}
                 {customer.projects.length === 0 && (
                   <tr>
-                    <td colSpan={5} style={{ ...bodyCell, color: TEXT_MUTED }}>
+                    <td colSpan={6} style={{ ...bodyCell, color: TEXT_MUTED }}>
                       No projects imported for this customer yet.
                     </td>
                   </tr>

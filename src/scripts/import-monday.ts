@@ -19,6 +19,7 @@ import {
   type MondayItem,
 } from "@/monday/client";
 import { resolveCustomer } from "@/monday/resolveCustomer";
+import { deriveLifecycle } from "@/lib/lifecycle";
 
 // This CLI entry point runs standalone via tsx, so unlike Next.js it doesn't
 // load .env automatically — do it explicitly.
@@ -36,6 +37,11 @@ const BOARD_IDS = {
 
 // Confirmed against the real board (see CLAUDE.md).
 const PROJECT_CUSTOMER_LINK_COLUMN_ID = "board_relation2__1";
+
+// Control Table "STAGE" and "Status" status columns, confirmed via monday:inspect-columns.
+// They drive the project lifecycle (Pre-NTP / On hold / Suspended / Cancelled).
+const CONTROL_TABLE_STAGE_COLUMN_ID = "stage";
+const CONTROL_TABLE_STATUS_COLUMN_ID = "status";
 
 // NOT confirmed — these must be filled in by running:
 //   npm run monday:inspect-columns -- 5738893445
@@ -127,6 +133,8 @@ async function main() {
       CONTROL_TABLE_COLUMN_IDS.contractValue,
       CONTROL_TABLE_COLUMN_IDS.capacity,
       CONTROL_TABLE_COLUMN_IDS.country,
+      CONTROL_TABLE_STAGE_COLUMN_ID,
+      CONTROL_TABLE_STATUS_COLUMN_ID,
     ]);
     for (const row of controlTableItems) {
       const linkedProjectIds = getLinkedItemIds(row, CONTROL_TABLE_COLUMN_IDS.projectLink);
@@ -175,6 +183,9 @@ async function main() {
     // Round to avoid storing binary floating-point noise (kW precision is plenty for MW figures).
     const capacityMw = capacityKwp !== null ? Math.round((capacityKwp / 1000) * 1000) / 1000 : null;
     const country = controlRow ? getColumnText(controlRow, CONTROL_TABLE_COLUMN_IDS.country) : null;
+    const mondayStage = controlRow ? getColumnText(controlRow, CONTROL_TABLE_STAGE_COLUMN_ID) : null;
+    const mondayStatus = controlRow ? getColumnText(controlRow, CONTROL_TABLE_STATUS_COLUMN_ID) : null;
+    const lifecycle = deriveLifecycle(mondayStage, mondayStatus);
 
     const existing = await prisma.project.findUnique({ where: { mondayItemId: projectItem.id } });
 
@@ -186,6 +197,9 @@ async function main() {
         contractValue,
         capacityMw,
         country,
+        lifecycle,
+        mondayStage,
+        mondayStatus,
       });
       summary.imported += 1;
       console.log(`  [imported] ${projectItem.name}`);
@@ -197,7 +211,10 @@ async function main() {
       existing.customerId !== resolution.customerId ||
       !numericValuesEqual(existing.contractValue, contractValue) ||
       !numericValuesEqual(existing.capacityMw, capacityMw) ||
-      (existing.country ?? null) !== country;
+      (existing.country ?? null) !== country ||
+      existing.lifecycle !== lifecycle ||
+      (existing.mondayStage ?? null) !== mondayStage ||
+      (existing.mondayStatus ?? null) !== mondayStatus;
 
     if (!changed) {
       summary.skipped += 1;
@@ -213,6 +230,9 @@ async function main() {
         contractValue,
         capacityMw,
         country,
+        lifecycle,
+        mondayStage,
+        mondayStatus,
       },
     });
     summary.updated += 1;
