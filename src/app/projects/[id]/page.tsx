@@ -37,12 +37,8 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   return (
     <main style={pageStyle}>
       <div style={{ fontSize: 13, color: TEXT_MUTED }}>
-        <Link href="/customers" style={{ color: NAVY, fontWeight: 600 }}>
-          Customers
-        </Link>{" "}
-        ›{" "}
-        <Link href={`/customers/${project.customer.id}`} style={{ color: NAVY, fontWeight: 600 }}>
-          {project.customer.name}
+        <Link href="/projects" style={{ color: NAVY, fontWeight: 600 }}>
+          Projects
         </Link>{" "}
         › {project.name}
       </div>
@@ -85,7 +81,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       )}
 
       <p style={{ color: TEXT_MUTED, marginTop: -12 }}>
-        Customer <strong style={{ color: NAVY }}>{project.customer.name}</strong> · {project.country ?? "—"} ·{" "}
+        Customer{" "}
+        <Link href={`/customers/${project.customer.id}`} style={{ color: NAVY, fontWeight: 700 }}>
+          {project.customer.name}
+        </Link>{" "}
+        · {project.country ?? "—"} ·{" "}
         {project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"} MW ·{" "}
         {project.contractValue ? `$${Number(project.contractValue).toLocaleString()}` : "—"}
       </p>
