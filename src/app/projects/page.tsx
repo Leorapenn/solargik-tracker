@@ -31,17 +31,17 @@ export default async function ProjectsPage() {
         <div
           style={{
             marginTop: "1.25rem",
-            background: "#FEF6E6",
-            border: "1px solid #F3DFA8",
+            background: GRAY_LIGHT,
             borderRadius: 8,
             padding: "0.85rem 1.1rem",
-            color: "#7A5B00",
+            color: TEXT_MUTED,
             fontSize: "0.9rem",
           }}
         >
-          <strong>{missingDataCount}</strong> of <strong>{projects.length}</strong> projects are missing
-          capacity, country, or contract value — usually because the Control Table doesn&apos;t have a
-          matching row yet.
+          <strong style={{ color: NAVY }}>{missingDataCount}</strong> of{" "}
+          <strong style={{ color: NAVY }}>{projects.length}</strong> projects don&apos;t have capacity,
+          country, or contract value yet — expected for projects still at the pre-contract stage, since
+          that data isn&apos;t set in the Control Table until contract signing.
         </div>
       )}
 
