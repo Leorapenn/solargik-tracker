@@ -42,6 +42,7 @@ export function StatusSelect({
           "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23000' stroke-opacity='0.4' fill='none' stroke-width='1.5'/%3E%3C/svg%3E\")",
         backgroundRepeat: "no-repeat",
         backgroundPosition: "right 0.6rem center",
+        backgroundSize: "0.55rem 0.35rem",
       }}
     >
       {STATUS_OPTIONS.map((status) => (
