@@ -41,6 +41,10 @@ const PROJECT_CUSTOMER_LINK_COLUMN_ID = "board_relation2__1";
 // Control Table "STAGE" and "Status" status columns, confirmed via monday:inspect-columns.
 // They drive the project lifecycle (Pre-NTP / On hold / Suspended / Cancelled).
 const CONTROL_TABLE_STAGE_COLUMN_ID = "stage";
+
+// Supply Projects columns that link to Control Table rows (both point at board 5738893445).
+// Some projects (e.g. 274) are linked only from this side, not from the Control Table's own link column.
+const SUPPLY_TO_CONTROL_TABLE_LINK_COLUMN_IDS = ["connect_boards6__1", "board_relation_mkws6ea9"];
 const CONTROL_TABLE_STATUS_COLUMN_ID = "status";
 
 // NOT confirmed — these must be filled in by running:
@@ -114,7 +118,10 @@ async function main() {
   }
 
   console.log(`Fetching Supply Projects board (${BOARD_IDS.supplyProjects})...`);
-  const projectItems = await fetchAllBoardItems(BOARD_IDS.supplyProjects, [PROJECT_CUSTOMER_LINK_COLUMN_ID]);
+  const projectItems = await fetchAllBoardItems(BOARD_IDS.supplyProjects, [
+    PROJECT_CUSTOMER_LINK_COLUMN_ID,
+    ...SUPPLY_TO_CONTROL_TABLE_LINK_COLUMN_IDS,
+  ]);
 
   const matchedCustomerMondayIds = new Set(matchedCustomerItems.map((c) => c.id));
   const projectsToImport = projectItems.filter((item) => {
@@ -126,6 +133,7 @@ async function main() {
   console.log(`Matched ${projectsToImport.length} project(s) on the Supply Projects board.\n`);
 
   const controlTableByProjectId = new Map<string, MondayItem>();
+  const controlTableById = new Map<string, MondayItem>();
   if (controlTableConfigured && projectsToImport.length > 0) {
     console.log(`Fetching Control Table board (${BOARD_IDS.controlTable})...`);
     const controlTableItems = await fetchAllBoardItems(BOARD_IDS.controlTable, [
@@ -137,6 +145,7 @@ async function main() {
       CONTROL_TABLE_STATUS_COLUMN_ID,
     ]);
     for (const row of controlTableItems) {
+      controlTableById.set(row.id, row);
       const linkedProjectIds = getLinkedItemIds(row, CONTROL_TABLE_COLUMN_IDS.projectLink);
       for (const projectId of linkedProjectIds) {
         controlTableByProjectId.set(projectId, row);
@@ -172,7 +181,20 @@ async function main() {
       continue;
     }
 
-    const controlRow = controlTableByProjectId.get(projectItem.id);
+    // The Control Table link can be set from either side in monday.com. Prefer the
+    // Control Table's own link, and fall back to the Supply Projects side.
+    const controlRowFromControlSide = controlTableByProjectId.get(projectItem.id);
+    const controlRowFromSupplySide = SUPPLY_TO_CONTROL_TABLE_LINK_COLUMN_IDS.flatMap((columnId) =>
+      getLinkedItemIds(projectItem, columnId),
+    )
+      .map((id) => controlTableById.get(id))
+      .find((row): row is MondayItem => row !== undefined);
+    if (controlRowFromControlSide && controlRowFromSupplySide && controlRowFromControlSide.id !== controlRowFromSupplySide.id) {
+      console.warn(
+        `  [warn] ${projectItem.name}: Control Table rows disagree ("${controlRowFromControlSide.name}" vs "${controlRowFromSupplySide.name}") — using the first.`,
+      );
+    }
+    const controlRow = controlRowFromControlSide ?? controlRowFromSupplySide;
     const contractValue = controlRow
       ? parseNumeric(getColumnText(controlRow, CONTROL_TABLE_COLUMN_IDS.contractValue))
       : null;

@@ -9,8 +9,9 @@ export function deriveLifecycle(stage: string | null | undefined, status: string
   const st = norm(status);
 
   if (st === "cancelled") return "CANCELLED";
-  if (st === "stuck/on hold" || s === "7 hold") return "ON_HOLD";
+  // A Suspended stage wins over Status "Stuck/On Hold" (the two usually appear together).
   if (s === "suspended") return "SUSPENDED";
+  if (st === "stuck/on hold" || s === "7 hold") return "ON_HOLD";
   if (s === "0 pre ntp & pre ap") return "PRE_NTP";
   return "ACTIVE";
 }

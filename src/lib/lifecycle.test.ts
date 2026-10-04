@@ -28,8 +28,13 @@ describe("deriveLifecycle", () => {
     expect(deriveLifecycle("7 Hold", "Cancelled")).toBe("CANCELLED");
   });
 
-  it("gives on hold precedence over suspended and pre-NTP", () => {
-    expect(deriveLifecycle("Suspended", "Stuck/On Hold")).toBe("ON_HOLD");
+  it("marks 274-PRJ (STAGE 'Suspended', Status 'Stuck/On Hold') as SUSPENDED", () => {
+    expect(deriveLifecycle("Suspended", "Stuck/On Hold")).toBe("SUSPENDED");
+  });
+
+  it("gives suspended precedence over on hold, and on hold precedence over pre-NTP", () => {
+    expect(deriveLifecycle("Suspended", "Construction")).toBe("SUSPENDED");
+    expect(deriveLifecycle("7 Hold", "Stuck/On Hold")).toBe("ON_HOLD");
     expect(deriveLifecycle("0 Pre NTP & Pre AP", "Stuck/On Hold")).toBe("ON_HOLD");
   });
 
