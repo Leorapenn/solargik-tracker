@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { ResolveReviewItem } from "@/components/ResolveReviewItem";
-import { BORDER, NAVY, PAGE_BG, TEXT_MUTED } from "@/lib/theme";
+import { BORDER, NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +17,15 @@ export default async function ImportReviewPage() {
   ]);
 
   return (
-    <main style={{ padding: "2rem", maxWidth: 1200, margin: "0 auto", background: PAGE_BG, flex: 1 }}>
-      <h1 style={{ fontSize: "1.75rem", fontWeight: 700, color: NAVY }}>Import Review</h1>
-      <p style={{ color: TEXT_MUTED, marginTop: "0.25rem", maxWidth: 760 }}>
+    <main style={pageStyle}>
+      <div style={{ fontSize: 13, color: TEXT_MUTED }}>
+        <Link href="/customers" style={{ color: NAVY, fontWeight: 600 }}>
+          Customers
+        </Link>{" "}
+        › Import review
+      </div>
+      <h1 style={{ ...pageTitleStyle, marginTop: -8 }}>Import Review</h1>
+      <p style={{ color: TEXT_MUTED, marginTop: -12, maxWidth: 760 }}>
         Items from the monday.com importer whose customer could not be resolved via{" "}
         <code>Customer.name</code> or <code>CustomerAlias</code>. No customer or project was created for
         these. Resolving a row creates the alias/customer but does not retroactively import the project —

@@ -1,6 +1,7 @@
 import type { PhaseName, StageStatus } from "@prisma/client";
 import { StatusSelect } from "./StatusSelect";
 import { STATUS_COLORS } from "@/lib/statusColors";
+import { phaseLabel } from "@/lib/phases";
 import { BORDER, TEXT_MUTED } from "@/lib/theme";
 
 const PROGRESS_FRACTION: Record<StageStatus, number> = {
@@ -11,12 +12,10 @@ const PROGRESS_FRACTION: Record<StageStatus, number> = {
 };
 
 export function PhaseCard({
-  index,
   name,
   status,
   onChange,
 }: {
-  index: number;
   name: PhaseName;
   status: StageStatus;
   onChange: (status: StageStatus) => Promise<void>;
@@ -45,7 +44,7 @@ export function PhaseCard({
           textTransform: "uppercase",
         }}
       >
-        {String(index).padStart(2, "0")} {name.replace("_", " ")}
+        {phaseLabel(name)}
       </div>
       <StatusSelect value={status} onChange={onChange} />
       <div style={{ height: 4, borderRadius: 2, background: "#eee", overflow: "hidden" }}>

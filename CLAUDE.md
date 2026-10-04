@@ -25,7 +25,13 @@ Schema, seed, `createProject` service, monday.com importer, read-only `/import` 
 
 ## Stage 2 (current)
 
-- `/projects` (list) and `/projects/[id]` (detail) — browse projects and update `Phase`/`SubStage` status (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via server actions. No gating between phases.
+- Navigation follows the Solargik 360 mockup (`Solargik 360.pdf` in Leora's OneDrive Documents folder): tabs are **Customers → Projects → Phases**. `/` redirects to `/customers`.
+  - `/customers`: customer roll-up (project count, phase spread, editable `Customer.importance`, flags derived from aliases and blocked phases). `/customers/[id]`: that customer's projects plus Commercial / Name variants cards.
+  - `/projects` and `/projects/[id]` (breadcrumb Customers › customer › project): browse projects and update `Phase`/`SubStage` status (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via server actions. No gating between phases.
+  - `/phases`: read-only matrix of every project × the six phases, with a summary card per phase.
+  - `/search?q=`: name search over customers (incl. aliases) and projects, from the top-bar box.
+  - `/import` (review queue) is no longer a tab; it is reached from the "Missing customer link" tile / banner on `/customers`.
+- Mockup items intentionally NOT built because the data doesn't exist: Payments tab, invoicing/"Ready to invoice", standing decisions, open commitments, last-sync time.
 - Access is gated by one shared password (`APP_PASSWORD`, min 10 chars): `src/proxy.ts` redirects unauthenticated requests to `/login`, and every page and Server Action also re-checks the session (`src/lib/auth.ts`). The app is deployed publicly on Vercel, so never add a route, page or action without these checks. If `APP_PASSWORD` is missing the app fails closed.
 - `/import` supports resolving a review item into an existing or new `Customer` (creating a `CustomerAlias` from the raw reference so future imports resolve automatically). Resolving deletes the `ImportReviewItem` — the fix takes effect on the next importer run, not retroactively.
 - No styling framework — keep it plain/functional, consistent with Stage 1.

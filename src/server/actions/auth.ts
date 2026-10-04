@@ -14,7 +14,7 @@ export type LoginState = { error?: string };
 
 // Only same-site relative paths, so the login redirect can't be used to bounce users elsewhere.
 function safeNextPath(value: string): string {
-  return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/projects";
+  return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/\\") ? value : "/customers";
 }
 
 export async function login(_previous: LoginState, formData: FormData): Promise<LoginState> {

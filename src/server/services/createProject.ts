@@ -1,16 +1,7 @@
-import type { PhaseName } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { PHASE_ORDER } from "@/lib/phases";
 
-// Fixed order the six phases are created in for every project, regardless
-// of which phases end up with active sub-stage templates.
-export const PHASE_ORDER: PhaseName[] = [
-  "INITIATION",
-  "DESIGN",
-  "SUPPLY",
-  "CONSTRUCTION",
-  "COMMISSIONING",
-  "OM",
-];
+export { PHASE_ORDER };
 
 export type CreateProjectInput = {
   name: string;
