@@ -26,6 +26,6 @@ Schema, seed, `createProject` service, monday.com importer, read-only `/import` 
 ## Stage 2 (current)
 
 - `/projects` (list) and `/projects/[id]` (detail) — browse projects and update `Phase`/`SubStage` status (`NOT_STARTED/IN_PROGRESS/BLOCKED/DONE`) via server actions. No gating between phases.
-- Still no authentication — single-user internal tool.
+- Access is gated by one shared password (`APP_PASSWORD`, min 10 chars): `src/proxy.ts` redirects unauthenticated requests to `/login`, and every page and Server Action also re-checks the session (`src/lib/auth.ts`). The app is deployed publicly on Vercel, so never add a route, page or action without these checks. If `APP_PASSWORD` is missing the app fails closed.
 - `/import` supports resolving a review item into an existing or new `Customer` (creating a `CustomerAlias` from the raw reference so future imports resolve automatically). Resolving deletes the `ImportReviewItem` — the fix takes effect on the next importer run, not retroactively.
 - No styling framework — keep it plain/functional, consistent with Stage 1.

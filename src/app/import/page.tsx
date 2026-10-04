@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { prisma } from "@/lib/prisma";
+import { requirePageAuth } from "@/lib/auth";
 import { ResolveReviewItem } from "@/components/ResolveReviewItem";
 import { BORDER, NAVY, PAGE_BG, TEXT_MUTED } from "@/lib/theme";
 
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 const NO_CUSTOMER_LINKED = "(no customer linked)";
 
 export default async function ImportReviewPage() {
+  await requirePageAuth();
   const [items, customers] = await Promise.all([
     prisma.importReviewItem.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),

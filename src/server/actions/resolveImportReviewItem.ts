@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { requireActionAuth } from "@/lib/auth";
 
 // Resolving a review item only affects future importer runs — it does not
 // retroactively create the project that was skipped when the item was
@@ -17,6 +18,7 @@ async function addAliasIfNew(alias: string, customerId: string) {
 }
 
 export async function resolveWithExistingCustomer(reviewItemId: string, customerId: string) {
+  await requireActionAuth();
   const item = await prisma.importReviewItem.findUniqueOrThrow({ where: { id: reviewItemId } });
   await addAliasIfNew(item.rawCustomerRef, customerId);
   await prisma.importReviewItem.delete({ where: { id: reviewItemId } });
@@ -24,6 +26,7 @@ export async function resolveWithExistingCustomer(reviewItemId: string, customer
 }
 
 export async function resolveWithNewCustomer(reviewItemId: string, customerName: string) {
+  await requireActionAuth();
   const trimmed = customerName.trim();
   if (!trimmed) throw new Error("Customer name is required.");
 
@@ -35,6 +38,7 @@ export async function resolveWithNewCustomer(reviewItemId: string, customerName:
 }
 
 export async function dismissReviewItem(reviewItemId: string) {
+  await requireActionAuth();
   await prisma.importReviewItem.delete({ where: { id: reviewItemId } });
   revalidatePath("/import");
 }

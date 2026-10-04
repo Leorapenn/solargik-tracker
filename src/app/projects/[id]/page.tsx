@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requirePageAuth } from "@/lib/auth";
 import { updatePhaseStatus, updateSubStageStatus } from "@/server/actions/updateStatus";
 import { StatusSelect } from "@/components/StatusSelect";
 import { PhaseCard } from "@/components/PhaseCard";
@@ -10,6 +11,7 @@ import { BORDER, NAVY, PAGE_BG, TEXT_MUTED } from "@/lib/theme";
 export const dynamic = "force-dynamic";
 
 export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePageAuth();
   const { id } = await params;
 
   const project = await prisma.project.findUnique({

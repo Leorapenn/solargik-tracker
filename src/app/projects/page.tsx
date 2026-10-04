@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requirePageAuth } from "@/lib/auth";
 import { PHASE_ORDER } from "@/server/services/createProject";
 import { PhaseSpreadBar } from "@/components/PhaseSpreadBar";
 import { StatCard } from "@/components/StatCard";
@@ -9,6 +10,7 @@ import { BORDER, GRAY_LIGHT, NAVY, PAGE_BG, TEXT_MUTED } from "@/lib/theme";
 export const dynamic = "force-dynamic";
 
 export default async function ProjectsPage() {
+  await requirePageAuth();
   const [projects, customerCount, reviewCount, blockedPhaseCount] = await Promise.all([
     prisma.project.findMany({ include: { customer: true, phases: true }, orderBy: { name: "asc" } }),
     prisma.customer.count(),

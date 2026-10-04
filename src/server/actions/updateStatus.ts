@@ -3,10 +3,12 @@
 import { revalidatePath } from "next/cache";
 import type { StageStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireActionAuth } from "@/lib/auth";
 
 // Deliberately no gating here: a later phase can move to IN_PROGRESS while an
 // earlier one is still IN_PROGRESS or BLOCKED (see createProject.test.ts).
 export async function updatePhaseStatus(phaseId: string, status: StageStatus) {
+  await requireActionAuth();
   const phase = await prisma.phase.update({
     where: { id: phaseId },
     data: { status },
@@ -17,6 +19,7 @@ export async function updatePhaseStatus(phaseId: string, status: StageStatus) {
 }
 
 export async function updateSubStageStatus(subStageId: string, status: StageStatus) {
+  await requireActionAuth();
   const subStage = await prisma.subStage.update({
     where: { id: subStageId },
     data: { status },
