@@ -10,6 +10,7 @@ import { SpreadBar } from "@/components/SpreadBar";
 import { StatCard } from "@/components/StatCard";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
+import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import {
   GRAY_LIGHT,
@@ -25,6 +26,16 @@ import {
 export const dynamic = "force-dynamic";
 
 type Params = Record<string, string | string[] | undefined>;
+
+const SORT_LABELS = {
+  name: "Project",
+  status: "Status",
+  customer: "Customer",
+  country: "Country",
+  capacity: "Capacity",
+  contract: "Contract value",
+  spread: "Phase spread",
+};
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
@@ -159,8 +170,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             </tbody>
           </table>
         </div>
-        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED }}>
-          Showing {projects.length} of {all.length} projects
+        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, display: "flex", flexDirection: "column", gap: 8 }}>
+          <span>
+            Showing {projects.length} of {all.length} projects
+          </span>
+          <SortSummary basePath="/projects" params={params} current={sort} labels={SORT_LABELS} />
         </div>
       </div>
     </main>

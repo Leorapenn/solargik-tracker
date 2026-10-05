@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { deleteContact, saveContact } from "@/server/actions/edit";
 import type { ContactPerson } from "@/lib/contacts";
 import { NAVY, ORANGE, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
@@ -88,20 +87,6 @@ export function ContactsCard({ customerId, people }: { customerId: string; peopl
                     <a href={`mailto:${person.email}`} style={{ fontSize: 13.5, color: NAVY, wordBreak: "break-all" }}>
                       {person.email}
                     </a>
-                  )}
-                  {person.projects.length > 0 && (
-                    <div style={{ fontSize: 12, color: TEXT_MUTED, marginTop: 3 }}>
-                      On {person.projects.length} project{person.projects.length === 1 ? "" : "s"}:{" "}
-                      {person.projects.slice(0, 3).map((p, i) => (
-                        <span key={p.id}>
-                          {i > 0 && ", "}
-                          <Link href={`/projects/${p.id}`} style={{ color: NAVY }}>
-                            {p.name}
-                          </Link>
-                        </span>
-                      ))}
-                      {person.projects.length > 3 && ` and ${person.projects.length - 3} more`}
-                    </div>
                   )}
                 </div>
                 {editMode && (

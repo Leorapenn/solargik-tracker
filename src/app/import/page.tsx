@@ -3,6 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { ResolveReviewItem } from "@/components/ResolveReviewItem";
+import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { parseSort, sortRows } from "@/lib/sort";
 import { BORDER, NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
@@ -93,6 +94,14 @@ export default async function ImportReviewPage({ searchParams }: { searchParams:
                 ))}
               </tbody>
             </table>
+          </div>
+          <div style={{ padding: "0.65rem 1rem", borderTop: `1px solid ${BORDER}` }}>
+            <SortSummary
+              basePath="/import"
+              params={params}
+              current={sort}
+              labels={{ item: "Item", ref: "Raw customer reference", reason: "Reason", flagged: "Flagged" }}
+            />
           </div>
         </div>
       )}

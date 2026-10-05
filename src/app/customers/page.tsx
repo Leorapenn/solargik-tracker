@@ -7,6 +7,7 @@ import { parseSort, sortRows } from "@/lib/sort";
 import { StatCard } from "@/components/StatCard";
 import { SpreadBar } from "@/components/SpreadBar";
 import { SortLink } from "@/components/SortTh";
+import { SortSummary } from "@/components/SortSummary";
 import { ImportanceSelect } from "@/components/ImportanceSelect";
 import { updateCustomerImportance } from "@/server/actions/updateCustomerImportance";
 import {
@@ -221,6 +222,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             Phase spread: <Swatch color={NAVY} /> all done · <Swatch color="#2F4C8F" /> in progress ·{" "}
             <Swatch color={ORANGE} /> blocked · <Swatch color="#E4E6EC" /> not started
           </span>
+          <SortSummary
+            basePath="/customers"
+            params={params}
+            current={sort}
+            labels={{ customer: "Customer", projects: "Projects", spread: "Phase spread", importance: "Importance", flags: "Flags" }}
+          />
         </div>
       </div>
     </main>

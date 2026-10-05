@@ -6,6 +6,8 @@ export type RollupItem = {
   targetDate: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
+  // dates marked N/A ("targetDate" | "startedAt" | "completedAt"): they never count as missing
+  naDates?: string[];
 };
 
 export type PhaseRollup = {
@@ -39,7 +41,7 @@ export function rollupPhase(items: RollupItem[], today: Date): PhaseRollup {
     completedAt: allDone ? max(present(done.map((i) => i.completedAt))) : null,
     targetDate: max(present(items.map((i) => i.targetDate))),
     owners: [...new Set(items.map((i) => i.ownerName).filter((n): n is string => !!n))].sort(),
-    doneWithoutDate: done.filter((i) => !i.completedAt).length,
+    doneWithoutDate: done.filter((i) => !i.completedAt && !i.naDates?.includes("completedAt")).length,
     overdueSince: min(
       present(items.filter((i) => i.status !== "DONE" && i.targetDate && i.targetDate < today).map((i) => i.targetDate)),
     ),

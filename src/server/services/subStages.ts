@@ -5,25 +5,33 @@ import { UserError } from "@/lib/errors";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import { applyStatusToDates } from "@/lib/subStageDates";
 
+// "N/A" means the date doesn't apply to this item (e.g. Contract Signing has no target date), as
+// opposed to simply not being set yet. An N/A date stays empty and is never filled in automatically.
+export const NOT_APPLICABLE = "NA" as const;
+export type DatePatch = Date | null | typeof NOT_APPLICABLE;
+export type DateField = "targetDate" | "startedAt" | "completedAt";
+
 export type SubStagePatch = {
   status?: StageStatus;
   ownerId?: string | null;
-  targetDate?: Date | null;
-  startedAt?: Date | null;
-  completedAt?: Date | null;
+  targetDate?: DatePatch;
+  startedAt?: DatePatch;
+  completedAt?: DatePatch;
 };
 
 export type PatchResult = {
   updated: number;
-  // Items a completed-date was not applied to because they are not Done.
+  // Items a completed date was not applied to because they are not Done.
   skippedCompletedDate: number;
   projectIds: string[];
 };
 
 const sameDay = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === (b?.getTime() ?? null);
+const sameSet = (a: string[], b: string[]) => [...a].sort().join() === [...b].sort().join();
 
 // Applies a change to any number of sub-stages inside the caller's transaction:
 //  - records start/completed dates automatically when the status changes (see applyStatusToDates),
+//    except for dates marked N/A,
 //  - writes a StatusEvent per status change,
 //  - re-derives each affected phase's status from its sub-stages.
 // The affected phase rows are locked first (in a fixed order) so concurrent edits can't leave a phase stale.
@@ -52,8 +60,10 @@ export async function patchSubStages(
     select: {
       id: true,
       status: true,
+      targetDate: true,
       startedAt: true,
       completedAt: true,
+      naDates: true,
       phase: { select: { projectId: true } },
     },
   });
@@ -65,26 +75,46 @@ export async function patchSubStages(
 
   for (const item of items) {
     const data: Prisma.SubStageUncheckedUpdateManyInput = {};
-    let { startedAt, completedAt } = item;
+    const dates: Record<DateField, Date | null> = {
+      targetDate: item.targetDate,
+      startedAt: item.startedAt,
+      completedAt: item.completedAt,
+    };
+    const na = new Set(item.naDates);
     let status = item.status;
 
     if (patch.status !== undefined && patch.status !== item.status) {
       status = patch.status;
       data.status = status;
-      ({ startedAt, completedAt } = applyStatusToDates({ startedAt, completedAt }, status, today));
+      const auto = applyStatusToDates({ startedAt: dates.startedAt, completedAt: dates.completedAt }, status, today);
+      dates.startedAt = na.has("startedAt") ? null : auto.startedAt;
+      dates.completedAt = na.has("completedAt") ? null : auto.completedAt;
       events.push({ subStageId: item.id, fromStatus: item.status, toStatus: status, source });
     }
 
-    if (patch.startedAt !== undefined) startedAt = patch.startedAt;
-    if (patch.completedAt !== undefined) {
-      if (status === "DONE" || patch.completedAt === null) completedAt = patch.completedAt;
-      else skippedCompletedDate += 1;
+    for (const field of ["targetDate", "startedAt", "completedAt"] as const) {
+      const value = patch[field];
+      if (value === undefined) continue;
+      // a completed date only makes sense for a Done item (clearing is always fine)
+      if (field === "completedAt" && value !== null && status !== "DONE") {
+        skippedCompletedDate += 1;
+        continue;
+      }
+      if (value === NOT_APPLICABLE) {
+        na.add(field);
+        dates[field] = null;
+      } else {
+        na.delete(field);
+        dates[field] = value;
+      }
     }
 
-    if (!sameDay(startedAt, item.startedAt)) data.startedAt = startedAt;
-    if (!sameDay(completedAt, item.completedAt)) data.completedAt = completedAt;
+    for (const field of ["targetDate", "startedAt", "completedAt"] as const) {
+      if (!sameDay(dates[field], item[field])) data[field] = dates[field];
+    }
+    const naList = [...na];
+    if (!sameSet(naList, item.naDates)) data.naDates = naList;
     if (patch.ownerId !== undefined) data.ownerId = patch.ownerId;
-    if (patch.targetDate !== undefined) data.targetDate = patch.targetDate;
 
     if (Object.keys(data).length === 0) continue;
     const signature = JSON.stringify(data);

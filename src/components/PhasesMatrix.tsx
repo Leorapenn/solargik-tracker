@@ -9,7 +9,9 @@ import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
 import { LIFECYCLE_LABELS, LIFECYCLE_STYLES } from "@/lib/lifecycle";
 import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import type { SortState } from "@/lib/sort";
-import { SortTh } from "@/components/SortTh";
+import { DateField, type DateChoice } from "@/components/DateField";
+import { SortSummary } from "@/components/SortSummary";
+import { SortLink, SortTh } from "@/components/SortTh";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 export type MatrixCell = {
@@ -43,6 +45,11 @@ const FIELD_LABELS: Record<BulkField, string> = {
   startedAt: "Start date",
   completedAt: "Completed date",
 };
+const SORT_LABELS: Record<string, string> = {
+  project: "Project",
+  customer: "Customer",
+  ...Object.fromEntries(PHASE_ORDER.map((phase) => [phase, phaseLabel(phase)])),
+};
 const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
 
 const th = { padding: "13px 14px", textAlign: "left" as const, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, whiteSpace: "nowrap" as const };
@@ -65,6 +72,7 @@ export function PhasesMatrix({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [field, setField] = useState<BulkField>("status");
   const [value, setValue] = useState("NOT_STARTED");
+  const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const allCells = rows.flatMap((r) => PHASE_ORDER.map((p) => r.cells[p]).filter((c): c is MatrixCell => !!c));
@@ -86,12 +94,27 @@ export function PhasesMatrix({
   function chooseField(next: BulkField) {
     setField(next);
     setValue(next === "status" ? "NOT_STARTED" : "");
+    setDateChoice(null);
   }
 
+  const isDateField = field !== "status" && field !== "ownerId";
+  const choiceText = !dateChoice
+    ? "Choose a date, N/A or Clear"
+    : dateChoice.notApplicable
+      ? "will be set to N/A"
+      : dateChoice.date
+        ? `will be set to ${fmt(dateChoice.date)}`
+        : "will be cleared";
+
   function apply() {
+    if (isDateField && !dateChoice) return;
     const ids = [...selected];
     const patch: PatchInput =
-      field === "status" ? { status: value as StageStatus } : field === "ownerId" ? { ownerId: value || null } : { [field]: value || null };
+      field === "status"
+        ? { status: value as StageStatus }
+        : field === "ownerId"
+          ? { ownerId: value || null }
+          : { [field]: dateChoice!.notApplicable ? "NA" : dateChoice!.date };
     const what = field === "status" ? `status to "${STATUS_LABELS[value as StageStatus]}"` : `${FIELD_LABELS[field].toLowerCase()}`;
     if (!window.confirm(`Change the ${what} for every item in ${ids.length} phase${ids.length === 1 ? "" : "s"} (${itemCount} items)?`)) return;
     setMessage(null);
@@ -145,10 +168,19 @@ export function PhasesMatrix({
               ))}
             </select>
           )}
-          {field !== "status" && field !== "ownerId" && (
-            <input type="date" aria-label={`New ${FIELD_LABELS[field]}`} value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle} />
+          {isDateField && (
+            <>
+              <DateField
+                ariaLabel={`New ${FIELD_LABELS[field].toLowerCase()}`}
+                value={dateChoice?.date ?? null}
+                notApplicable={dateChoice?.notApplicable ?? false}
+                allowNotApplicable
+                onCommit={setDateChoice}
+              />
+              <span style={{ fontSize: 12, color: dateChoice ? NAVY : TEXT_MUTED }}>{choiceText}</span>
+            </>
           )}
-          <button type="button" disabled={pending} style={primaryButton} onClick={apply}>
+          <button type="button" disabled={pending || (isDateField && !dateChoice)} style={primaryButton} onClick={apply}>
             Apply
           </button>
           <button type="button" style={secondaryButton} onClick={() => setSelected(new Set())}>
@@ -188,7 +220,7 @@ export function PhasesMatrix({
                         checked={allOn(columnIds(phase))}
                         onChange={(e) => setMany(columnIds(phase), e.target.checked)}
                       />
-                      <SortTh label={phaseLabel(phase)} sortKey={phase} {...sortProps} style={{ padding: 0 }} />
+                      <SortLink label={phaseLabel(phase)} sortKey={phase} current={sort} basePath="/phases" params={params} />
                     </div>
                   </th>
                 ))}
@@ -290,8 +322,9 @@ export function PhasesMatrix({
             </tbody>
           </table>
         </div>
-        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, borderTop: `1px solid ${ROW_DIVIDER}` }}>
-          {rows.length} projects · tick phases to change an owner, dates or status for all their items at once
+        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, borderTop: `1px solid ${ROW_DIVIDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
+          <span>{rows.length} projects · tick phases to change an owner, dates or status for all their items at once</span>
+          <SortSummary basePath="/phases" params={params} current={sort} labels={SORT_LABELS} />
         </div>
       </div>
     </div>

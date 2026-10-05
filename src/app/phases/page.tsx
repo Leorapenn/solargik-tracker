@@ -44,6 +44,7 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
                 targetDate: true,
                 startedAt: true,
                 completedAt: true,
+                naDates: true,
                 owner: { select: { name: true } },
               },
             },
@@ -73,6 +74,7 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
           targetDate: s.targetDate,
           startedAt: s.startedAt,
           completedAt: s.completedAt,
+          naDates: s.naDates,
         })),
         today,
       );

@@ -5,6 +5,8 @@ export type TemplateSeed = {
   department: Department;
   name: string;
   order: number;
+  // Date fields that never apply to this item; copied onto new projects' items.
+  naDates?: string[];
 };
 
 // Order is the global display order across all phases, in the sequence
@@ -12,7 +14,7 @@ export type TemplateSeed = {
 // and phases sort correctly relative to each other.
 export const SUB_STAGE_TEMPLATES: TemplateSeed[] = [
   // 00 Initiation
-  { phase: "INITIATION", department: "FINANCE", name: "Contract Signing & Project Opening", order: 1 },
+  { phase: "INITIATION", department: "FINANCE", name: "Contract Signing & Project Opening", order: 1, naDates: ["targetDate"] },
   { phase: "INITIATION", department: "DESIGN", name: "Internal Kickoff", order: 2 },
   { phase: "INITIATION", department: "DESIGN", name: "Customer Kickoff", order: 3 },
 
@@ -55,8 +57,8 @@ export async function seedSubStageTemplates(prisma: PrismaClient) {
   for (const template of SUB_STAGE_TEMPLATES) {
     await prisma.subStageTemplate.upsert({
       where: { phase_name: { phase: template.phase, name: template.name } },
-      update: { department: template.department, order: template.order, active: true },
-      create: template,
+      update: { department: template.department, order: template.order, active: true, naDates: template.naDates ?? [] },
+      create: { ...template, naDates: template.naDates ?? [] },
     });
   }
   return SUB_STAGE_TEMPLATES.length;

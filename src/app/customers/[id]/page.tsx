@@ -11,6 +11,7 @@ import { parseSort, sortRows } from "@/lib/sort";
 import { SpreadBar } from "@/components/SpreadBar";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
+import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { ContactsCard } from "@/components/ContactsCard";
 import { CustomerEditor } from "@/components/CustomerEditor";
@@ -184,8 +185,16 @@ export default async function CustomerDetailPage({
               </tbody>
             </table>
           </div>
-          <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED }}>
-            Showing {projects.length} of {all.length} projects
+          <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, display: "flex", flexDirection: "column", gap: 8 }}>
+            <span>
+              Showing {projects.length} of {all.length} projects
+            </span>
+            <SortSummary
+              basePath={basePath}
+              params={query}
+              current={sort}
+              labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value" }}
+            />
           </div>
         </div>
 

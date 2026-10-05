@@ -6,6 +6,8 @@ import { updateSubStages, updateSubStageStatus, type PatchInput } from "@/server
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { STATUS_LABELS } from "@/lib/statusColors";
 import type { SortState } from "@/lib/sort";
+import { DateField, type DateChoice } from "@/components/DateField";
+import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { StatusSelect } from "@/components/StatusSelect";
 import { BORDER, NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
@@ -25,9 +27,22 @@ export type SubStageRow = {
   targetDate: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  // dates marked "N/A" (don't apply to this item): "targetDate" | "startedAt" | "completedAt"
+  naDates: string[];
 };
 
 type Params = Record<string, string | string[] | undefined>;
+
+const SORT_LABELS = {
+  phase: "Phase",
+  name: "Sub-stage",
+  department: "Department",
+  owner: "Owner",
+  target: "Target",
+  started: "Started",
+  completed: "Completed",
+  status: "Status",
+};
 type BulkField = "status" | "ownerId" | "targetDate" | "startedAt" | "completedAt";
 
 const FIELD_LABELS: Record<BulkField, string> = {
@@ -64,6 +79,8 @@ export function SubStageTable({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [field, setField] = useState<BulkField>("status");
   const [value, setValue] = useState("NOT_STARTED");
+  // for the date fields in the bulk bar: null until a date, N/A or Clear has been chosen
+  const [dateChoice, setDateChoice] = useState<DateChoice | null>(null);
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const phases = [...new Map(rows.map((r) => [r.phaseName, r.phaseLabel])).entries()];
@@ -91,7 +108,17 @@ export function SubStageTable({
   function chooseField(next: BulkField) {
     setField(next);
     setValue(next === "status" ? "NOT_STARTED" : "");
+    setDateChoice(null);
   }
+
+  const isDateField = field !== "status" && field !== "ownerId";
+  const choiceText = !dateChoice
+    ? "Choose a date, N/A or Clear"
+    : dateChoice.notApplicable
+      ? "will be set to N/A"
+      : dateChoice.date
+        ? `will be set to ${formatDate(parseDateInput(dateChoice.date))}`
+        : "will be cleared";
 
   function save(ids: string[], patch: PatchInput, success?: string) {
     setMessage(null);
@@ -107,14 +134,16 @@ export function SubStageTable({
 
   function applyBulk() {
     const ids = [...selected];
+    if (isDateField && !dateChoice) return;
     const patch: PatchInput =
       field === "status"
         ? { status: value as StageStatus }
         : field === "ownerId"
           ? { ownerId: value || null }
-          : { [field]: value || null };
+          : { [field]: dateChoice!.notApplicable ? "NA" : dateChoice!.date };
     save(ids, patch, `Updated ${ids.length} item${ids.length === 1 ? "" : "s"}.`);
     setSelected(new Set());
+    setDateChoice(null);
   }
 
   const ownerOptions = (row: SubStageRow) => {
@@ -134,18 +163,25 @@ export function SubStageTable({
 
   const dateCell = (row: SubStageRow, key: "targetDate" | "startedAt" | "completedAt") => {
     const current = row[key];
+    const notApplicable = row.naDates.includes(key);
     const editable = key !== "completedAt" || row.status === "DONE";
     if (editing && editable) {
       return (
-        <input
-          type="date"
-          aria-label={`${FIELD_LABELS[key]} for ${row.name}`}
-          key={`${row.id}-${key}-${current ?? ""}`}
-          defaultValue={current ?? ""}
+        <DateField
+          ariaLabel={`${FIELD_LABELS[key]} for ${row.name}`}
+          value={current}
+          notApplicable={notApplicable}
+          allowNotApplicable
           disabled={pending}
-          style={{ ...inputStyle, padding: "5px 8px", fontSize: 13 }}
-          onChange={(e) => save([row.id], { [key]: e.target.value || null })}
+          onCommit={(choice) => save([row.id], { [key]: choice.notApplicable ? "NA" : choice.date })}
         />
+      );
+    }
+    if (notApplicable) {
+      return (
+        <span style={{ color: TEXT_MUTED }} title="Marked as not applicable to this item">
+          N/A
+        </span>
       );
     }
     if (key === "completedAt" && row.status === "DONE" && !current) {
@@ -221,10 +257,19 @@ export function SubStageTable({
               ))}
             </select>
           )}
-          {field !== "status" && field !== "ownerId" && (
-            <input type="date" aria-label={`New ${FIELD_LABELS[field]}`} value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle} />
+          {isDateField && (
+            <>
+              <DateField
+                ariaLabel={`New ${FIELD_LABELS[field].toLowerCase()}`}
+                value={dateChoice?.date ?? null}
+                notApplicable={dateChoice?.notApplicable ?? false}
+                allowNotApplicable
+                onCommit={setDateChoice}
+              />
+              <span style={{ fontSize: 12, color: dateChoice ? NAVY : TEXT_MUTED }}>{choiceText}</span>
+            </>
           )}
-          <button type="button" disabled={pending} style={primaryButton} onClick={applyBulk}>
+          <button type="button" disabled={pending || (isDateField && !dateChoice)} style={primaryButton} onClick={applyBulk}>
             Apply to {selected.size}
           </button>
           <button type="button" style={secondaryButton} onClick={() => setSelected(new Set())}>
@@ -316,6 +361,9 @@ export function SubStageTable({
               )}
             </tbody>
           </table>
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: `1px solid ${ROW_DIVIDER}` }}>
+          <SortSummary basePath={basePath} params={params} current={sort} labels={SORT_LABELS} />
         </div>
       </div>
     </div>

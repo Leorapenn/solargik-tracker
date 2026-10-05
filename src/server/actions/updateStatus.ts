@@ -6,12 +6,12 @@ import { prisma } from "@/lib/prisma";
 import { requireActionAuth } from "@/lib/auth";
 import { parseDateInput } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/errors";
-import { patchSubStages, type SubStagePatch } from "@/server/services/subStages";
+import { NOT_APPLICABLE, patchSubStages, type DatePatch, type SubStagePatch } from "@/server/services/subStages";
 
 const MAX_ITEMS = 1000;
 const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
 
-// Dates travel as "YYYY-MM-DD" strings (what <input type="date"> produces); null/"" clears.
+// Dates travel as "YYYY-MM-DD" strings; null or "" clears the date, and "NA" marks it Not Applicable.
 export type PatchInput = {
   status?: StageStatus;
   ownerId?: string | null;
@@ -22,7 +22,8 @@ export type PatchInput = {
 
 export type BulkResult = ActionResult<{ updated: number; skippedCompletedDate: number; items?: number }>;
 
-function date(value: string | null | undefined): Date | null {
+function date(value: string | null | undefined): DatePatch {
+  if (value === NOT_APPLICABLE) return NOT_APPLICABLE;
   try {
     return parseDateInput(value);
   } catch {

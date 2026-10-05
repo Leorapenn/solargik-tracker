@@ -4,7 +4,7 @@ import { seedSubStageTemplates } from "../../../prisma/seedData";
 import { todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
-import { patchSubStages, type SubStagePatch } from "./subStages";
+import { NOT_APPLICABLE, patchSubStages, type SubStagePatch } from "./subStages";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -95,6 +95,44 @@ describe("patchSubStages", () => {
       expect(row.ownerId).toBe(personId);
       expect(row.targetDate).toEqual(target);
     }
+  });
+
+  it("marks a date as not applicable, and a real date or Clear takes the mark off again", async () => {
+    const id = supplyIds[4];
+    await patch([id], { targetDate: new Date("2026-12-01T00:00:00.000Z") });
+    await patch([id], { targetDate: NOT_APPLICABLE });
+    let row = await item(id);
+    expect(row.targetDate).toBeNull();
+    expect(row.naDates).toEqual(["targetDate"]);
+
+    const date = new Date("2026-12-15T00:00:00.000Z");
+    await patch([id], { targetDate: date });
+    row = await item(id);
+    expect(row.targetDate).toEqual(date);
+    expect(row.naDates).toEqual([]);
+
+    await patch([id], { targetDate: NOT_APPLICABLE });
+    await patch([id], { targetDate: null });
+    row = await item(id);
+    expect(row.targetDate).toBeNull();
+    expect(row.naDates).toEqual([]);
+  });
+
+  it("does not record an automatic start date on an item whose start date is not applicable", async () => {
+    const id = supplyIds[5];
+    await patch([id], { startedAt: NOT_APPLICABLE });
+    await patch([id], { status: "IN_PROGRESS" });
+    const row = await item(id);
+    expect(row.status).toBe("IN_PROGRESS");
+    expect(row.startedAt).toBeNull();
+    expect(row.naDates).toEqual(["startedAt"]);
+  });
+
+  it("starts new projects' Contract Signing item with no target date applicable", async () => {
+    const signing = await prisma.subStage.findFirstOrThrow({
+      where: { name: "Contract Signing & Project Opening", phase: { projectId } },
+    });
+    expect(signing.naDates).toEqual(["targetDate"]);
   });
 
   it("rejects an owner that doesn't exist", async () => {

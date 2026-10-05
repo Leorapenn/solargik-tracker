@@ -62,6 +62,7 @@ export default async function ProjectDetailPage({
       targetDate: s.targetDate ? toDateInputValue(s.targetDate) : null,
       startedAt: s.startedAt ? toDateInputValue(s.startedAt) : null,
       completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null,
+      naDates: s.naDates,
       order: s.order,
     })),
   );
@@ -166,6 +167,7 @@ export default async function ProjectDetailPage({
                 targetDate: s.targetDate,
                 startedAt: s.startedAt,
                 completedAt: s.completedAt,
+                naDates: s.naDates,
               })),
               today,
             )}

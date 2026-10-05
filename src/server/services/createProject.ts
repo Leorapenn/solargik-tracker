@@ -60,6 +60,7 @@ export async function createProject(input: CreateProjectInput) {
             department: template.department,
             order: template.order,
             ownerId: defaultOwners.get(template.department) ?? null,
+            naDates: template.naDates,
           })),
         });
       }

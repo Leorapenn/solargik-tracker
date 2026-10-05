@@ -47,6 +47,11 @@ describe("rollupPhase", () => {
     expect(r.doneWithoutDate).toBe(1);
   });
 
+  it("does not flag a done item whose completed date is marked N/A", () => {
+    const r = rollupPhase([item({ status: "DONE", naDates: ["completedAt"] }), item({ status: "DONE" })], today);
+    expect(r.doneWithoutDate).toBe(1);
+  });
+
   it("lists distinct owners alphabetically and ignores unassigned items", () => {
     const r = rollupPhase([item({ ownerName: "Yossi" }), item({ ownerName: "Dana" }), item({ ownerName: "Yossi" }), item()], today);
     expect(r.owners).toEqual(["Dana", "Yossi"]);

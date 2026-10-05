@@ -5,6 +5,7 @@ import type { Department } from "@prisma/client";
 import { applyDefaultOwners, createPerson, setDepartmentOwner, updatePerson } from "@/server/actions/people";
 import { departmentLabel, DEPARTMENTS } from "@/lib/departments";
 import type { SortState } from "@/lib/sort";
+import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
@@ -135,6 +136,14 @@ export function PeopleManager({
               )}
             </tbody>
           </table>
+        </div>
+        <div style={{ padding: "10px 18px", borderTop: `1px solid ${ROW_DIVIDER}` }}>
+          <SortSummary
+            basePath="/people"
+            params={params}
+            current={sort}
+            labels={{ name: "Name", email: "Email", items: "Items owned", status: "Status" }}
+          />
         </div>
 
         <form

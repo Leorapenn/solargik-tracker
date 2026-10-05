@@ -136,6 +136,8 @@ model SubStageTemplate {
   name       String
   order      Int
   active     Boolean    @default(true)
+  // Date fields that never apply to this item (e.g. "targetDate" for Contract Signing); copied to new items.
+  naDates    String[]   @default([])
   subStages  SubStage[]
 
   @@unique([phase, name])
@@ -157,6 +159,9 @@ model SubStage {
   targetDate  DateTime?        @db.Date
   startedAt   DateTime?        @db.Date
   completedAt DateTime?        @db.Date
+  // Dates deliberately marked "N/A" ("targetDate" | "startedAt" | "completedAt"): not applicable to this item,
+  // as opposed to simply not set yet. An N/A date stays empty and never raises a missing-date warning.
+  naDates     String[]         @default([])
   events      StatusEvent[]
 }
 
