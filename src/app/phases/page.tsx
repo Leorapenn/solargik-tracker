@@ -4,6 +4,9 @@ import { requirePageAuth } from "@/lib/auth";
 import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
 import { STATUS_COLORS, STATUS_LABELS } from "@/lib/statusColors";
 import { rollupPhase } from "@/lib/phaseRollup";
+import { derivePhaseStatus } from "@/lib/phaseStatus";
+import { parseDepartments } from "@/lib/departmentFilter";
+import { DepartmentFilterBar } from "@/components/DepartmentFilterBar";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { parseSort, sortRows } from "@/lib/sort";
 import { PhasesMatrix, type MatrixCell, type MatrixRow } from "@/components/PhasesMatrix";
@@ -28,6 +31,7 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
   await requirePageAuth();
   const params = await searchParams;
   const today = todayInAppTz();
+  const departments = parseDepartments(params);
 
   const [projects, people] = await Promise.all([
     prisma.project.findMany({
@@ -39,6 +43,8 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
             name: true,
             status: true,
             subStages: {
+              // With a department filter, only those departments' items count towards each phase.
+              where: departments.length > 0 ? { department: { in: departments } } : undefined,
               select: {
                 status: true,
                 targetDate: true,
@@ -63,10 +69,11 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
     const sortDates: Partial<Record<PhaseName, number>> = {};
     for (const name of PHASE_ORDER) {
       const phase = project.phases.find((p) => p.name === name);
-      if (!phase) {
+      if (!phase || (departments.length > 0 && phase.subStages.length === 0)) {
         cells[name] = null;
         continue;
       }
+      const status = departments.length > 0 ? (derivePhaseStatus(phase.subStages.map((s) => s.status)) ?? phase.status) : phase.status;
       const rollup = rollupPhase(
         phase.subStages.map((s) => ({
           status: s.status,
@@ -80,7 +87,7 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
       );
       cells[name] = {
         phaseId: phase.id,
-        status: phase.status,
+        status,
         done: rollup.done,
         total: rollup.total,
         startedAt: iso(rollup.startedAt),
@@ -126,10 +133,15 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
 
   const summaries = PHASE_ORDER.map((phase) => {
     const counts = { DONE: 0, IN_PROGRESS: 0, BLOCKED: 0, NOT_STARTED: 0 } as Record<StageStatus, number>;
-    for (const project of projects) {
-      counts[project.phases.find((p) => p.name === phase)?.status ?? "NOT_STARTED"] += 1;
+    let total = 0;
+    for (const row of rows) {
+      const cell = row.cells[phase];
+      // with a filter on, projects with none of those items don't count
+      if (!cell && departments.length > 0) continue;
+      total += 1;
+      counts[cell?.status ?? "NOT_STARTED"] += 1;
     }
-    return { phase, counts };
+    return { phase, counts, total };
   });
 
   return (
@@ -143,8 +155,7 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 16 }}>
-        {summaries.map(({ phase, counts }) => {
-          const total = projects.length;
+        {summaries.map(({ phase, counts, total }) => {
           return (
             <div key={phase} style={{ ...cardStyle, padding: 18 }}>
               <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: TEXT_MUTED }}>
@@ -174,7 +185,9 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
         })}
       </div>
 
-      <PhasesMatrix rows={sorted} people={people} sort={sort} params={params} />
+      <DepartmentFilterBar basePath="/phases" params={params} selected={departments} />
+
+      <PhasesMatrix rows={sorted} people={people} sort={sort} params={params} departments={departments} />
     </main>
   );
 }

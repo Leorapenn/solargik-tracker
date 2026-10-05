@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { StageStatus } from "@prisma/client";
+import type { Department, StageStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { cleanDepartments } from "@/lib/departmentFilter";
 import { requireActionAuth } from "@/lib/auth";
 import { parseDateInput } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/errors";
@@ -86,15 +87,20 @@ export async function updateSubStages(subStageIds: string[], input: PatchInput):
   });
 }
 
-// Whole phases across projects (Phases tab multi-select): applies to every item inside them.
-export async function updatePhases(phaseIds: string[], input: PatchInput): Promise<BulkResult> {
+// Whole phases across projects (Phases tab multi-select): applies to every item inside them, or, when
+// the view is filtered by department, only to the items of those departments (what the person sees).
+export async function updatePhases(phaseIds: string[], input: PatchInput, departments: Department[] = []): Promise<BulkResult> {
   await requireActionAuth();
   return run(async () => {
     checkIds(phaseIds);
     const patch = toPatch(input);
+    const only = cleanDepartments(departments);
     const result = await prisma.$transaction(
       async (tx) => {
-        const items = await tx.subStage.findMany({ where: { phaseId: { in: phaseIds } }, select: { id: true } });
+        const items = await tx.subStage.findMany({
+          where: { phaseId: { in: phaseIds }, ...(only.length > 0 ? { department: { in: only } } : {}) },
+          select: { id: true },
+        });
         if (items.length > 5000) throw new UserError("That selection is too large; choose fewer phases.");
         const patched = await patchSubStages(tx, items.map((i) => i.id), patch, "phase-bulk");
         return { ...patched, items: items.length };

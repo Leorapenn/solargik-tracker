@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import type { PhaseName, ProjectLifecycle, StageStatus } from "@prisma/client";
+import type { Department, PhaseName, ProjectLifecycle, StageStatus } from "@prisma/client";
+import { departmentLabel } from "@/lib/departments";
 import { updatePhases, type PatchInput } from "@/server/actions/updateStatus";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
@@ -62,11 +63,13 @@ export function PhasesMatrix({
   people,
   sort,
   params,
+  departments,
 }: {
   rows: MatrixRow[];
   people: { id: string; name: string }[];
   sort: SortState;
   params: Params;
+  departments: Department[];
 }) {
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -116,10 +119,11 @@ export function PhasesMatrix({
           ? { ownerId: value || null }
           : { [field]: dateChoice!.notApplicable ? "NA" : dateChoice!.date };
     const what = field === "status" ? `status to "${STATUS_LABELS[value as StageStatus]}"` : `${FIELD_LABELS[field].toLowerCase()}`;
-    if (!window.confirm(`Change the ${what} for every item in ${ids.length} phase${ids.length === 1 ? "" : "s"} (${itemCount} items)?`)) return;
+    const scope = departments.length > 0 ? `the ${departments.map(departmentLabel).join(" / ")} items in` : "every item in";
+    if (!window.confirm(`Change the ${what} for ${scope} ${ids.length} phase${ids.length === 1 ? "" : "s"} (${itemCount} items)?`)) return;
     setMessage(null);
     startTransition(async () => {
-      const result = await updatePhases(ids, patch);
+      const result = await updatePhases(ids, patch, departments);
       if (!result.ok) return setMessage({ kind: "error", text: result.error });
       setSelected(new Set());
       const skipped = result.skippedCompletedDate
@@ -140,7 +144,9 @@ export function PhasesMatrix({
           <strong style={{ color: NAVY }}>
             {selected.size} phase{selected.size === 1 ? "" : "s"} selected ({itemCount} items)
           </strong>
-          <span style={{ color: TEXT_MUTED, fontSize: 13 }}>Set every item&apos;s</span>
+          <span style={{ color: TEXT_MUTED, fontSize: 13 }}>
+            {departments.length > 0 ? `Set the ${departments.map(departmentLabel).join(" / ")} items' (only)` : "Set every item's"}
+          </span>
           <select aria-label="Field to change" value={field} onChange={(e) => chooseField(e.target.value as BulkField)} style={inputStyle}>
             {(Object.keys(FIELD_LABELS) as BulkField[]).map((f) => (
               <option key={f} value={f}>

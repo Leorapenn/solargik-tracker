@@ -6,6 +6,10 @@ import { PhaseCard } from "@/components/PhaseCard";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
 import { ProjectEditor } from "@/components/ProjectEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
+import { DepartmentFilterBar } from "@/components/DepartmentFilterBar";
+import { parseDepartments } from "@/lib/departmentFilter";
+import { derivePhaseStatus } from "@/lib/phaseStatus";
+import type { Department } from "@prisma/client";
 import { knownFlags } from "@/server/services/flags";
 import { SubStageTable, type SubStageRow } from "@/components/SubStageTable";
 import { phaseLabel } from "@/lib/phases";
@@ -50,9 +54,11 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   const today = todayInAppTz();
+  const departments = parseDepartments(query);
+  const shown = (s: { department: Department }) => departments.length === 0 || departments.includes(s.department);
 
   const rows: SubStageRow[] = project.phases.flatMap((phase) =>
-    phase.subStages.map((s) => ({
+    phase.subStages.filter(shown).map((s) => ({
       id: s.id,
       phaseName: phase.name,
       phaseLabel: phaseLabel(phase.name),
@@ -153,6 +159,8 @@ export default async function ProjectDetailPage({
 
       <FlagsEditor kind="project" id={project.id} flags={project.flags} suggestions={flagSuggestions} />
 
+      <DepartmentFilterBar basePath={`/projects/${project.id}`} params={query} selected={departments} />
+
       <div
         style={{
           display: "grid",
@@ -160,30 +168,36 @@ export default async function ProjectDetailPage({
           gap: "0.75rem",
         }}
       >
-        {project.phases.map((phase) => (
-          <PhaseCard
-            key={phase.id}
-            name={phase.name}
-            status={phase.status}
-            rollup={rollupPhase(
-              phase.subStages.map((s) => ({
-                status: s.status,
-                ownerName: s.owner?.name ?? null,
-                targetDate: s.targetDate,
-                startedAt: s.startedAt,
-                completedAt: s.completedAt,
-                naDates: s.naDates,
-              })),
-              today,
-            )}
-          />
-        ))}
+        {project.phases.map((phase) => {
+          const items = phase.subStages.filter(shown);
+          // With a department filter, a phase with none of that department's items has nothing to show.
+          if (items.length === 0 && departments.length > 0) return null;
+          return (
+            <PhaseCard
+              key={phase.id}
+              name={phase.name}
+              status={departments.length > 0 ? (derivePhaseStatus(items.map((s) => s.status)) ?? phase.status) : phase.status}
+              rollup={rollupPhase(
+                items.map((s) => ({
+                  status: s.status,
+                  ownerName: s.owner?.name ?? null,
+                  targetDate: s.targetDate,
+                  startedAt: s.startedAt,
+                  completedAt: s.completedAt,
+                  naDates: s.naDates,
+                })),
+                today,
+              )}
+            />
+          );
+        })}
       </div>
       <p style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -8 }}>
         Phase status, dates and owners update automatically from the items below: a phase is Done when all its items
         are, Blocked if any is blocked, In progress once any has started. Start and completed dates are recorded
         automatically when an item&apos;s status changes, and every change is kept in a history log. Phases
         don&apos;t wait for each other.
+        {departments.length > 0 && " With a department filter on, the cards show only those departments' items."}
       </p>
 
       <SubStageTable

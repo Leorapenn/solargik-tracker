@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { removeSortHref, type SortState } from "@/lib/sort";
+import { canonicalQuery } from "@/lib/savedViews";
+import { SavedViews } from "@/components/SavedViews";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED } from "@/lib/theme";
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -47,6 +49,7 @@ export function SortSummary({
         </span>
       ))}
       <span>· Shift+click another column heading to sort by more than one</span>
+      <SavedViews basePath={basePath} query={canonicalQuery(params)} />
     </div>
   );
 }
