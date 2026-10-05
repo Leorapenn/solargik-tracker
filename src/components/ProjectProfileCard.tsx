@@ -258,19 +258,14 @@ export function ProjectProfileCard({
                       if (file) readContract(file);
                     }}
                   />
-                  <button
-                    type="button"
-                    style={secondaryButton}
-                    disabled={!contractReading || reading || pending}
-                    title={
-                      contractReading
-                        ? "Claude reads the PDF (max 4 MB) once and it is not stored. Check what it fills in, then press Save."
-                        : "Not switched on yet: it needs an ANTHROPIC_API_KEY setting."
-                    }
-                    onClick={() => fileInput.current?.click()}
-                  >
+                  <button type="button" style={secondaryButton} disabled={!contractReading || reading || pending} onClick={() => fileInput.current?.click()}>
                     {reading ? "Reading the contract…" : "Fill from a contract PDF…"}
                   </button>
+                  <span style={NOTE}>
+                    {contractReading
+                      ? "The PDF (max 4 MB) is sent to Claude to read once and is not stored. Check what it fills in, then press Save."
+                      : "Not switched on yet: it needs an ANTHROPIC_API_KEY setting."}
+                  </span>
                 </div>
               </div>
             ) : view.contractLink ? (
