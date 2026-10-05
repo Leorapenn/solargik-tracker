@@ -1,0 +1,336 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import type { Department, PhaseName, StageStatus } from "@prisma/client";
+import { updateSubStages, updateSubStageStatus, type PatchInput } from "@/server/actions/updateStatus";
+import { formatDate, parseDateInput } from "@/lib/dates";
+import { STATUS_LABELS } from "@/lib/statusColors";
+import type { SortState } from "@/lib/sort";
+import { SortTh } from "@/components/SortTh";
+import { StatusSelect } from "@/components/StatusSelect";
+import { BORDER, NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
+
+// Dates are "YYYY-MM-DD" strings so they cross the server/client boundary cleanly.
+export type SubStageRow = {
+  id: string;
+  order: number;
+  phaseName: PhaseName;
+  phaseLabel: string;
+  name: string;
+  department: Department;
+  departmentLabel: string;
+  status: StageStatus;
+  ownerId: string | null;
+  ownerName: string | null;
+  targetDate: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+type Params = Record<string, string | string[] | undefined>;
+type BulkField = "status" | "ownerId" | "targetDate" | "startedAt" | "completedAt";
+
+const FIELD_LABELS: Record<BulkField, string> = {
+  status: "Status",
+  ownerId: "Owner",
+  targetDate: "Target date",
+  startedAt: "Start date",
+  completedAt: "Completed date",
+};
+const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+
+const th = { padding: "13px 14px", textAlign: "left" as const, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const };
+const td = { padding: "10px 14px", fontSize: 14, verticalAlign: "middle" as const };
+
+const fmt = (value: string | null) => (value ? formatDate(parseDateInput(value)) : "—");
+
+export function SubStageTable({
+  rows,
+  people,
+  sort,
+  basePath,
+  params,
+  todayIso,
+}: {
+  rows: SubStageRow[];
+  people: { id: string; name: string }[];
+  sort: SortState;
+  basePath: string;
+  params: Params;
+  todayIso: string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [field, setField] = useState<BulkField>("status");
+  const [value, setValue] = useState("NOT_STARTED");
+  const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+
+  const phases = [...new Map(rows.map((r) => [r.phaseName, r.phaseLabel])).entries()];
+  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const sortProps = { current: sort, basePath, params, style: th };
+
+  function toggle(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  function selectPhase(name: PhaseName) {
+    const ids = rows.filter((r) => r.phaseName === name).map((r) => r.id);
+    const everySelected = ids.every((id) => selected.has(id));
+    const next = new Set(selected);
+    for (const id of ids) {
+      if (everySelected) next.delete(id);
+      else next.add(id);
+    }
+    setSelected(next);
+  }
+
+  function chooseField(next: BulkField) {
+    setField(next);
+    setValue(next === "status" ? "NOT_STARTED" : "");
+  }
+
+  function save(ids: string[], patch: PatchInput, success?: string) {
+    setMessage(null);
+    startTransition(async () => {
+      const result = await updateSubStages(ids, patch);
+      if (!result.ok) return setMessage({ kind: "error", text: result.error });
+      const skipped = result.skippedCompletedDate
+        ? ` The completed date was skipped for ${result.skippedCompletedDate} item${result.skippedCompletedDate === 1 ? "" : "s"} that aren't Done.`
+        : "";
+      if (success || result.skippedCompletedDate) setMessage({ kind: "ok", text: `${success ?? "Saved."}${skipped}` });
+    });
+  }
+
+  function applyBulk() {
+    const ids = [...selected];
+    const patch: PatchInput =
+      field === "status"
+        ? { status: value as StageStatus }
+        : field === "ownerId"
+          ? { ownerId: value || null }
+          : { [field]: value || null };
+    save(ids, patch, `Updated ${ids.length} item${ids.length === 1 ? "" : "s"}.`);
+    setSelected(new Set());
+  }
+
+  const ownerOptions = (row: SubStageRow) => {
+    const known = people.some((p) => p.id === row.ownerId);
+    return (
+      <>
+        <option value="">Unassigned</option>
+        {!known && row.ownerId && <option value={row.ownerId}>{row.ownerName} (inactive)</option>}
+        {people.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </>
+    );
+  };
+
+  const dateCell = (row: SubStageRow, key: "targetDate" | "startedAt" | "completedAt") => {
+    const current = row[key];
+    const editable = key !== "completedAt" || row.status === "DONE";
+    if (editing && editable) {
+      return (
+        <input
+          type="date"
+          aria-label={`${FIELD_LABELS[key]} for ${row.name}`}
+          key={`${row.id}-${key}-${current ?? ""}`}
+          defaultValue={current ?? ""}
+          disabled={pending}
+          style={{ ...inputStyle, padding: "5px 8px", fontSize: 13 }}
+          onChange={(e) => save([row.id], { [key]: e.target.value || null })}
+        />
+      );
+    }
+    if (key === "completedAt" && row.status === "DONE" && !current) {
+      return <span style={{ color: "#9A4B00", fontWeight: 600 }} title="This item is done but has no completion date. Use Edit to add it.">⚠ add date</span>;
+    }
+    if (key === "targetDate" && current && row.status !== "DONE" && current < todayIso) {
+      return (
+        <span style={{ color: "#B3261E", fontWeight: 600 }} title="Past its target date and not done">
+          {fmt(current)} · overdue
+        </span>
+      );
+    }
+    return <span style={{ color: current ? undefined : TEXT_MUTED }}>{fmt(current)}</span>;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <button
+          type="button"
+          style={editing ? primaryButton : secondaryButton}
+          aria-pressed={editing}
+          onClick={() => setEditing(!editing)}
+        >
+          {editing ? "Done editing" : "Edit owners & dates"}
+        </button>
+        <span style={{ fontSize: 13, color: TEXT_MUTED }}>Select:</span>
+        <button type="button" style={chipStyle(allSelected)} onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}>
+          All
+        </button>
+        {phases.map(([name, label]) => {
+          const ids = rows.filter((r) => r.phaseName === name).map((r) => r.id);
+          return (
+            <button key={name} type="button" style={chipStyle(ids.length > 0 && ids.every((id) => selected.has(id)))} onClick={() => selectPhase(name)}>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {selected.size > 0 && (
+        <div
+          role="region"
+          aria-label="Bulk edit"
+          style={{ ...cardStyle, padding: "12px 16px", display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", borderColor: NAVY }}
+        >
+          <strong style={{ color: NAVY }}>{selected.size} selected</strong>
+          <span style={{ color: TEXT_MUTED, fontSize: 13 }}>Set</span>
+          <select aria-label="Field to change" value={field} onChange={(e) => chooseField(e.target.value as BulkField)} style={inputStyle}>
+            {(Object.keys(FIELD_LABELS) as BulkField[]).map((f) => (
+              <option key={f} value={f}>
+                {FIELD_LABELS[f]}
+              </option>
+            ))}
+          </select>
+          <span style={{ color: TEXT_MUTED, fontSize: 13 }}>to</span>
+          {field === "status" && (
+            <select aria-label="New status" value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle}>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          )}
+          {field === "ownerId" && (
+            <select aria-label="New owner" value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle}>
+              <option value="">Unassigned</option>
+              {people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {field !== "status" && field !== "ownerId" && (
+            <input type="date" aria-label={`New ${FIELD_LABELS[field]}`} value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle} />
+          )}
+          <button type="button" disabled={pending} style={primaryButton} onClick={applyBulk}>
+            Apply to {selected.size}
+          </button>
+          <button type="button" style={secondaryButton} onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
+          {field === "completedAt" && <span style={{ fontSize: 12, color: TEXT_MUTED }}>Only Done items have a completed date.</span>}
+        </div>
+      )}
+
+      {message && (
+        <div
+          role="status"
+          style={{
+            padding: "10px 16px",
+            borderRadius: 8,
+            fontSize: 14,
+            background: message.kind === "ok" ? "#D8F5E3" : "#FCE9E7",
+            color: message.kind === "ok" ? "#047857" : "#8C1D18",
+          }}
+        >
+          {message.text}
+        </div>
+      )}
+
+      <div style={cardStyle}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
+            <thead>
+              <tr style={{ background: NAVY, color: "#fff" }}>
+                <th style={{ ...th, width: 36 }}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all items"
+                    checked={allSelected}
+                    onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
+                  />
+                </th>
+                <SortTh label="Phase" sortKey="phase" {...sortProps} />
+                <SortTh label="Sub-stage" sortKey="name" {...sortProps} />
+                <SortTh label="Department" sortKey="department" {...sortProps} />
+                <SortTh label="Owner" sortKey="owner" {...sortProps} />
+                <SortTh label="Target" sortKey="target" {...sortProps} />
+                <SortTh label="Started" sortKey="started" {...sortProps} />
+                <SortTh label="Completed" sortKey="completed" {...sortProps} />
+                <SortTh label="Status" sortKey="status" {...sortProps} />
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr
+                  key={row.id}
+                  style={{ borderBottom: `1px solid ${ROW_DIVIDER}`, background: selected.has(row.id) ? "#F1F5FD" : undefined }}
+                >
+                  <td style={td}>
+                    <input type="checkbox" aria-label={`Select ${row.name}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
+                  </td>
+                  <td style={{ ...td, color: TEXT_MUTED, whiteSpace: "nowrap" }}>{row.phaseLabel}</td>
+                  <td style={{ ...td, fontWeight: 600, color: NAVY }}>{row.name}</td>
+                  <td style={td}>{row.departmentLabel}</td>
+                  <td style={td}>
+                    {editing ? (
+                      <select
+                        aria-label={`Owner of ${row.name}`}
+                        value={row.ownerId ?? ""}
+                        disabled={pending}
+                        style={{ ...inputStyle, padding: "5px 8px", fontSize: 13 }}
+                        onChange={(e) => save([row.id], { ownerId: e.target.value || null })}
+                      >
+                        {ownerOptions(row)}
+                      </select>
+                    ) : (
+                      <span style={{ color: row.ownerName ? undefined : TEXT_MUTED }}>{row.ownerName ?? "Unassigned"}</span>
+                    )}
+                  </td>
+                  <td style={td}>{dateCell(row, "targetDate")}</td>
+                  <td style={td}>{dateCell(row, "startedAt")}</td>
+                  <td style={td}>{dateCell(row, "completedAt")}</td>
+                  <td style={td}>
+                    <StatusSelect value={row.status} onChange={updateSubStageStatus.bind(null, row.id)} />
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={9} style={{ ...td, color: TEXT_MUTED }}>
+                    This project has no items.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function chipStyle(active: boolean) {
+  return {
+    padding: "5px 12px",
+    borderRadius: 999,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    border: `1px solid ${active ? NAVY : BORDER}`,
+    background: active ? NAVY : "#fff",
+    color: active ? "#fff" : NAVY,
+  } as const;
+}

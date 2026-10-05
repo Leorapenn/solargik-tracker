@@ -1,38 +1,83 @@
-import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
-import { updateSubStageStatus } from "@/server/actions/updateStatus";
-import { StatusSelect } from "@/components/StatusSelect";
 import { PhaseCard } from "@/components/PhaseCard";
-import { phaseLabel } from "@/lib/phases";
-import { LIFECYCLE_NOTES, LIFECYCLE_STYLES } from "@/lib/lifecycle";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
-import { BORDER, NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
+import { ProjectEditor } from "@/components/ProjectEditor";
+import { SubStageTable, type SubStageRow } from "@/components/SubStageTable";
+import { phaseLabel } from "@/lib/phases";
+import { departmentLabel } from "@/lib/departments";
+import { LIFECYCLE_NOTES, LIFECYCLE_STYLES } from "@/lib/lifecycle";
+import { rollupPhase } from "@/lib/phaseRollup";
+import { toDateInputValue, todayInAppTz } from "@/lib/dates";
+import { parseSort, sortRows } from "@/lib/sort";
+import { NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+type Params = Record<string, string | string[] | undefined>;
+const STATUS_RANK = { NOT_STARTED: 0, IN_PROGRESS: 1, BLOCKED: 2, DONE: 3 } as const;
+
+export default async function ProjectDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Params>;
+}) {
   await requirePageAuth();
   const { id } = await params;
+  const query = await searchParams;
 
-  const project = await prisma.project.findUnique({
-    where: { id },
-    include: {
-      customer: true,
-      phases: {
-        orderBy: { order: "asc" },
-        include: { subStages: { orderBy: { order: "asc" } } },
+  const [project, people] = await Promise.all([
+    prisma.project.findUnique({
+      where: { id },
+      include: {
+        customer: true,
+        phases: {
+          orderBy: { order: "asc" },
+          include: { subStages: { orderBy: { order: "asc" }, include: { owner: { select: { id: true, name: true } } } } },
+        },
       },
-    },
-  });
+    }),
+    prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
 
   if (!project) notFound();
 
-  const rows = project.phases.flatMap((phase) =>
-    phase.subStages.map((subStage) => ({ phase, subStage })),
+  const today = todayInAppTz();
+
+  const rows: SubStageRow[] = project.phases.flatMap((phase) =>
+    phase.subStages.map((s) => ({
+      id: s.id,
+      phaseName: phase.name,
+      phaseLabel: phaseLabel(phase.name),
+      name: s.name,
+      department: s.department,
+      departmentLabel: departmentLabel(s.department),
+      status: s.status,
+      ownerId: s.ownerId,
+      ownerName: s.owner?.name ?? null,
+      targetDate: s.targetDate ? toDateInputValue(s.targetDate) : null,
+      startedAt: s.startedAt ? toDateInputValue(s.startedAt) : null,
+      completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null,
+      order: s.order,
+    })),
   );
+
+  const accessors = {
+    phase: (r: SubStageRow) => r.order,
+    name: (r: SubStageRow) => r.name,
+    department: (r: SubStageRow) => r.departmentLabel,
+    owner: (r: SubStageRow) => r.ownerName,
+    target: (r: SubStageRow) => r.targetDate,
+    started: (r: SubStageRow) => r.startedAt,
+    completed: (r: SubStageRow) => r.completedAt,
+    status: (r: SubStageRow) => STATUS_RANK[r.status],
+  };
+  const sort = parseSort(query, Object.keys(accessors), { key: "phase", dir: "asc" });
+  const sortedRows = sortRows(rows, accessors, sort);
 
   return (
     <main style={pageStyle}>
@@ -90,12 +135,23 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         {project.contractValue ? `$${Number(project.contractValue).toLocaleString()}` : "—"}
       </p>
 
+      <ProjectEditor
+        project={{
+          id: project.id,
+          name: project.name,
+          country: project.country ?? "",
+          capacityMw: project.capacityMw ? String(Number(project.capacityMw)) : "",
+          contractValue: project.contractValue ? String(Number(project.contractValue)) : "",
+          lifecycle: project.lifecycle,
+          lockedFields: project.lockedFields,
+        }}
+      />
+
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))",
           gap: "0.75rem",
-          marginTop: "1.5rem",
         }}
       >
         {project.phases.map((phase) => (
@@ -103,70 +159,34 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             key={phase.id}
             name={phase.name}
             status={phase.status}
-            done={phase.subStages.filter((s) => s.status === "DONE").length}
-            total={phase.subStages.length}
+            rollup={rollupPhase(
+              phase.subStages.map((s) => ({
+                status: s.status,
+                ownerName: s.owner?.name ?? null,
+                targetDate: s.targetDate,
+                startedAt: s.startedAt,
+                completedAt: s.completedAt,
+              })),
+              today,
+            )}
           />
         ))}
       </div>
-      <p style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: "0.6rem" }}>
-        Phase status updates automatically from its sub-stages: Done when all are done, Blocked if any is blocked,
-        In progress once any has started. Phases don&apos;t wait for each other, so a later phase can be running
-        while an earlier one is still open.
+      <p style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -8 }}>
+        Phase status, dates and owners update automatically from the items below: a phase is Done when all its items
+        are, Blocked if any is blocked, In progress once any has started. Start and completed dates are recorded
+        automatically when an item&apos;s status changes, and every change is kept in a history log. Phases
+        don&apos;t wait for each other.
       </p>
 
-      <div
-        style={{
-          marginTop: "1.5rem",
-          background: "#fff",
-          border: `1px solid ${BORDER}`,
-          borderRadius: 8,
-          overflow: "hidden",
-        }}
-      >
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%" }}>
-            <thead>
-              <tr style={{ backgroundColor: NAVY }}>
-                <th style={headerCellStyle}>Phase</th>
-                <th style={headerCellStyle}>Sub-stage</th>
-                <th style={headerCellStyle}>Department</th>
-                <th style={headerCellStyle}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ phase, subStage }) => (
-                <tr key={subStage.id} style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <td style={{ ...cellStyle, color: TEXT_MUTED, whiteSpace: "nowrap" }}>
-                    {phaseLabel(phase.name)}
-                  </td>
-                  <td style={{ ...cellStyle, fontWeight: 600, color: NAVY }}>{subStage.name}</td>
-                  <td style={cellStyle}>{subStage.department}</td>
-                  <td style={cellStyle}>
-                    <StatusSelect value={subStage.status} onChange={updateSubStageStatus.bind(null, subStage.id)} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <SubStageTable
+        rows={sortedRows}
+        people={people}
+        sort={sort}
+        basePath={`/projects/${project.id}`}
+        params={query}
+        todayIso={toDateInputValue(today)}
+      />
     </main>
   );
 }
-
-const headerCellStyle: CSSProperties = {
-  padding: "0.65rem 1rem",
-  textAlign: "left",
-  fontSize: "0.72rem",
-  fontWeight: 700,
-  letterSpacing: "0.05em",
-  textTransform: "uppercase",
-  color: "#fff",
-};
-
-const cellStyle: CSSProperties = {
-  padding: "0.6rem 1rem",
-  textAlign: "left",
-  verticalAlign: "middle",
-  fontSize: "0.9rem",
-};

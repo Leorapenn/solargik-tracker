@@ -3,18 +3,34 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { ResolveReviewItem } from "@/components/ResolveReviewItem";
+import { SortTh } from "@/components/SortTh";
+import { parseSort, sortRows } from "@/lib/sort";
 import { BORDER, NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 
 const NO_CUSTOMER_LINKED = "(no customer linked)";
 
-export default async function ImportReviewPage() {
+type Params = Record<string, string | string[] | undefined>;
+
+export default async function ImportReviewPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
-  const [items, customers] = await Promise.all([
+  const params = await searchParams;
+  const [found, customers] = await Promise.all([
     prisma.importReviewItem.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
+
+  type Item = (typeof found)[number];
+  const accessors = {
+    item: (i: Item) => i.itemName,
+    ref: (i: Item) => i.rawCustomerRef,
+    reason: (i: Item) => i.reason,
+    flagged: (i: Item) => i.createdAt,
+  };
+  const sort = parseSort(params, Object.keys(accessors), { key: "flagged", dir: "desc" });
+  const items = sortRows(found, accessors, sort);
+  const th = { current: sort, basePath: "/import", params, style: headerCellStyle };
 
   return (
     <main style={pageStyle}>
@@ -48,10 +64,10 @@ export default async function ImportReviewPage() {
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <thead>
                 <tr style={{ backgroundColor: NAVY }}>
-                  <th style={headerCellStyle}>Item</th>
-                  <th style={headerCellStyle}>Raw customer reference</th>
-                  <th style={headerCellStyle}>Reason</th>
-                  <th style={headerCellStyle}>Flagged</th>
+                  <SortTh label="Item" sortKey="item" {...th} />
+                  <SortTh label="Raw customer reference" sortKey="ref" {...th} />
+                  <SortTh label="Reason" sortKey="reason" {...th} />
+                  <SortTh label="Flagged" sortKey="flagged" {...th} />
                   <th style={headerCellStyle}>Resolve</th>
                 </tr>
               </thead>

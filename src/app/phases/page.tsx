@@ -1,14 +1,14 @@
-import type { CSSProperties } from "react";
-import Link from "next/link";
-import type { StageStatus } from "@prisma/client";
+import type { PhaseName, StageStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
-import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
+import { STATUS_COLORS, STATUS_LABELS } from "@/lib/statusColors";
+import { rollupPhase } from "@/lib/phaseRollup";
+import { toDateInputValue, todayInAppTz } from "@/lib/dates";
+import { parseSort, sortRows } from "@/lib/sort";
+import { PhasesMatrix, type MatrixCell, type MatrixRow } from "@/components/PhasesMatrix";
 import {
-  BORDER,
   NAVY,
-  ROW_DIVIDER,
   TEXT_MUTED,
   cardStyle,
   pageStyle,
@@ -18,22 +18,115 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type Params = Record<string, string | string[] | undefined>;
+
 const STATUS_ORDER: StageStatus[] = ["DONE", "IN_PROGRESS", "BLOCKED", "NOT_STARTED"];
+// For sorting a phase column: further along sorts higher.
+const PROGRESS_RANK: Record<StageStatus, number> = { NOT_STARTED: 0, BLOCKED: 1, IN_PROGRESS: 2, DONE: 3 };
 
-export default async function PhasesPage() {
+export default async function PhasesPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
+  const params = await searchParams;
+  const today = todayInAppTz();
 
-  const projects = await prisma.project.findMany({
-    include: { customer: { select: { name: true } }, phases: { select: { name: true, status: true } } },
+  const [projects, people] = await Promise.all([
+    prisma.project.findMany({
+      include: {
+        customer: { select: { name: true } },
+        phases: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            subStages: {
+              select: {
+                status: true,
+                targetDate: true,
+                startedAt: true,
+                completedAt: true,
+                owner: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
+
+  const iso = (d: Date | null) => (d ? toDateInputValue(d) : null);
+
+  const rows: (MatrixRow & { sortDates: Partial<Record<PhaseName, number>> })[] = projects.map((project) => {
+    const cells = {} as Record<PhaseName, MatrixCell | null>;
+    const sortDates: Partial<Record<PhaseName, number>> = {};
+    for (const name of PHASE_ORDER) {
+      const phase = project.phases.find((p) => p.name === name);
+      if (!phase) {
+        cells[name] = null;
+        continue;
+      }
+      const rollup = rollupPhase(
+        phase.subStages.map((s) => ({
+          status: s.status,
+          ownerName: s.owner?.name ?? null,
+          targetDate: s.targetDate,
+          startedAt: s.startedAt,
+          completedAt: s.completedAt,
+        })),
+        today,
+      );
+      cells[name] = {
+        phaseId: phase.id,
+        status: phase.status,
+        done: rollup.done,
+        total: rollup.total,
+        startedAt: iso(rollup.startedAt),
+        completedAt: iso(rollup.completedAt),
+        targetDate: iso(rollup.targetDate),
+        owners: rollup.owners,
+        doneWithoutDate: rollup.doneWithoutDate,
+        overdue: rollup.overdueSince !== null,
+      };
+      const date = rollup.completedAt ?? rollup.startedAt ?? rollup.targetDate;
+      sortDates[name] = date ? date.getTime() : 0;
+    }
+    return {
+      projectId: project.id,
+      projectName: project.name,
+      customerName: project.customer.name,
+      lifecycle: project.lifecycle,
+      cells,
+      sortDates,
+    };
   });
-  projects.sort((a, b) => a.customer.name.localeCompare(b.customer.name) || a.name.localeCompare(b.name));
 
-  const statusOf = (project: (typeof projects)[number], phase: (typeof PHASE_ORDER)[number]): StageStatus =>
-    project.phases.find((p) => p.name === phase)?.status ?? "NOT_STARTED";
+  type Row = (typeof rows)[number];
+  const accessors: Record<string, (r: Row) => string | number | null> = {
+    project: (r) => r.projectName,
+    customer: (r) => r.customerName,
+  };
+  for (const phase of PHASE_ORDER) {
+    // status first (further along = higher), then the date shown in the cell
+    accessors[phase] = (r) => {
+      const cell = r.cells[phase];
+      return cell ? PROGRESS_RANK[cell.status] * 1e14 + (r.sortDates[phase] ?? 0) : null;
+    };
+  }
+  const sort = parseSort(params, Object.keys(accessors), { key: "project", dir: "asc" });
+  const sorted = sortRows(rows, accessors, sort).map((row) => ({
+    projectId: row.projectId,
+    projectName: row.projectName,
+    customerName: row.customerName,
+    lifecycle: row.lifecycle,
+    cells: row.cells,
+  }));
 
   const summaries = PHASE_ORDER.map((phase) => {
     const counts = { DONE: 0, IN_PROGRESS: 0, BLOCKED: 0, NOT_STARTED: 0 } as Record<StageStatus, number>;
-    for (const project of projects) counts[statusOf(project, phase)] += 1;
+    for (const project of projects) {
+      counts[project.phases.find((p) => p.name === phase)?.status ?? "NOT_STARTED"] += 1;
+    }
     return { phase, counts };
   });
 
@@ -42,7 +135,8 @@ export default async function PhasesPage() {
       <div>
         <h1 style={pageTitleStyle}>Phases</h1>
         <div style={pageSubtitleStyle}>
-          Where every project stands across the six delivery phases. Open a project to update statuses.
+          Where every project stands across the six delivery phases, with dates and owners. Tick phases to update them
+          in bulk, or open a project to edit its items one by one.
         </div>
       </div>
 
@@ -78,78 +172,7 @@ export default async function PhasesPage() {
         })}
       </div>
 
-      <div style={cardStyle}>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1000 }}>
-            <thead>
-              <tr style={{ background: NAVY, color: "#fff" }}>
-                <th style={headCell}>Project</th>
-                <th style={headCell}>Customer</th>
-                {PHASE_ORDER.map((phase) => (
-                  <th key={phase} style={headCell}>
-                    {phaseLabel(phase)}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((project) => (
-                <tr key={project.id} style={{ borderBottom: `1px solid ${ROW_DIVIDER}` }}>
-                  <td style={{ ...bodyCell, fontWeight: 700 }}>
-                    <Link href={`/projects/${project.id}`} style={{ color: NAVY }}>
-                      {project.name}
-                    </Link>
-                  </td>
-                  <td style={{ ...bodyCell, color: TEXT_MUTED }}>{project.customer.name}</td>
-                  {PHASE_ORDER.map((phase) => {
-                    const status = statusOf(project, phase);
-                    const { bg, text } = STATUS_PILL_STYLES[status];
-                    return (
-                      <td key={phase} style={bodyCell}>
-                        <span
-                          style={{
-                            display: "inline-block",
-                            background: bg,
-                            color: text,
-                            borderRadius: 999,
-                            padding: "4px 10px",
-                            fontSize: 12,
-                            fontWeight: 700,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {STATUS_LABELS[status]}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-              {projects.length === 0 && (
-                <tr>
-                  <td colSpan={8} style={{ ...bodyCell, color: TEXT_MUTED }}>
-                    No projects yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, borderTop: `1px solid ${BORDER}` }}>
-          {projects.length} projects
-        </div>
-      </div>
+      <PhasesMatrix rows={sorted} people={people} sort={sort} params={params} />
     </main>
   );
 }
-
-const headCell: CSSProperties = {
-  padding: "15px 16px",
-  textAlign: "left",
-  fontSize: 11.5,
-  fontWeight: 700,
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  whiteSpace: "nowrap",
-};
-const bodyCell: CSSProperties = { padding: "12px 16px", fontSize: 14, verticalAlign: "middle" };

@@ -1,11 +1,19 @@
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { ProjectLifecycle } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
-import { phaseSpread } from "@/lib/phaseSpread";
+import { phaseSpread, progressScore } from "@/lib/phaseSpread";
+import { LIFECYCLE_ORDER, parseLifecycle } from "@/lib/lifecycle";
+import { groupContacts } from "@/lib/contacts";
+import { parseSort, sortRows } from "@/lib/sort";
 import { SpreadBar } from "@/components/SpreadBar";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
+import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
+import { SortTh } from "@/components/SortTh";
+import { ContactsCard } from "@/components/ContactsCard";
+import { CustomerEditor } from "@/components/CustomerEditor";
 import {
   NAVY,
   ORANGE,
@@ -19,25 +27,66 @@ import {
 
 export const dynamic = "force-dynamic";
 
+type Params = Record<string, string | string[] | undefined>;
+
 const IMPORTANCE_LABELS = { NORMAL: "Normal", SEMI_STRATEGIC: "Semi-Strategic", STRATEGIC: "Strategic" } as const;
 
-export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CustomerDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<Params>;
+}) {
   await requirePageAuth();
   const { id } = await params;
+  const query = await searchParams;
+  const filter = parseLifecycle(typeof query.lifecycle === "string" ? query.lifecycle : undefined);
 
   const customer = await prisma.customer.findUnique({
     where: { id },
     include: {
       aliases: { orderBy: { alias: "asc" } },
       projects: { orderBy: { name: "asc" }, include: { phases: { select: { name: true, status: true } } } },
+      contacts: { include: { project: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
     },
   });
   if (!customer) notFound();
 
-  const totalContract = customer.projects.reduce((sum, p) => sum + (p.contractValue ? Number(p.contractValue) : 0), 0);
-  const totalCapacity = customer.projects.reduce((sum, p) => sum + (p.capacityMw ? Number(p.capacityMw) : 0), 0);
-  const withoutContract = customer.projects.filter((p) => p.contractValue === null).length;
+  const all = customer.projects;
+  const counts = Object.fromEntries(LIFECYCLE_ORDER.map((l) => [l, 0])) as Record<ProjectLifecycle, number>;
+  for (const project of all) counts[project.lifecycle] += 1;
+
+  type Project = (typeof all)[number];
+  const accessors = {
+    name: (p: Project) => p.name,
+    status: (p: Project) => LIFECYCLE_ORDER.indexOf(p.lifecycle),
+    spread: (p: Project) => progressScore([p]),
+    capacity: (p: Project) => (p.capacityMw ? Number(p.capacityMw) : null),
+    contract: (p: Project) => (p.contractValue ? Number(p.contractValue) : null),
+  };
+  const sort = parseSort(query, Object.keys(accessors), { key: "name", dir: "asc" });
+  const projects = sortRows(filter ? all.filter((p) => p.lifecycle === filter) : all, accessors, sort);
+
+  const people = groupContacts(
+    customer.contacts.map((c) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      role: c.role,
+      englishLevel: c.englishLevel,
+      source: c.source,
+      projectId: c.project?.id ?? null,
+      projectName: c.project?.name ?? null,
+    })),
+  );
+
+  const totalContract = all.reduce((sum, p) => sum + (p.contractValue ? Number(p.contractValue) : 0), 0);
+  const totalCapacity = all.reduce((sum, p) => sum + (p.capacityMw ? Number(p.capacityMw) : 0), 0);
+  const withoutContract = all.filter((p) => p.contractValue === null).length;
   const strategic = customer.importance === "STRATEGIC";
+  const basePath = `/customers/${customer.id}`;
+  const th = { current: sort, basePath, params: query, style: headCell };
 
   return (
     <main style={pageStyle}>
@@ -65,9 +114,20 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           </span>
         </div>
         <div style={pageSubtitleStyle}>
-          {customer.projects.length} project{customer.projects.length === 1 ? "" : "s"}
+          {all.length} project{all.length === 1 ? "" : "s"} · {people.length} contact{people.length === 1 ? "" : "s"}
         </div>
       </div>
+
+      <CustomerEditor
+        customer={{
+          id: customer.id,
+          name: customer.name,
+          importance: customer.importance,
+          lockedFields: customer.lockedFields,
+        }}
+      />
+
+      <LifecycleFilterBar basePath={basePath} params={query} filter={filter} counts={counts} total={all.length} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20, alignItems: "start" }}>
         <div style={{ ...cardStyle, gridColumn: "span 2" }}>
@@ -75,15 +135,16 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
-                  {["Project", "Status", "Phase spread", "Capacity (MW)", "Contract value", ""].map((heading) => (
-                    <th key={heading} style={headCell}>
-                      {heading}
-                    </th>
-                  ))}
+                  <SortTh label="Project" sortKey="name" {...th} />
+                  <SortTh label="Status" sortKey="status" {...th} />
+                  <SortTh label="Phase spread" sortKey="spread" {...th} />
+                  <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
+                  <SortTh label="Contract value" sortKey="contract" {...th} />
+                  <SortTh style={headCell} />
                 </tr>
               </thead>
               <tbody>
-                {customer.projects.map((project) => (
+                {projects.map((project) => (
                   <tr
                     key={project.id}
                     style={{ borderBottom: `1px solid ${ROW_DIVIDER}`, opacity: project.lifecycle === "CANCELLED" ? 0.6 : 1 }}
@@ -97,11 +158,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                       </Link>
                     </td>
                     <td style={bodyCell}>
-                      <LifecycleBadge
-                        lifecycle={project.lifecycle}
-                        stage={project.mondayStage}
-                        status={project.mondayStatus}
-                      />
+                      <LifecycleBadge lifecycle={project.lifecycle} stage={project.mondayStage} status={project.mondayStatus} />
                     </td>
                     <td style={{ ...bodyCell, width: 220 }}>
                       <SpreadBar segments={phaseSpread([project])} />
@@ -117,10 +174,10 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                     </td>
                   </tr>
                 ))}
-                {customer.projects.length === 0 && (
+                {projects.length === 0 && (
                   <tr>
                     <td colSpan={6} style={{ ...bodyCell, color: TEXT_MUTED }}>
-                      No projects imported for this customer yet.
+                      {filter ? "No projects with this status." : "No projects imported for this customer yet."}
                     </td>
                   </tr>
                 )}
@@ -128,11 +185,13 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
             </table>
           </div>
           <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED }}>
-            Showing {customer.projects.length} of {customer.projects.length} projects
+            Showing {projects.length} of {all.length} projects
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <ContactsCard customerId={customer.id} people={people} />
+
           <SideCard title="Commercial">
             <Row label="Contract value" value={totalContract > 0 ? `$${totalContract.toLocaleString()}` : "—"} />
             <Row label="Capacity" value={totalCapacity > 0 ? `${totalCapacity.toFixed(2)} MW` : "—"} />
