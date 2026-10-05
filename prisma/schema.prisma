@@ -119,8 +119,45 @@ model Project {
   flags         String[]         @default([])
   phases        Phase[]
   contacts      Contact[]
+  profile       ProjectProfile?
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
+}
+
+// The "project profile": extra details people fill in by hand (or from the contract), one row per project,
+// created the first time it is saved. Dropdown fields store a code (see src/lib/projectProfile.ts); null is
+// the blank default. Dates that already exist as sub-stages (kickoffs, layout approval, BOM release...) are
+// NOT stored here: the page shows those items' own dates and statuses.
+model ProjectProfile {
+  projectId String  @id
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  // Project details
+  pileDrivingStart     DateTime?
+  deliveryExpectations String?
+  supplyTerms          String?
+  supplyObligations    String?
+  soilTest             String? // SPT / GPT
+  intercoms            String?
+  soma                 String?
+  // Only a fallback for the Contract Signing item's own completed date (e.g. read from the contract).
+  contractSigningDate  DateTime?
+  ntpDate              DateTime?
+  projectType          String?
+  contractLink         String? // link to the contract file (e.g. SharePoint)
+
+  // Design details
+  projectEngineerId           String?
+  projectEngineer             Person?   @relation(fields: [projectEngineerId], references: [id], onDelete: SetNull)
+  designNotes                 String?
+  designQuestionnaireReceived DateTime?
+  designInfoStatus            String?
+  geotechStatus               String?
+  initialLayoutSent           DateTime?
+  genioCivileStatus           String?
+  bomStatus                   String?
+
+  updatedAt DateTime @updatedAt
 }
 
 model Phase {
@@ -185,13 +222,14 @@ model StatusEvent {
 }
 
 model Person {
-  id         String            @id @default(cuid())
-  name       String            @unique
-  email      String?
-  active     Boolean           @default(true)
-  subStages  SubStage[]
-  defaultFor DepartmentOwner[]
-  createdAt  DateTime          @default(now())
+  id                 String            @id @default(cuid())
+  name               String            @unique
+  email              String?
+  active             Boolean           @default(true)
+  subStages          SubStage[]
+  defaultFor         DepartmentOwner[]
+  engineeredProfiles ProjectProfile[]
+  createdAt          DateTime          @default(now())
 }
 
 // The person who owns new items of a department by default (used when projects are created).

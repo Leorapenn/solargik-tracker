@@ -5,6 +5,8 @@ import { todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
 import { addFlag, knownFlags, removeFlag, setFlagColor } from "./flags";
+import { getProfile, saveProfile } from "./projectProfile";
+import { EMPTY_PROFILE } from "@/lib/projectProfile";
 import { parseFlagColors } from "@/lib/flags";
 import { NOT_APPLICABLE, patchSubStages, type SubStagePatch } from "./subStages";
 
@@ -152,6 +154,21 @@ describe("patchSubStages", () => {
     await removeFlag("customer", customerId, "Strategic push");
     expect((await prisma.customer.findUniqueOrThrow({ where: { id: customerId } })).flagColors).toEqual({});
     await expect(addFlag("project", "nope", "x")).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("saves and reloads a project profile, and rejects an engineer who isn't in People", async () => {
+    expect(await getProfile(projectId)).toEqual(EMPTY_PROFILE);
+    await saveProfile(projectId, { ...EMPTY_PROFILE, ntpDate: "2026-10-05", bomStatus: "IFI", designNotes: " Note ", projectEngineerId: personId, soilTest: "SPT" });
+    expect(await getProfile(projectId)).toEqual({ ...EMPTY_PROFILE, ntpDate: "2026-10-05", bomStatus: "IFI", designNotes: "Note", projectEngineerId: personId, soilTest: "SPT" });
+
+    // saving again updates the same row and can blank things out
+    await saveProfile(projectId, { ...EMPTY_PROFILE, geotechStatus: "STUCK" });
+    expect(await getProfile(projectId)).toEqual({ ...EMPTY_PROFILE, geotechStatus: "STUCK" });
+    expect(await prisma.projectProfile.count({ where: { projectId } })).toBe(1);
+
+    await expect(saveProfile(projectId, { ...EMPTY_PROFILE, projectEngineerId: "nobody" })).rejects.toBeInstanceOf(UserError);
+    await expect(saveProfile(projectId, { ...EMPTY_PROFILE, bomStatus: "NOPE" })).rejects.toBeInstanceOf(UserError);
+    await expect(saveProfile("missing", EMPTY_PROFILE)).rejects.toBeInstanceOf(UserError);
   });
 
   it("rejects an owner that doesn't exist", async () => {

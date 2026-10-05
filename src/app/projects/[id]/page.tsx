@@ -7,6 +7,9 @@ import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { ProjectEditor } from "@/components/ProjectEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { matchesFilters, parseRowFilters } from "@/lib/rowFilters";
+import { ProjectProfileCard } from "@/components/ProjectProfileCard";
+import { linkedValues } from "@/lib/projectProfile";
+import { getProfile } from "@/server/services/projectProfile";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
 import { knownFlags } from "@/server/services/flags";
@@ -20,6 +23,8 @@ import { parseSort, sortRows } from "@/lib/sort";
 import { NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
+// Reading a contract with Claude (a Server Action used on this page) can take a while.
+export const maxDuration = 60;
 
 type Params = Record<string, string | string[] | undefined>;
 const STATUS_RANK = { NOT_STARTED: 0, IN_PROGRESS: 1, BLOCKED: 2, DONE: 3 } as const;
@@ -35,7 +40,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions] = await Promise.all([
+  const [project, people, flagSuggestions, profile] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -48,6 +53,7 @@ export default async function ProjectDetailPage({
     }),
     prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     knownFlags(),
+    getProfile(id),
   ]);
 
   if (!project) notFound();
@@ -204,6 +210,26 @@ export default async function ProjectDetailPage({
           );
         })}
       </div>
+      <details open style={{ marginTop: 4 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Project profile</summary>
+        <ProjectProfileCard
+          projectId={project.id}
+          initial={profile}
+          people={people}
+          contractReading={Boolean(process.env.ANTHROPIC_API_KEY)}
+          linked={linkedValues(
+            project.phases.flatMap((phase) =>
+              phase.subStages.map((s) => ({
+                phaseName: phase.name,
+                name: s.name,
+                status: s.status,
+                completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null,
+              })),
+            ),
+          )}
+        />
+      </details>
+
       <details style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -6 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 600 }}>
           How phases and dates work
