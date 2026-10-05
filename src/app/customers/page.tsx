@@ -8,8 +8,9 @@ import { StatCard } from "@/components/StatCard";
 import { SpreadBar } from "@/components/SpreadBar";
 import { SortLink } from "@/components/SortTh";
 import { SortSummary } from "@/components/SortSummary";
-import { FlagChip } from "@/components/FlagChip";
-import { colorOf, flagSeverity, parseFlagColors } from "@/lib/flags";
+import { FlagsEditor } from "@/components/FlagsEditor";
+import { flagSeverity, parseFlagColors } from "@/lib/flags";
+import { knownFlags } from "@/server/services/flags";
 import { ImportanceSelect } from "@/components/ImportanceSelect";
 import { updateCustomerImportance } from "@/server/actions/updateCustomerImportance";
 import {
@@ -35,7 +36,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   await requirePageAuth();
   const params = await searchParams;
 
-  const [customers, reviewCount, blockedPhaseCount] = await Promise.all([
+  const [customers, reviewCount, blockedPhaseCount, flagSuggestions] = await Promise.all([
     prisma.customer.findMany({
       include: {
         projects: { select: { phases: { select: { name: true, status: true } } } },
@@ -44,6 +45,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     }),
     prisma.importReviewItem.count(),
     prisma.phase.count({ where: { status: "BLOCKED" } }),
+    knownFlags(),
   ]);
 
   const built = customers.map((customer) => {
@@ -197,19 +199,26 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     onChange={updateCustomerImportance.bind(null, customer.id)}
                   />
                 </div>
-                <div style={{ ...bodyCell, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {customer.flags.map((flag) => (
-                    <FlagChip key={flag} label={flag} color={colorOf(parseFlagColors(customer.flagColors), flag)} />
-                  ))}
-                  {customer._count.aliases > 0 && (
-                    <span style={chip("#7A4E00", "#FEF6E7")}>
-                      {customer._count.aliases} name variant{customer._count.aliases === 1 ? "" : "s"}
-                    </span>
-                  )}
-                  {blocked > 0 && <span style={chip("#8C1D18", "#FCE9E7")}>{blocked} blocked</span>}
-                  {customer.flags.length === 0 && customer._count.aliases === 0 && blocked === 0 && (
-                    <span style={{ color: TEXT_MUTED }}>—</span>
-                  )}
+                <div style={bodyCell}>
+                  <FlagsEditor
+                    compact
+                    kind="customer"
+                    id={customer.id}
+                    name={customer.name}
+                    flags={customer.flags}
+                    colors={parseFlagColors(customer.flagColors)}
+                    suggestions={flagSuggestions}
+                    extra={
+                      <>
+                        {customer._count.aliases > 0 && (
+                          <span style={chip("#7A4E00", "#FEF6E7")}>
+                            {customer._count.aliases} name variant{customer._count.aliases === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {blocked > 0 && <span style={chip("#8C1D18", "#FCE9E7")}>{blocked} blocked</span>}
+                      </>
+                    }
+                  />
                 </div>
                 <div style={bodyCell}>
                   <Link

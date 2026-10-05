@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
+import { useId, useState, useTransition, type ReactNode } from "react";
 import { addFlag, removeFlag, setCustomerFlagColor } from "@/server/actions/flags";
 import {
   DEFAULT_FLAG_COLOR,
@@ -22,14 +22,24 @@ export function FlagsEditor({
   flags,
   colors = {},
   suggestions,
+  compact = false,
+  extra,
+  name,
 }: {
   kind: "customer" | "project";
   id: string;
   flags: string[];
   colors?: Record<string, FlagColor>;
   suggestions: string[];
+  // compact: for a table cell. No "Flags" heading; the add box opens from a small "+ Flag" button.
+  compact?: boolean;
+  // extra chips shown before the editable ones (e.g. the automatic name-variant / blocked chips)
+  extra?: ReactNode;
+  // what the flags belong to, for screen readers in the table
+  name?: string;
 }) {
   const [pending, startTransition] = useTransition();
+  const [adding, setAdding] = useState(!compact);
   const [text, setText] = useState("");
   const [color, setColor] = useState<FlagColor>(DEFAULT_FLAG_COLOR);
   const [error, setError] = useState<string | null>(null);
@@ -41,16 +51,19 @@ export function FlagsEditor({
     setError(null);
     startTransition(async () => {
       const result = await addFlag(kind, id, label, colored ? color : undefined);
-      if (result.ok) setText("");
-      else setError(result.error);
+      if (result.ok) {
+        setText("");
+        if (compact) setAdding(false);
+      } else setError(result.error);
     });
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} role="group" aria-label="Flags">
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Flags</span>
-        {flags.length === 0 && <span style={{ fontSize: 13, color: TEXT_MUTED }}>None yet</span>}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }} role="group" aria-label={name ? `Flags for ${name}` : "Flags"}>
+      <div style={{ display: "flex", gap: compact ? 6 : 8, flexWrap: "wrap", alignItems: "center" }}>
+        {!compact && <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Flags</span>}
+        {extra}
+        {flags.length === 0 && !extra && !compact && <span style={{ fontSize: 13, color: TEXT_MUTED }}>None yet</span>}
         {flags.map((flag) => {
           const flagColor = colored ? colorOf(colors, flag) : null;
           return (
@@ -80,7 +93,18 @@ export function FlagsEditor({
             />
           );
         })}
+        {compact && !adding && (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            aria-label={name ? `Add a flag to ${name}` : "Add a flag"}
+            style={{ ...secondaryButton, padding: "2px 10px", fontSize: 12.5, borderRadius: 999 }}
+          >
+            + Flag
+          </button>
+        )}
       </div>
+      {adding && (
       <form
         style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}
         onSubmit={(event) => {
@@ -95,7 +119,8 @@ export function FlagsEditor({
           value={text}
           maxLength={MAX_FLAG_LENGTH}
           onChange={(event) => setText(event.target.value)}
-          style={{ ...inputStyle, width: 260 }}
+          autoFocus={compact}
+          style={{ ...inputStyle, width: compact ? 180 : 260 }}
         />
         <datalist id={listId}>
           {suggestions
@@ -116,12 +141,31 @@ export function FlagsEditor({
         <button type="submit" disabled={pending || !text.trim()} style={secondaryButton}>
           Add flag
         </button>
+        {compact && (
+          <button
+            type="button"
+            style={secondaryButton}
+            onClick={() => {
+              setAdding(false);
+              setText("");
+              setError(null);
+            }}
+          >
+            Cancel
+          </button>
+        )}
         {error && (
           <span role="alert" style={{ fontSize: 13, color: "#8C1D18" }}>
             {error}
           </span>
         )}
       </form>
+      )}
+      {!adding && error && (
+        <span role="alert" style={{ fontSize: 12.5, color: "#8C1D18" }}>
+          {error}
+        </span>
+      )}
     </div>
   );
 }

@@ -11,7 +11,8 @@ import { StatCard } from "@/components/StatCard";
 import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
-import { FlagChip } from "@/components/FlagChip";
+import { FlagsEditor } from "@/components/FlagsEditor";
+import { knownFlags } from "@/server/services/flags";
 import { SortTh } from "@/components/SortTh";
 import {
   GRAY_LIGHT,
@@ -44,7 +45,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   const filter = parseLifecycle(typeof params.lifecycle === "string" ? params.lifecycle : undefined);
 
-  const all = await prisma.project.findMany({ include: { customer: true, phases: true }, orderBy: { name: "asc" } });
+  const [all, flagSuggestions] = await Promise.all([
+    prisma.project.findMany({ include: { customer: true, phases: true }, orderBy: { name: "asc" } }),
+    knownFlags(),
+  ]);
 
   const counts = Object.fromEntries(LIFECYCLE_ORDER.map((l) => [l, 0])) as Record<ProjectLifecycle, number>;
   for (const project of all) counts[project.lifecycle] += 1;
@@ -161,15 +165,14 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                       <SpreadBar segments={phaseSpread([project])} />
                     </td>
                     <td style={bodyCell}>
-                      {project.flags.length === 0 ? (
-                        <span style={{ color: TEXT_MUTED }}>—</span>
-                      ) : (
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {project.flags.map((flag) => (
-                            <FlagChip key={flag} label={flag} color={null} />
-                          ))}
-                        </div>
-                      )}
+                      <FlagsEditor
+                        compact
+                        kind="project"
+                        id={project.id}
+                        name={project.name}
+                        flags={project.flags}
+                        suggestions={flagSuggestions}
+                      />
                     </td>
                     <td style={{ ...bodyCell, textAlign: "right" }}>
                       <Link href={`/projects/${project.id}`} aria-label={`Open ${project.name}`} style={{ color: TEXT_MUTED }}>
