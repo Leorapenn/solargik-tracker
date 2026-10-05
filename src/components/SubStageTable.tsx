@@ -7,10 +7,11 @@ import { formatDate, parseDateInput } from "@/lib/dates";
 import { STATUS_LABELS } from "@/lib/statusColors";
 import type { SortState } from "@/lib/sort";
 import { DateField, type DateChoice } from "@/components/DateField";
+import { ColumnFilters } from "@/components/ColumnFilters";
 import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { StatusSelect } from "@/components/StatusSelect";
-import { BORDER, NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
+import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 // Dates are "YYYY-MM-DD" strings so they cross the server/client boundary cleanly.
 export type SubStageRow = {
@@ -66,6 +67,7 @@ export function SubStageTable({
   basePath,
   params,
   todayIso,
+  totalCount,
 }: {
   rows: SubStageRow[];
   people: { id: string; name: string }[];
@@ -73,6 +75,8 @@ export function SubStageTable({
   basePath: string;
   params: Params;
   todayIso: string;
+  // how many items the project has before any filter
+  totalCount: number;
 }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
@@ -208,18 +212,27 @@ export function SubStageTable({
         >
           {editing ? "Done editing" : "Edit owners & dates"}
         </button>
-        <span style={{ fontSize: 13, color: TEXT_MUTED }}>Select:</span>
-        <button type="button" style={chipStyle(allSelected)} onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}>
-          All
-        </button>
-        {phases.map(([name, label]) => {
-          const ids = rows.filter((r) => r.phaseName === name).map((r) => r.id);
-          return (
-            <button key={name} type="button" style={chipStyle(ids.length > 0 && ids.every((id) => selected.has(id)))} onClick={() => selectPhase(name)}>
+        <select
+          aria-label="Select items"
+          value=""
+          style={{ ...inputStyle, fontWeight: 600, color: NAVY }}
+          onChange={(event) => {
+            const choice = event.target.value;
+            if (choice === "all") setSelected(new Set(rows.map((r) => r.id)));
+            else if (choice === "none") setSelected(new Set());
+            else if (choice) selectPhase(choice as PhaseName);
+          }}
+        >
+          <option value="">Select items…</option>
+          <option value="all">All shown ({rows.length})</option>
+          <option value="none">None</option>
+          {phases.map(([name, label]) => (
+            <option key={name} value={name}>
               {label}
-            </button>
-          );
-        })}
+            </option>
+          ))}
+        </select>
+        <ColumnFilters basePath={basePath} params={params} people={people} shown={rows.length} total={totalCount} />
       </div>
 
       {selected.size > 0 && (
@@ -356,7 +369,7 @@ export function SubStageTable({
               {rows.length === 0 && (
                 <tr>
                   <td colSpan={9} style={{ ...td, color: TEXT_MUTED }}>
-                    This project has no items.
+                    {totalCount > 0 ? "No items match these filters." : "This project has no items."}
                   </td>
                 </tr>
               )}
@@ -366,17 +379,4 @@ export function SubStageTable({
       </div>
     </div>
   );
-}
-
-function chipStyle(active: boolean) {
-  return {
-    padding: "5px 12px",
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 600,
-    cursor: "pointer",
-    border: `1px solid ${active ? NAVY : BORDER}`,
-    background: active ? NAVY : "#fff",
-    color: active ? "#fff" : NAVY,
-  } as const;
 }

@@ -6,8 +6,7 @@ import { PhaseCard } from "@/components/PhaseCard";
 import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { ProjectEditor } from "@/components/ProjectEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
-import { DepartmentFilterBar } from "@/components/DepartmentFilterBar";
-import { parseDepartments } from "@/lib/departmentFilter";
+import { matchesFilters, parseRowFilters } from "@/lib/rowFilters";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
 import { knownFlags } from "@/server/services/flags";
@@ -54,11 +53,14 @@ export default async function ProjectDetailPage({
   if (!project) notFound();
 
   const today = todayInAppTz();
-  const departments = parseDepartments(query);
+  const todayIso = toDateInputValue(today);
+  const filters = parseRowFilters(query);
+  // The phase cards follow the department filter only; the other column filters narrow the table below.
+  const departments = filters.dept;
   const shown = (s: { department: Department }) => departments.length === 0 || departments.includes(s.department);
 
-  const rows: SubStageRow[] = project.phases.flatMap((phase) =>
-    phase.subStages.filter(shown).map((s) => ({
+  const allRows: SubStageRow[] = project.phases.flatMap((phase) =>
+    phase.subStages.map((s) => ({
       id: s.id,
       phaseName: phase.name,
       phaseLabel: phaseLabel(phase.name),
@@ -75,6 +77,8 @@ export default async function ProjectDetailPage({
       order: s.order,
     })),
   );
+
+  const rows = allRows.filter((r) => matchesFilters(r, filters, todayIso));
 
   const accessors = {
     phase: (r: SubStageRow) => r.order,
@@ -164,9 +168,10 @@ export default async function ProjectDetailPage({
         }}
       />
 
-      <FlagsEditor kind="project" id={project.id} flags={project.flags} suggestions={flagSuggestions} />
-
-      <DepartmentFilterBar basePath={`/projects/${project.id}`} params={query} selected={departments} />
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: -4 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Flags</span>
+        <FlagsEditor compact kind="project" id={project.id} name={project.name} flags={project.flags} suggestions={flagSuggestions} />
+      </div>
 
       <div
         style={{
@@ -199,13 +204,18 @@ export default async function ProjectDetailPage({
           );
         })}
       </div>
-      <p style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -8 }}>
-        Phase status, dates and owners update automatically from the items below: a phase is Done when all its items
-        are, Blocked if any is blocked, In progress once any has started. Start and completed dates are recorded
-        automatically when an item&apos;s status changes, and every change is kept in a history log. Phases
-        don&apos;t wait for each other.
-        {departments.length > 0 && " With a department filter on, the cards show only those departments' items."}
-      </p>
+      <details style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -6 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 600 }}>
+          How phases and dates work
+          {departments.length > 0 && ` (cards show only the ${departments.map(departmentLabel).join(" / ")} items)`}
+        </summary>
+        <p style={{ margin: "6px 0 0", maxWidth: 820 }}>
+          Phase status, dates and owners update automatically from the items below: a phase is Done when all its items
+          are, Blocked if any is blocked, In progress once any has started. Start and completed dates are recorded
+          automatically when an item&apos;s status changes, and every change is kept in a history log. Phases
+          don&apos;t wait for each other.
+        </p>
+      </details>
 
       <SubStageTable
         rows={sortedRows}
@@ -213,7 +223,8 @@ export default async function ProjectDetailPage({
         sort={sort}
         basePath={`/projects/${project.id}`}
         params={query}
-        todayIso={toDateInputValue(today)}
+        todayIso={todayIso}
+        totalCount={allRows.length}
       />
     </main>
   );
