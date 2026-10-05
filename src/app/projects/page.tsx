@@ -11,6 +11,7 @@ import { StatCard } from "@/components/StatCard";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
+import { FlagChip } from "@/components/FlagChip";
 import { SortTh } from "@/components/SortTh";
 import {
   GRAY_LIGHT,
@@ -35,6 +36,7 @@ const SORT_LABELS = {
   capacity: "Capacity",
   contract: "Contract value",
   spread: "Phase spread",
+  flags: "Flags",
 };
 
 export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Params> }) {
@@ -55,6 +57,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     capacity: (p: (typeof all)[number]) => (p.capacityMw ? Number(p.capacityMw) : null),
     contract: (p: (typeof all)[number]) => (p.contractValue ? Number(p.contractValue) : null),
     spread: (p: (typeof all)[number]) => progressScore([p]),
+    flags: (p: (typeof all)[number]) => p.flags.length,
   };
   const sort = parseSort(params, Object.keys(accessors), { key: "name", dir: "asc" });
   const projects = sortRows(filter ? all.filter((p) => p.lifecycle === filter) : all, accessors, sort);
@@ -102,6 +105,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       <LifecycleFilterBar basePath="/projects" params={params} filter={filter} counts={counts} total={all.length} />
 
       <div style={cardStyle}>
+        <SortSummary basePath="/projects" params={params} current={sort} labels={SORT_LABELS} />
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 960 }}>
             <thead>
@@ -113,6 +117,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
                 <SortTh label="Contract value" sortKey="contract" {...th} />
                 <SortTh label="Phase spread" sortKey="spread" {...th} />
+                <SortTh label="Flags" sortKey="flags" {...th} />
                 <SortTh style={headCell} />
               </tr>
             </thead>
@@ -152,6 +157,17 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                     <td style={{ ...bodyCell, width: 200 }}>
                       <SpreadBar segments={phaseSpread([project])} />
                     </td>
+                    <td style={bodyCell}>
+                      {project.flags.length === 0 ? (
+                        <span style={{ color: TEXT_MUTED }}>—</span>
+                      ) : (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {project.flags.map((flag) => (
+                            <FlagChip key={flag} label={flag} />
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ ...bodyCell, textAlign: "right" }}>
                       <Link href={`/projects/${project.id}`} aria-label={`Open ${project.name}`} style={{ color: TEXT_MUTED }}>
                         ›
@@ -162,7 +178,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
               })}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={8} style={{ ...bodyCell, color: TEXT_MUTED }}>
+                  <td colSpan={9} style={{ ...bodyCell, color: TEXT_MUTED }}>
                     {filter ? "No projects with this status." : "No projects yet — run the monday.com importer to bring some in."}
                   </td>
                 </tr>
@@ -170,11 +186,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             </tbody>
           </table>
         </div>
-        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>
-            Showing {projects.length} of {all.length} projects
-          </span>
-          <SortSummary basePath="/projects" params={params} current={sort} labels={SORT_LABELS} />
+        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED }}>
+          Showing {projects.length} of {all.length} projects
         </div>
       </div>
     </main>

@@ -15,6 +15,9 @@ import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { ContactsCard } from "@/components/ContactsCard";
 import { CustomerEditor } from "@/components/CustomerEditor";
+import { FlagsEditor } from "@/components/FlagsEditor";
+import { FlagChip } from "@/components/FlagChip";
+import { knownFlags } from "@/server/services/flags";
 import {
   NAVY,
   ORANGE,
@@ -44,14 +47,17 @@ export default async function CustomerDetailPage({
   const query = await searchParams;
   const filter = parseLifecycle(typeof query.lifecycle === "string" ? query.lifecycle : undefined);
 
-  const customer = await prisma.customer.findUnique({
-    where: { id },
-    include: {
-      aliases: { orderBy: { alias: "asc" } },
-      projects: { orderBy: { name: "asc" }, include: { phases: { select: { name: true, status: true } } } },
-      contacts: { include: { project: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
-    },
-  });
+  const [customer, flagSuggestions] = await Promise.all([
+    prisma.customer.findUnique({
+      where: { id },
+      include: {
+        aliases: { orderBy: { alias: "asc" } },
+        projects: { orderBy: { name: "asc" }, include: { phases: { select: { name: true, status: true } } } },
+        contacts: { include: { project: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
+      },
+    }),
+    knownFlags(),
+  ]);
   if (!customer) notFound();
 
   const all = customer.projects;
@@ -128,10 +134,18 @@ export default async function CustomerDetailPage({
         }}
       />
 
+      <FlagsEditor kind="customer" id={customer.id} flags={customer.flags} suggestions={flagSuggestions} />
+
       <LifecycleFilterBar basePath={basePath} params={query} filter={filter} counts={counts} total={all.length} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20, alignItems: "start" }}>
         <div style={{ ...cardStyle, gridColumn: "span 2" }}>
+          <SortSummary
+            basePath={basePath}
+            params={query}
+            current={sort}
+            labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value" }}
+          />
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
               <thead>
@@ -157,6 +171,13 @@ export default async function CustomerDetailPage({
                       >
                         {project.name}
                       </Link>
+                      {project.flags.length > 0 && (
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                          {project.flags.map((flag) => (
+                            <FlagChip key={flag} label={flag} />
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td style={bodyCell}>
                       <LifecycleBadge lifecycle={project.lifecycle} stage={project.mondayStage} status={project.mondayStatus} />
@@ -185,16 +206,8 @@ export default async function CustomerDetailPage({
               </tbody>
             </table>
           </div>
-          <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, display: "flex", flexDirection: "column", gap: 8 }}>
-            <span>
-              Showing {projects.length} of {all.length} projects
-            </span>
-            <SortSummary
-              basePath={basePath}
-              params={query}
-              current={sort}
-              labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value" }}
-            />
+          <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED }}>
+            Showing {projects.length} of {all.length} projects
           </div>
         </div>
 

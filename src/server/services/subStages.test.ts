@@ -4,6 +4,7 @@ import { seedSubStageTemplates } from "../../../prisma/seedData";
 import { todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
+import { addFlag, knownFlags, removeFlag } from "./flags";
 import { NOT_APPLICABLE, patchSubStages, type SubStagePatch } from "./subStages";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -133,6 +134,16 @@ describe("patchSubStages", () => {
       where: { name: "Contract Signing & Project Opening", phase: { projectId } },
     });
     expect(signing.naDates).toEqual(["targetDate"]);
+  });
+
+  it("adds and removes manual flags on a project and a customer", async () => {
+    expect(await addFlag("project", projectId, "  Payment   risk ")).toEqual(["Payment risk"]);
+    await expect(addFlag("project", projectId, "payment RISK")).rejects.toBeInstanceOf(UserError);
+    expect(await addFlag("customer", customerId, "Strategic push")).toEqual(["Strategic push"]);
+    expect(await knownFlags()).toEqual(expect.arrayContaining(["Payment risk", "Strategic push"]));
+    expect(await removeFlag("project", projectId, "payment risk")).toEqual([]);
+    expect((await prisma.customer.findUniqueOrThrow({ where: { id: customerId } })).flags).toEqual(["Strategic push"]);
+    await expect(addFlag("project", "nope", "x")).rejects.toBeInstanceOf(UserError);
   });
 
   it("rejects an owner that doesn't exist", async () => {

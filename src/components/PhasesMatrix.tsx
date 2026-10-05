@@ -205,6 +205,7 @@ export function PhasesMatrix({
       )}
 
       <div style={cardStyle}>
+        <SortSummary basePath="/phases" params={params} current={sort} labels={SORT_LABELS} />
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1200 }}>
             <thead>
@@ -322,9 +323,8 @@ export function PhasesMatrix({
             </tbody>
           </table>
         </div>
-        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, borderTop: `1px solid ${ROW_DIVIDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>{rows.length} projects · tick phases to change an owner, dates or status for all their items at once</span>
-          <SortSummary basePath="/phases" params={params} current={sort} labels={SORT_LABELS} />
+        <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, borderTop: `1px solid ${ROW_DIVIDER}` }}>
+          {rows.length} projects · tick phases to change an owner, dates or status for all their items at once
         </div>
       </div>
     </div>

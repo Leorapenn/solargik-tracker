@@ -58,6 +58,12 @@ export function PeopleManager({
       )}
 
       <div style={cardStyle}>
+        <SortSummary
+          basePath="/people"
+          params={params}
+          current={sort}
+          labels={{ name: "Name", email: "Email", items: "Items owned", status: "Status" }}
+        />
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
             <thead>
@@ -136,14 +142,6 @@ export function PeopleManager({
               )}
             </tbody>
           </table>
-        </div>
-        <div style={{ padding: "10px 18px", borderTop: `1px solid ${ROW_DIVIDER}` }}>
-          <SortSummary
-            basePath="/people"
-            params={params}
-            current={sort}
-            labels={{ name: "Name", email: "Email", items: "Items owned", status: "Status" }}
-          />
         </div>
 
         <form

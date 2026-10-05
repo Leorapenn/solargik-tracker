@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { removeSortHref, type SortState } from "@/lib/sort";
-import { NAVY, TEXT_MUTED } from "@/lib/theme";
+import { NAVY, ROW_DIVIDER, TEXT_MUTED } from "@/lib/theme";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -19,7 +19,18 @@ export function SortSummary({
 }) {
   const several = current.length > 1;
   return (
-    <span style={{ display: "inline-flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13, color: TEXT_MUTED }}>
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        gap: 8,
+        fontSize: 13,
+        color: TEXT_MUTED,
+        padding: "10px 20px",
+        borderBottom: `1px solid ${ROW_DIVIDER}`,
+      }}
+    >
       <span>Sorted by</span>
       {current.map((s, index) => (
         <span
@@ -36,6 +47,6 @@ export function SortSummary({
         </span>
       ))}
       <span>· Shift+click another column heading to sort by more than one</span>
-    </span>
+    </div>
   );
 }

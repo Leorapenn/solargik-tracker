@@ -61,6 +61,12 @@ export default async function ImportReviewPage({ searchParams }: { searchParams:
             overflow: "hidden",
           }}
         >
+          <SortSummary
+            basePath="/import"
+            params={params}
+            current={sort}
+            labels={{ item: "Item", ref: "Raw customer reference", reason: "Reason", flagged: "Flagged" }}
+          />
           <div style={{ overflowX: "auto" }}>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <thead>
@@ -94,14 +100,6 @@ export default async function ImportReviewPage({ searchParams }: { searchParams:
                 ))}
               </tbody>
             </table>
-          </div>
-          <div style={{ padding: "0.65rem 1rem", borderTop: `1px solid ${BORDER}` }}>
-            <SortSummary
-              basePath="/import"
-              params={params}
-              current={sort}
-              labels={{ item: "Item", ref: "Raw customer reference", reason: "Reason", flagged: "Flagged" }}
-            />
           </div>
         </div>
       )}

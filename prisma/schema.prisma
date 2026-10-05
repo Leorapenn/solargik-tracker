@@ -45,6 +45,8 @@ model Customer {
   mondayItemId String?            @unique
   // Fields edited by hand on the site; the importer leaves these alone until they are reset.
   lockedFields String[]           @default([])
+  // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
+  flags        String[]           @default([])
   aliases      CustomerAlias[]
   projects     Project[]
   contacts     Contact[]
@@ -111,6 +113,8 @@ model Project {
   mondayStatus  String?
   // Fields edited by hand on the site; the importer leaves these alone until they are reset.
   lockedFields  String[]         @default([])
+  // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
+  flags         String[]         @default([])
   phases        Phase[]
   contacts      Contact[]
   createdAt     DateTime         @default(now())

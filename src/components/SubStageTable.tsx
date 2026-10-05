@@ -295,6 +295,7 @@ export function SubStageTable({
       )}
 
       <div style={cardStyle}>
+        <SortSummary basePath={basePath} params={params} current={sort} labels={SORT_LABELS} />
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
             <thead>
@@ -361,9 +362,6 @@ export function SubStageTable({
               )}
             </tbody>
           </table>
-        </div>
-        <div style={{ padding: "12px 20px", borderTop: `1px solid ${ROW_DIVIDER}` }}>
-          <SortSummary basePath={basePath} params={params} current={sort} labels={SORT_LABELS} />
         </div>
       </div>
     </div>

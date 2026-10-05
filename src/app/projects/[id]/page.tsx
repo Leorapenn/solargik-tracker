@@ -5,6 +5,8 @@ import { requirePageAuth } from "@/lib/auth";
 import { PhaseCard } from "@/components/PhaseCard";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
 import { ProjectEditor } from "@/components/ProjectEditor";
+import { FlagsEditor } from "@/components/FlagsEditor";
+import { knownFlags } from "@/server/services/flags";
 import { SubStageTable, type SubStageRow } from "@/components/SubStageTable";
 import { phaseLabel } from "@/lib/phases";
 import { departmentLabel } from "@/lib/departments";
@@ -30,7 +32,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people] = await Promise.all([
+  const [project, people, flagSuggestions] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -42,6 +44,7 @@ export default async function ProjectDetailPage({
       },
     }),
     prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    knownFlags(),
   ]);
 
   if (!project) notFound();
@@ -147,6 +150,8 @@ export default async function ProjectDetailPage({
           lockedFields: project.lockedFields,
         }}
       />
+
+      <FlagsEditor kind="project" id={project.id} flags={project.flags} suggestions={flagSuggestions} />
 
       <div
         style={{

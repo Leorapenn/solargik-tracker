@@ -8,6 +8,7 @@ import { StatCard } from "@/components/StatCard";
 import { SpreadBar } from "@/components/SpreadBar";
 import { SortLink } from "@/components/SortTh";
 import { SortSummary } from "@/components/SortSummary";
+import { FlagChip } from "@/components/FlagChip";
 import { ImportanceSelect } from "@/components/ImportanceSelect";
 import { updateCustomerImportance } from "@/server/actions/updateCustomerImportance";
 import {
@@ -55,7 +56,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       spread: phaseSpread(customer.projects),
       progress: progressScore(customer.projects),
       blocked,
-      flags: customer._count.aliases + (blocked > 0 ? 1 : 0),
+      flags: customer.flags.length + customer._count.aliases + (blocked > 0 ? 1 : 0),
     };
   });
 
@@ -126,6 +127,12 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       </div>
 
       <div style={cardStyle}>
+        <SortSummary
+          basePath="/customers"
+          params={params}
+          current={sort}
+          labels={{ customer: "Customer", projects: "Projects", spread: "Phase spread", importance: "Importance", flags: "Flags" }}
+        />
         <div style={{ overflowX: "auto" }}>
           <div style={{ minWidth: 900 }}>
             <div
@@ -190,13 +197,18 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   />
                 </div>
                 <div style={{ ...bodyCell, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {customer.flags.map((flag) => (
+                    <FlagChip key={flag} label={flag} />
+                  ))}
                   {customer._count.aliases > 0 && (
                     <span style={chip("#7A4E00", "#FEF6E7")}>
                       {customer._count.aliases} name variant{customer._count.aliases === 1 ? "" : "s"}
                     </span>
                   )}
                   {blocked > 0 && <span style={chip("#8C1D18", "#FCE9E7")}>{blocked} blocked</span>}
-                  {customer._count.aliases === 0 && blocked === 0 && <span style={{ color: TEXT_MUTED }}>—</span>}
+                  {customer.flags.length === 0 && customer._count.aliases === 0 && blocked === 0 && (
+                    <span style={{ color: TEXT_MUTED }}>—</span>
+                  )}
                 </div>
                 <div style={bodyCell}>
                   <Link
@@ -222,12 +234,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
             Phase spread: <Swatch color={NAVY} /> all done · <Swatch color="#2F4C8F" /> in progress ·{" "}
             <Swatch color={ORANGE} /> blocked · <Swatch color="#E4E6EC" /> not started
           </span>
-          <SortSummary
-            basePath="/customers"
-            params={params}
-            current={sort}
-            labels={{ customer: "Customer", projects: "Projects", spread: "Phase spread", importance: "Importance", flags: "Flags" }}
-          />
         </div>
       </div>
     </main>
