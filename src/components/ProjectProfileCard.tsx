@@ -120,15 +120,14 @@ export function ProjectProfileCard({
 
   const mark = (key: keyof ProfileInput) => (filled.has(key) ? { background: "#F1F8FF", outline: "2px solid #BBD4F7", outlineOffset: 2, borderRadius: 6 } : {});
 
-  const field = (label: string, children: ReactNode, opts: { wide?: boolean; note?: string } = {}) => (
+  const field = (label: string, children: ReactNode, opts: { wide?: boolean } = {}) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, gridColumn: opts.wide ? "1 / -1" : undefined, minWidth: 0 }}>
       <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TEXT_MUTED }}>{label}</div>
       <div style={{ fontSize: 14.5, minWidth: 0 }}>{children}</div>
-      {opts.note && <div style={NOTE}>{opts.note}</div>}
     </div>
   );
 
-  const text = (key: keyof ProfileInput, label: string, opts: { long?: boolean; fromContract?: boolean } = {}) =>
+  const text = (key: keyof ProfileInput, label: string, opts: { long?: boolean } = {}) =>
     field(
       label,
       editing ? (
@@ -149,7 +148,7 @@ export function ProjectProfileCard({
       ) : (
         <span style={{ color: TEXT_MUTED }}>—</span>
       ),
-      { wide: opts.long, note: editing && opts.fromContract ? "Can be read from the contract." : undefined },
+      { wide: opts.long },
     );
 
   const date = (key: keyof ProfileInput, label: string) =>
@@ -164,7 +163,7 @@ export function ProjectProfileCard({
       ),
     );
 
-  const choose = (key: ChoiceField, label: string, options: typeof SOIL_TESTS, opts: { fromContract?: boolean } = {}) =>
+  const choose = (key: ChoiceField, label: string, options: typeof SOIL_TESTS) =>
     field(
       label,
       editing ? (
@@ -174,20 +173,15 @@ export function ProjectProfileCard({
       ) : (
         <ChoicePill choice={choiceFor(key, view[key])} />
       ),
-      { note: editing && opts.fromContract ? "Can be read from the contract." : undefined },
     );
 
-  const linkedDate = (key: LinkedKey, label: string, fallback?: string) => {
+  // Shown from the project's own item (read-only); hovering explains where it comes from.
+  const linkedDate = (key: LinkedKey, label: string) => {
     const l = linked[key];
-    const shown = l.date ? fmt(l.date) : fallback ? fmt(fallback) : "";
-    return field(
-      label,
-      shown ? shown : <span style={{ color: TEXT_MUTED }}>—</span>,
-      {
-        note: l.found
-          ? `From the “${LINKED_ITEMS[key].name}” item${l.date ? "" : fallback ? " (not done yet; date from the contract)" : " (not done yet)"}.`
-          : `No “${LINKED_ITEMS[key].name}” item on this project.`,
-      },
+    return (
+      <div title={`From the “${LINKED_ITEMS[key].name}” item`}>
+        {field(label, l.date ? fmt(l.date) : <span style={{ color: TEXT_MUTED }}>—</span>)}
+      </div>
     );
   };
 
@@ -236,24 +230,16 @@ export function ProjectProfileCard({
         <>
           {date("pileDrivingStart", "Customer ideal pile driving start")}
           {text("deliveryExpectations", "Delivery expectations", { long: true })}
-          {text("supplyTerms", "Contractual supply terms", { long: true, fromContract: true })}
-          {text("supplyObligations", "Contractual supply obligations", { long: true, fromContract: true })}
-          {choose("soilTest", "SPT or GPT", SOIL_TESTS, { fromContract: true })}
-          {text("intercoms", "Intercoms", { fromContract: true })}
-          {text("soma", "SOMA", { fromContract: true })}
-          {linkedDate("contractSigning", "Contract signing date", saved.contractSigningDate)}
-          {editing &&
-            field(
-              "Contract signing date (from the contract)",
-              <span style={mark("contractSigningDate")}>
-                <DateField ariaLabel="Contract signing date from the contract" value={form.contractSigningDate || null} onCommit={(c) => set("contractSigningDate", c.date ?? "")} />
-              </span>,
-              { note: "Only shown until the Contract Signing item is marked Done." },
-            )}
+          {text("supplyTerms", "Contractual supply terms", { long: true })}
+          {text("supplyObligations", "Contractual supply obligations", { long: true })}
+          {choose("soilTest", "SPT or GPT", SOIL_TESTS)}
+          {text("intercoms", "Intercoms")}
+          {text("soma", "SOMA")}
+          {linkedDate("contractSigning", "Contract signing date")}
           {linkedDate("internalKickoff", "Internal kickoff")}
           {linkedDate("clientKickoff", "Client kickoff")}
           {date("ntpDate", "NTP date")}
-          {text("projectType", "Type", { fromContract: true })}
+          {text("projectType", "Type")}
           {field(
             "Contract file",
             editing ? (
@@ -272,14 +258,19 @@ export function ProjectProfileCard({
                       if (file) readContract(file);
                     }}
                   />
-                  <button type="button" style={secondaryButton} disabled={!contractReading || reading || pending} onClick={() => fileInput.current?.click()}>
+                  <button
+                    type="button"
+                    style={secondaryButton}
+                    disabled={!contractReading || reading || pending}
+                    title={
+                      contractReading
+                        ? "Claude reads the PDF (max 4 MB) once and it is not stored. Check what it fills in, then press Save."
+                        : "Not switched on yet: it needs an ANTHROPIC_API_KEY setting."
+                    }
+                    onClick={() => fileInput.current?.click()}
+                  >
                     {reading ? "Reading the contract…" : "Fill from a contract PDF…"}
                   </button>
-                  <span style={NOTE}>
-                    {contractReading
-                      ? "The PDF (max 4 MB) is sent to Claude to read once and is not stored. Check what it fills in, then press Save."
-                      : "Not switched on yet: it needs an ANTHROPIC_API_KEY setting."}
-                  </span>
                 </div>
               </div>
             ) : view.contractLink ? (
@@ -332,7 +323,6 @@ export function ProjectProfileCard({
             ) : (
               <span style={{ color: TEXT_MUTED }}>—</span>
             ),
-            { note: designPackage.found ? `From the “${LINKED_ITEMS.designPackage.name}” item.` : `No “${LINKED_ITEMS.designPackage.name}” item on this project.` },
           )}
         </>,
       )}

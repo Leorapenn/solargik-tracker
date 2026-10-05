@@ -49,7 +49,6 @@ export type ProfileInput = {
   soilTest: string;
   intercoms: string;
   soma: string;
-  contractSigningDate: DateText;
   ntpDate: DateText;
   projectType: string;
   contractLink: string;
@@ -71,7 +70,6 @@ export const EMPTY_PROFILE: ProfileInput = {
   soilTest: "",
   intercoms: "",
   soma: "",
-  contractSigningDate: "",
   ntpDate: "",
   projectType: "",
   contractLink: "",
@@ -90,7 +88,7 @@ export const SHORT_TEXT_MAX = 200;
 
 export type CleanProfile = {
   text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "intercoms" | "soma" | "projectType" | "designNotes", string | null>;
-  dates: Record<"pileDrivingStart" | "contractSigningDate" | "ntpDate" | "designQuestionnaireReceived" | "initialLayoutSent", string | null>;
+  dates: Record<"pileDrivingStart" | "ntpDate" | "designQuestionnaireReceived" | "initialLayoutSent", string | null>;
   choices: Record<ChoiceField, string | null>;
   contractLink: string | null;
   projectEngineerId: string | null;
@@ -113,7 +111,7 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
 
   const result: CleanProfile = {
     text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, intercoms: null, soma: null, projectType: null, designNotes: null },
-    dates: { pileDrivingStart: null, contractSigningDate: null, ntpDate: null, designQuestionnaireReceived: null, initialLayoutSent: null },
+    dates: { pileDrivingStart: null, ntpDate: null, designQuestionnaireReceived: null, initialLayoutSent: null },
     choices: { soilTest: null, designInfoStatus: null, geotechStatus: null, genioCivileStatus: null, bomStatus: null },
     contractLink: null,
     projectEngineerId: null,
@@ -134,7 +132,6 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
 
   const dateLabels = {
     pileDrivingStart: "Customer ideal pile driving start",
-    contractSigningDate: "Contract signing date",
     ntpDate: "NTP date",
     designQuestionnaireReceived: "Design questionnaire received",
     initialLayoutSent: "Initial layout sent",

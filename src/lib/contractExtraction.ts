@@ -12,7 +12,6 @@ export type ContractFields = {
   soilTest: string;
   intercoms: string;
   soma: string;
-  contractSigningDate: string;
   projectType: string;
 };
 
@@ -22,7 +21,6 @@ export const CONTRACT_FIELD_LABELS: Record<keyof ContractFields, string> = {
   soilTest: "SPT or GPT",
   intercoms: "Intercoms",
   soma: "SOMA",
-  contractSigningDate: "Contract signing date",
   projectType: "Type",
 };
 
@@ -37,10 +35,9 @@ export const EXTRACTION_TOOL = {
       soilTest: { type: ["string", "null"], enum: ["SPT", "GPT", null], description: "Whether the contract calls for SPT or GPT." },
       intercoms: { type: ["string", "null"], description: "What the contract says about intercoms, briefly." },
       soma: { type: ["string", "null"], description: "What the contract says about SOMA, briefly." },
-      contractSigningDate: { type: ["string", "null"], description: "The date the contract was signed, as YYYY-MM-DD." },
       projectType: { type: ["string", "null"], description: "The type of project or system as described in the contract, briefly." },
     },
-    required: ["supplyTerms", "supplyObligations", "soilTest", "intercoms", "soma", "contractSigningDate", "projectType"],
+    required: ["supplyTerms", "supplyObligations", "soilTest", "intercoms", "soma", "projectType"],
   },
 };
 
@@ -58,8 +55,6 @@ const text = (value: unknown, max = MAX_FIELD): string => (typeof value === "str
 // Turns Claude's raw tool input into form-ready values ("" where nothing was found).
 export function normalizeExtraction(raw: unknown): ContractFields {
   const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const date = text(r.contractSigningDate, 10);
-  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().startsWith(date);
   const soil = text(r.soilTest, 5).toUpperCase();
   return {
     supplyTerms: text(r.supplyTerms),
@@ -67,7 +62,6 @@ export function normalizeExtraction(raw: unknown): ContractFields {
     soilTest: SOIL_TESTS.some((o) => o.value === soil) ? soil : "",
     intercoms: text(r.intercoms, 200),
     soma: text(r.soma, 200),
-    contractSigningDate: validDate ? date : "",
     projectType: text(r.projectType, 200),
   };
 }
