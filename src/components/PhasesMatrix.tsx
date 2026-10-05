@@ -72,6 +72,7 @@ export function PhasesMatrix({
   departments: Department[];
 }) {
   const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [field, setField] = useState<BulkField>("status");
   const [value, setValue] = useState("NOT_STARTED");
@@ -135,7 +136,27 @@ export function PhasesMatrix({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      {selected.size > 0 && (
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+        <button
+          type="button"
+          style={editing ? primaryButton : secondaryButton}
+          aria-pressed={editing}
+          onClick={() => {
+            setEditing(!editing);
+            setSelected(new Set());
+            setMessage(null);
+          }}
+        >
+          {editing ? "Done editing" : "Edit"}
+        </button>
+        {editing && (
+          <span style={{ fontSize: 13, color: TEXT_MUTED }}>
+            Tick phases (or a whole project row / phase column) to change their owner, dates or status at once.
+          </span>
+        )}
+      </div>
+
+      {editing && selected.size > 0 && (
         <div
           role="region"
           aria-label="Bulk edit"
@@ -221,12 +242,14 @@ export function PhasesMatrix({
                 {PHASE_ORDER.map((phase) => (
                   <th key={phase} style={th}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      <input
-                        type="checkbox"
-                        aria-label={`Select the ${phaseLabel(phase)} phase for all projects`}
-                        checked={allOn(columnIds(phase))}
-                        onChange={(e) => setMany(columnIds(phase), e.target.checked)}
-                      />
+                      {editing && (
+                        <input
+                          type="checkbox"
+                          aria-label={`Select the ${phaseLabel(phase)} phase for all projects`}
+                          checked={allOn(columnIds(phase))}
+                          onChange={(e) => setMany(columnIds(phase), e.target.checked)}
+                        />
+                      )}
                       <SortLink label={phaseLabel(phase)} sortKey={phase} current={sort} basePath="/phases" params={params} />
                     </div>
                   </th>
@@ -241,13 +264,15 @@ export function PhasesMatrix({
                   <tr key={row.projectId} style={{ borderBottom: `1px solid ${ROW_DIVIDER}`, opacity: row.lifecycle === "CANCELLED" ? 0.6 : 1 }}>
                     <td style={{ ...td, fontWeight: 700 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select every phase of ${row.projectName}`}
-                          checked={allOn(ids)}
-                          onChange={(e) => setMany(ids, e.target.checked)}
-                          style={{ marginTop: 3 }}
-                        />
+                        {editing && (
+                          <input
+                            type="checkbox"
+                            aria-label={`Select every phase of ${row.projectName}`}
+                            checked={allOn(ids)}
+                            onChange={(e) => setMany(ids, e.target.checked)}
+                            style={{ marginTop: 3 }}
+                          />
+                        )}
                         <div>
                           <Link href={`/projects/${row.projectId}`} style={{ color: NAVY }}>
                             {row.projectName}
@@ -282,13 +307,15 @@ export function PhasesMatrix({
                       return (
                         <td key={phase} style={td} title={cell.owners.length ? `Owner: ${cell.owners.join(", ")}` : "No owner assigned"}>
                           <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                            <input
-                              type="checkbox"
-                              aria-label={`Select ${phaseLabel(phase)} of ${row.projectName}`}
-                              checked={selected.has(cell.phaseId)}
-                              onChange={(e) => setMany([cell.phaseId], e.target.checked)}
-                              style={{ marginTop: 4 }}
-                            />
+                            {editing && (
+                              <input
+                                type="checkbox"
+                                aria-label={`Select ${phaseLabel(phase)} of ${row.projectName}`}
+                                checked={selected.has(cell.phaseId)}
+                                onChange={(e) => setMany([cell.phaseId], e.target.checked)}
+                                style={{ marginTop: 4 }}
+                              />
+                            )}
                             <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                               <span style={{ alignSelf: "flex-start", background: bg, color: text, borderRadius: 999, padding: "3px 10px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
                                 {STATUS_LABELS[cell.status]}
@@ -330,7 +357,7 @@ export function PhasesMatrix({
           </table>
         </div>
         <div style={{ padding: "12px 20px", fontSize: 13, color: TEXT_MUTED, borderTop: `1px solid ${ROW_DIVIDER}` }}>
-          {rows.length} projects · tick phases to change an owner, dates or status for all their items at once
+          {rows.length} projects · click Edit to change owners, dates or status for several phases at once
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import type { Department, PhaseName, StageStatus } from "@prisma/client";
 import { updateSubStages, updateSubStageStatus, type PatchInput } from "@/server/actions/updateStatus";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { STATUS_LABELS } from "@/lib/statusColors";
+import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import type { SortState } from "@/lib/sort";
 import { DateField, type DateChoice } from "@/components/DateField";
 import { ColumnFilters } from "@/components/ColumnFilters";
@@ -204,38 +204,50 @@ export function SubStageTable({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <ColumnFilters basePath={basePath} params={params} people={people} shown={rows.length} total={totalCount} />
         <button
           type="button"
           style={editing ? primaryButton : secondaryButton}
           aria-pressed={editing}
-          onClick={() => setEditing(!editing)}
-        >
-          {editing ? "Done editing" : "Edit owners & dates"}
-        </button>
-        <select
-          aria-label="Select items"
-          value=""
-          style={{ ...inputStyle, fontWeight: 600, color: NAVY }}
-          onChange={(event) => {
-            const choice = event.target.value;
-            if (choice === "all") setSelected(new Set(rows.map((r) => r.id)));
-            else if (choice === "none") setSelected(new Set());
-            else if (choice) selectPhase(choice as PhaseName);
+          onClick={() => {
+            setEditing(!editing);
+            setSelected(new Set());
+            setMessage(null);
           }}
         >
-          <option value="">Select items…</option>
-          <option value="all">All shown ({rows.length})</option>
-          <option value="none">None</option>
-          {phases.map(([name, label]) => (
-            <option key={name} value={name}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <ColumnFilters basePath={basePath} params={params} people={people} shown={rows.length} total={totalCount} />
+          {editing ? "Done editing" : "Edit"}
+        </button>
       </div>
 
-      {selected.size > 0 && (
+      {editing && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            aria-label="Select items"
+            value=""
+            style={{ ...inputStyle, fontWeight: 600, color: NAVY }}
+            onChange={(event) => {
+              const choice = event.target.value;
+              if (choice === "all") setSelected(new Set(rows.map((r) => r.id)));
+              else if (choice === "none") setSelected(new Set());
+              else if (choice) selectPhase(choice as PhaseName);
+            }}
+          >
+            <option value="">Select items…</option>
+            <option value="all">All shown ({rows.length})</option>
+            <option value="none">None</option>
+            {phases.map(([name, label]) => (
+              <option key={name} value={name}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <span style={{ fontSize: 13, color: TEXT_MUTED }}>
+            Change owners, dates and status in the table, or tick items to change several at once.
+          </span>
+        </div>
+      )}
+
+      {editing && selected.size > 0 && (
         <div
           role="region"
           aria-label="Bulk edit"
@@ -313,14 +325,16 @@ export function SubStageTable({
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
             <thead>
               <tr style={{ background: NAVY, color: "#fff" }}>
-                <th style={{ ...th, width: 36 }}>
-                  <input
-                    type="checkbox"
-                    aria-label="Select all items"
-                    checked={allSelected}
-                    onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
-                  />
-                </th>
+                {editing && (
+                  <th style={{ ...th, width: 36 }}>
+                    <input
+                      type="checkbox"
+                      aria-label="Select all items"
+                      checked={allSelected}
+                      onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
+                    />
+                  </th>
+                )}
                 <SortTh label="Phase" sortKey="phase" {...sortProps} />
                 <SortTh label="Sub-stage" sortKey="name" {...sortProps} />
                 <SortTh label="Department" sortKey="department" {...sortProps} />
@@ -337,9 +351,11 @@ export function SubStageTable({
                   key={row.id}
                   style={{ borderBottom: `1px solid ${ROW_DIVIDER}`, background: selected.has(row.id) ? "#F1F5FD" : undefined }}
                 >
-                  <td style={td}>
-                    <input type="checkbox" aria-label={`Select ${row.name}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
-                  </td>
+                  {editing && (
+                    <td style={td}>
+                      <input type="checkbox" aria-label={`Select ${row.name}`} checked={selected.has(row.id)} onChange={() => toggle(row.id)} />
+                    </td>
+                  )}
                   <td style={{ ...td, color: TEXT_MUTED, whiteSpace: "nowrap" }}>{row.phaseLabel}</td>
                   <td style={{ ...td, fontWeight: 600, color: NAVY }}>{row.name}</td>
                   <td style={td}>{row.departmentLabel}</td>
@@ -362,13 +378,30 @@ export function SubStageTable({
                   <td style={td}>{dateCell(row, "startedAt")}</td>
                   <td style={td}>{dateCell(row, "completedAt")}</td>
                   <td style={td}>
-                    <StatusSelect value={row.status} onChange={updateSubStageStatus.bind(null, row.id)} />
+                    {editing ? (
+                      <StatusSelect value={row.status} onChange={updateSubStageStatus.bind(null, row.id)} />
+                    ) : (
+                      <span
+                        style={{
+                          display: "inline-block",
+                          background: STATUS_PILL_STYLES[row.status].bg,
+                          color: STATUS_PILL_STYLES[row.status].text,
+                          borderRadius: 999,
+                          padding: "0.3rem 0.75rem",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {STATUS_LABELS[row.status]}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ ...td, color: TEXT_MUTED }}>
+                  <td colSpan={editing ? 9 : 8} style={{ ...td, color: TEXT_MUTED }}>
                     {totalCount > 0 ? "No items match these filters." : "This project has no items."}
                   </td>
                 </tr>
