@@ -2,9 +2,11 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
-import { phaseSpread } from "@/lib/phaseSpread";
+import { phaseSpread, progressScore } from "@/lib/phaseSpread";
+import { parseSort, sortRows } from "@/lib/sort";
 import { StatCard } from "@/components/StatCard";
 import { SpreadBar } from "@/components/SpreadBar";
+import { SortLink } from "@/components/SortTh";
 import { ImportanceSelect } from "@/components/ImportanceSelect";
 import { updateCustomerImportance } from "@/server/actions/updateCustomerImportance";
 import {
@@ -22,9 +24,13 @@ import {
 export const dynamic = "force-dynamic";
 
 const GRID = "2.4fr 0.9fr 1.7fr 1.2fr 1.9fr 56px";
+const IMPORTANCE_RANK = { NORMAL: 0, SEMI_STRATEGIC: 1, STRATEGIC: 2 } as const;
 
-export default async function CustomersPage() {
+type Params = Record<string, string | string[] | undefined>;
+
+export default async function CustomersPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
+  const params = await searchParams;
 
   const [customers, reviewCount, blockedPhaseCount] = await Promise.all([
     prisma.customer.findMany({
@@ -37,19 +43,38 @@ export default async function CustomersPage() {
     prisma.phase.count({ where: { status: "BLOCKED" } }),
   ]);
 
-  const rows = customers
-    .map((customer) => ({
+  const built = customers.map((customer) => {
+    const blocked = customer.projects.reduce(
+      (sum, project) => sum + project.phases.filter((phase) => phase.status === "BLOCKED").length,
+      0,
+    );
+    return {
       customer,
       projectCount: customer.projects.length,
       spread: phaseSpread(customer.projects),
-      blocked: customer.projects.reduce(
-        (sum, project) => sum + project.phases.filter((phase) => phase.status === "BLOCKED").length,
-        0,
-      ),
-    }))
-    .sort((a, b) => b.projectCount - a.projectCount || a.customer.name.localeCompare(b.customer.name));
+      progress: progressScore(customer.projects),
+      blocked,
+      flags: customer._count.aliases + (blocked > 0 ? 1 : 0),
+    };
+  });
+
+  type Row = (typeof built)[number];
+  const accessors = {
+    customer: (r: Row) => r.customer.name,
+    projects: (r: Row) => r.projectCount,
+    spread: (r: Row) => r.progress,
+    importance: (r: Row) => IMPORTANCE_RANK[r.customer.importance],
+    flags: (r: Row) => r.flags,
+  };
+  const sort = parseSort(params, Object.keys(accessors), { key: "projects", dir: "desc" });
+  const rows = sortRows(
+    [...built].sort((a, b) => a.customer.name.localeCompare(b.customer.name)),
+    accessors,
+    sort,
+  );
 
   const projectTotal = rows.reduce((sum, row) => sum + row.projectCount, 0);
+  const sortProps = { current: sort, basePath: "/customers", params };
 
   return (
     <main style={pageStyle}>
@@ -114,11 +139,21 @@ export default async function CustomersPage() {
                 textTransform: "uppercase",
               }}
             >
-              <div style={headerCell}>Customer</div>
-              <div style={headerCell}>Projects</div>
-              <div style={headerCell}>Phase spread</div>
-              <div style={headerCell}>Importance</div>
-              <div style={headerCell}>Flags</div>
+              <div style={headerCell}>
+                <SortLink label="Customer" sortKey="customer" {...sortProps} />
+              </div>
+              <div style={headerCell}>
+                <SortLink label="Projects" sortKey="projects" {...sortProps} />
+              </div>
+              <div style={headerCell}>
+                <SortLink label="Phase spread" sortKey="spread" {...sortProps} />
+              </div>
+              <div style={headerCell}>
+                <SortLink label="Importance" sortKey="importance" {...sortProps} />
+              </div>
+              <div style={headerCell}>
+                <SortLink label="Flags" sortKey="flags" {...sortProps} />
+              </div>
               <div style={headerCell} />
             </div>
 

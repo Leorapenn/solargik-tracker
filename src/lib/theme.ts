@@ -39,6 +39,37 @@ export const pageSubtitleStyle: CSSProperties = {
   color: TEXT_MUTED,
 };
 
+export const inputStyle: CSSProperties = {
+  border: `1px solid ${BORDER}`,
+  borderRadius: 6,
+  padding: "7px 10px",
+  fontSize: 14,
+  background: "#fff",
+  minWidth: 0,
+};
+
+export const primaryButton: CSSProperties = {
+  background: NAVY,
+  color: "#fff",
+  border: "none",
+  borderRadius: 6,
+  padding: "8px 14px",
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
+export const secondaryButton: CSSProperties = {
+  background: "#fff",
+  color: NAVY,
+  border: `1px solid ${BORDER}`,
+  borderRadius: 6,
+  padding: "8px 14px",
+  fontSize: 14,
+  fontWeight: 600,
+  cursor: "pointer",
+};
+
 export const cardStyle: CSSProperties = {
   background: "#fff",
   border: `1px solid ${BORDER}`,

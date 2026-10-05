@@ -32,6 +32,11 @@ export async function createProject(input: CreateProjectInput) {
       },
     });
 
+    // New items start owned by their department's default owner (managed on the People page), if set.
+    const defaultOwners = new Map(
+      (await tx.departmentOwner.findMany({ where: { person: { active: true } } })).map((o) => [o.department, o.personId]),
+    );
+
     for (const [index, phaseName] of PHASE_ORDER.entries()) {
       const phase = await tx.phase.create({
         data: {
@@ -54,6 +59,7 @@ export async function createProject(input: CreateProjectInput) {
             name: template.name,
             department: template.department,
             order: template.order,
+            ownerId: defaultOwners.get(template.department) ?? null,
           })),
         });
       }

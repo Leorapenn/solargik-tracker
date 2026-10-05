@@ -11,5 +11,6 @@ export default defineConfig({
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
     testTimeout: 30000, // queries hit a remote Neon DB, not local
+    hookTimeout: 90000, // beforeAll/afterAll create and delete whole projects over the network
   },
 });

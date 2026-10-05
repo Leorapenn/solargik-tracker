@@ -43,10 +43,41 @@ model Customer {
   name         String             @unique
   importance   CustomerImportance @default(NORMAL)
   mondayItemId String?            @unique
+  // Fields edited by hand on the site; the importer leaves these alone until they are reset.
+  lockedFields String[]           @default([])
   aliases      CustomerAlias[]
   projects     Project[]
+  contacts     Contact[]
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
+}
+
+enum ContactSource {
+  IMPORTED
+  MANUAL
+}
+
+// A person at the customer. Imported from the POC 1-4 columns on the monday Supply Projects
+// board (one row per project and slot), or added by hand on the customer profile.
+model Contact {
+  id           String        @id @default(cuid())
+  customerId   String
+  customer     Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slot         Int?
+  name         String
+  email        String?
+  role         String?
+  englishLevel String?
+  source       ContactSource @default(IMPORTED)
+  // Set when edited by hand, so the importer no longer overwrites or removes it.
+  locked       Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([projectId, slot])
+  @@index([customerId])
 }
 
 model CustomerAlias {
@@ -78,7 +109,10 @@ model Project {
   lifecycle     ProjectLifecycle @default(ACTIVE)
   mondayStage   String?
   mondayStatus  String?
+  // Fields edited by hand on the site; the importer leaves these alone until they are reset.
+  lockedFields  String[]         @default([])
   phases        Phase[]
+  contacts      Contact[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 }
@@ -108,15 +142,52 @@ model SubStageTemplate {
 }
 
 model SubStage {
-  id         String           @id @default(cuid())
-  phaseId    String
-  phase      Phase            @relation(fields: [phaseId], references: [id], onDelete: Cascade)
-  templateId String
-  template   SubStageTemplate @relation(fields: [templateId], references: [id])
-  name       String
-  department Department
-  status     StageStatus      @default(NOT_STARTED)
-  order      Int
+  id          String           @id @default(cuid())
+  phaseId     String
+  phase       Phase            @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  templateId  String
+  template    SubStageTemplate @relation(fields: [templateId], references: [id])
+  name        String
+  department  Department
+  status      StageStatus      @default(NOT_STARTED)
+  order       Int
+  ownerId     String?
+  owner       Person?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  // Plain dates (no time). Start/completed are recorded automatically when the status changes.
+  targetDate  DateTime?        @db.Date
+  startedAt   DateTime?        @db.Date
+  completedAt DateTime?        @db.Date
+  events      StatusEvent[]
+}
+
+// Every status change, with its timestamp, so dates can always be reconstructed.
+model StatusEvent {
+  id         String       @id @default(cuid())
+  subStageId String
+  subStage   SubStage     @relation(fields: [subStageId], references: [id], onDelete: Cascade)
+  fromStatus StageStatus?
+  toStatus   StageStatus
+  at         DateTime     @default(now())
+  source     String
+
+  @@index([subStageId, at])
+}
+
+model Person {
+  id         String            @id @default(cuid())
+  name       String            @unique
+  email      String?
+  active     Boolean           @default(true)
+  subStages  SubStage[]
+  defaultFor DepartmentOwner[]
+  createdAt  DateTime          @default(now())
+}
+
+// The person who owns new items of a department by default (used when projects are created).
+model DepartmentOwner {
+  department Department @id
+  personId   String
+  person     Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
 }
 
 model ImportReviewItem {

@@ -3,13 +3,15 @@ import Link from "next/link";
 import type { ProjectLifecycle } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
-import { phaseSpread } from "@/lib/phaseSpread";
-import { LIFECYCLE_LABELS, LIFECYCLE_ORDER, parseLifecycle } from "@/lib/lifecycle";
+import { phaseSpread, progressScore } from "@/lib/phaseSpread";
+import { LIFECYCLE_ORDER, parseLifecycle } from "@/lib/lifecycle";
+import { parseSort, sortRows } from "@/lib/sort";
 import { SpreadBar } from "@/components/SpreadBar";
 import { StatCard } from "@/components/StatCard";
 import { LifecycleBadge } from "@/components/LifecycleBadge";
+import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
+import { SortTh } from "@/components/SortTh";
 import {
-  BORDER,
   GRAY_LIGHT,
   NAVY,
   ROW_DIVIDER,
@@ -22,16 +24,29 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export default async function ProjectsPage({ searchParams }: { searchParams: Promise<{ lifecycle?: string }> }) {
+type Params = Record<string, string | string[] | undefined>;
+
+export default async function ProjectsPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
-  const filter = parseLifecycle((await searchParams).lifecycle);
+  const params = await searchParams;
+  const filter = parseLifecycle(typeof params.lifecycle === "string" ? params.lifecycle : undefined);
 
   const all = await prisma.project.findMany({ include: { customer: true, phases: true }, orderBy: { name: "asc" } });
 
   const counts = Object.fromEntries(LIFECYCLE_ORDER.map((l) => [l, 0])) as Record<ProjectLifecycle, number>;
   for (const project of all) counts[project.lifecycle] += 1;
 
-  const projects = filter ? all.filter((p) => p.lifecycle === filter) : all;
+  const accessors = {
+    name: (p: (typeof all)[number]) => p.name,
+    status: (p: (typeof all)[number]) => LIFECYCLE_ORDER.indexOf(p.lifecycle),
+    customer: (p: (typeof all)[number]) => p.customer.name,
+    country: (p: (typeof all)[number]) => p.country,
+    capacity: (p: (typeof all)[number]) => (p.capacityMw ? Number(p.capacityMw) : null),
+    contract: (p: (typeof all)[number]) => (p.contractValue ? Number(p.contractValue) : null),
+    spread: (p: (typeof all)[number]) => progressScore([p]),
+  };
+  const sort = parseSort(params, Object.keys(accessors), { key: "name", dir: "asc" });
+  const projects = sortRows(filter ? all.filter((p) => p.lifecycle === filter) : all, accessors, sort);
 
   // Pre-NTP and cancelled projects are expected to lack contract data, so only flag the rest.
   const needsDataCount = all.filter(
@@ -39,6 +54,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       ["ACTIVE", "ON_HOLD", "SUSPENDED"].includes(p.lifecycle) &&
       (p.contractValue === null || p.capacityMw === null || p.country === null),
   ).length;
+
+  const th = { current: sort, basePath: "/projects", params, style: headCell };
 
   return (
     <main style={pageStyle}>
@@ -71,30 +88,21 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         />
       </div>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }} role="group" aria-label="Filter by project status">
-        <FilterChip href="/projects" active={!filter} label={`All (${all.length})`} />
-        {LIFECYCLE_ORDER.map((lifecycle) => (
-          <FilterChip
-            key={lifecycle}
-            href={`/projects?lifecycle=${lifecycle}`}
-            active={filter === lifecycle}
-            label={`${LIFECYCLE_LABELS[lifecycle]} (${counts[lifecycle]})`}
-          />
-        ))}
-      </div>
+      <LifecycleFilterBar basePath="/projects" params={params} filter={filter} counts={counts} total={all.length} />
 
       <div style={cardStyle}>
         <div style={{ overflowX: "auto" }}>
           <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 960 }}>
             <thead>
               <tr style={{ background: NAVY, color: "#fff" }}>
-                {["Project", "Status", "Customer", "Country", "Capacity (MW)", "Contract value", "Phase spread", ""].map(
-                  (heading) => (
-                    <th key={heading} style={headCell}>
-                      {heading}
-                    </th>
-                  ),
-                )}
+                <SortTh label="Project" sortKey="name" {...th} />
+                <SortTh label="Status" sortKey="status" {...th} />
+                <SortTh label="Customer" sortKey="customer" {...th} />
+                <SortTh label="Country" sortKey="country" {...th} />
+                <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
+                <SortTh label="Contract value" sortKey="contract" {...th} />
+                <SortTh label="Phase spread" sortKey="spread" {...th} />
+                <SortTh style={headCell} />
               </tr>
             </thead>
             <tbody>
@@ -156,26 +164,6 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         </div>
       </div>
     </main>
-  );
-}
-
-function FilterChip({ href, active, label }: { href: string; active: boolean; label: string }) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "true" : undefined}
-      style={{
-        padding: "8px 14px",
-        borderRadius: 999,
-        fontSize: 14,
-        fontWeight: 600,
-        border: `1px solid ${active ? NAVY : BORDER}`,
-        background: active ? NAVY : "#fff",
-        color: active ? "#fff" : NAVY,
-      }}
-    >
-      {label}
-    </Link>
   );
 }
 
