@@ -97,6 +97,25 @@ export async function updateProject(projectId: string, input: ProjectEdit): Prom
   });
 }
 
+// Quick status change straight from a table. Same rule as the full editor: a hand-edited status is
+// locked, so the next import from monday.com won't put the old one back.
+export async function setProjectLifecycle(projectId: string, lifecycle: ProjectLifecycle): Promise<ActionResult> {
+  await requireActionAuth();
+  return run(async () => {
+    if (!LIFECYCLE_ORDER.includes(lifecycle)) throw new UserError("Invalid project status.");
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { lockedFields: true } });
+    if (!project) throw new UserError("That project no longer exists.");
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { lifecycle, lockedFields: withLocks(project.lockedFields, ["lifecycle"], []) },
+    });
+    revalidatePath("/projects", "layout");
+    revalidatePath("/customers", "layout");
+    revalidatePath("/phases");
+    return {};
+  });
+}
+
 export type CustomerEdit = { name: string; importance: CustomerImportance; unlock: string[] };
 
 export async function updateCustomer(customerId: string, input: CustomerEdit): Promise<ActionResult> {

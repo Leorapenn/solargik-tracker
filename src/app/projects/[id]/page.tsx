@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { PhaseCard } from "@/components/PhaseCard";
-import { LifecycleBadge } from "@/components/LifecycleBadge";
+import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { ProjectEditor } from "@/components/ProjectEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { DepartmentFilterBar } from "@/components/DepartmentFilterBar";
@@ -107,7 +107,14 @@ export default async function ProjectDetailPage({
         >
           {project.name}
         </h1>
-        <LifecycleBadge lifecycle={project.lifecycle} stage={project.mondayStage} status={project.mondayStatus} />
+        <ProjectStatusSelect
+          projectId={project.id}
+          projectName={project.name}
+          value={project.lifecycle}
+          lockedFields={project.lockedFields}
+          mondayStage={project.mondayStage}
+          mondayStatus={project.mondayStatus}
+        />
       </div>
 
       {LIFECYCLE_NOTES[project.lifecycle] && (

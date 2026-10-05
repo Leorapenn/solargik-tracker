@@ -9,7 +9,7 @@ import { LIFECYCLE_ORDER, parseLifecycle } from "@/lib/lifecycle";
 import { groupContacts } from "@/lib/contacts";
 import { parseSort, sortRows } from "@/lib/sort";
 import { SpreadBar } from "@/components/SpreadBar";
-import { LifecycleBadge } from "@/components/LifecycleBadge";
+import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
@@ -17,6 +17,7 @@ import { ContactsCard } from "@/components/ContactsCard";
 import { CustomerEditor } from "@/components/CustomerEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { FlagChip } from "@/components/FlagChip";
+import { parseFlagColors } from "@/lib/flags";
 import { knownFlags } from "@/server/services/flags";
 import {
   NAVY,
@@ -134,7 +135,13 @@ export default async function CustomerDetailPage({
         }}
       />
 
-      <FlagsEditor kind="customer" id={customer.id} flags={customer.flags} suggestions={flagSuggestions} />
+      <FlagsEditor
+        kind="customer"
+        id={customer.id}
+        flags={customer.flags}
+        colors={parseFlagColors(customer.flagColors)}
+        suggestions={flagSuggestions}
+      />
 
       <LifecycleFilterBar basePath={basePath} params={query} filter={filter} counts={counts} total={all.length} />
 
@@ -174,13 +181,20 @@ export default async function CustomerDetailPage({
                       {project.flags.length > 0 && (
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                           {project.flags.map((flag) => (
-                            <FlagChip key={flag} label={flag} />
+                            <FlagChip key={flag} label={flag} color={null} />
                           ))}
                         </div>
                       )}
                     </td>
                     <td style={bodyCell}>
-                      <LifecycleBadge lifecycle={project.lifecycle} stage={project.mondayStage} status={project.mondayStatus} />
+                      <ProjectStatusSelect
+                        projectId={project.id}
+                        projectName={project.name}
+                        value={project.lifecycle}
+                        lockedFields={project.lockedFields}
+                        mondayStage={project.mondayStage}
+                        mondayStatus={project.mondayStatus}
+                      />
                     </td>
                     <td style={{ ...bodyCell, width: 220 }}>
                       <SpreadBar segments={phaseSpread([project])} />

@@ -47,6 +47,8 @@ model Customer {
   lockedFields String[]           @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
   flags        String[]           @default([])
+  // Green / yellow / red per flag label: {"Payment risk": "RED"}. A flag with no entry counts as yellow.
+  flagColors   Json               @default("{}")
   aliases      CustomerAlias[]
   projects     Project[]
   contacts     Contact[]

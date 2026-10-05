@@ -8,7 +8,7 @@ import { LIFECYCLE_ORDER, parseLifecycle } from "@/lib/lifecycle";
 import { parseSort, sortRows } from "@/lib/sort";
 import { SpreadBar } from "@/components/SpreadBar";
 import { StatCard } from "@/components/StatCard";
-import { LifecycleBadge } from "@/components/LifecycleBadge";
+import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagChip } from "@/components/FlagChip";
@@ -138,10 +138,13 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                       </Link>
                     </td>
                     <td style={bodyCell}>
-                      <LifecycleBadge
-                        lifecycle={project.lifecycle}
-                        stage={project.mondayStage}
-                        status={project.mondayStatus}
+                      <ProjectStatusSelect
+                        projectId={project.id}
+                        projectName={project.name}
+                        value={project.lifecycle}
+                        lockedFields={project.lockedFields}
+                        mondayStage={project.mondayStage}
+                        mondayStatus={project.mondayStatus}
                       />
                     </td>
                     <td style={bodyCell}>
@@ -163,7 +166,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                       ) : (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                           {project.flags.map((flag) => (
-                            <FlagChip key={flag} label={flag} />
+                            <FlagChip key={flag} label={flag} color={null} />
                           ))}
                         </div>
                       )}

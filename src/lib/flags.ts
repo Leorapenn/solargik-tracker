@@ -14,4 +14,37 @@ export function checkNewFlag(raw: string, existing: string[]): FlagCheck {
   return { ok: true, label };
 }
 
+// Customer flags carry a traffic-light color. A flag with no color recorded counts as yellow.
+export type FlagColor = "GREEN" | "YELLOW" | "RED";
+export const FLAG_COLORS: FlagColor[] = ["GREEN", "YELLOW", "RED"];
+export const DEFAULT_FLAG_COLOR: FlagColor = "YELLOW";
+
+export const FLAG_COLOR_LABELS: Record<FlagColor, string> = { GREEN: "Green", YELLOW: "Yellow", RED: "Red" };
+export const FLAG_COLOR_STYLES: Record<FlagColor, { bg: string; text: string; border: string; dot: string }> = {
+  GREEN: { bg: "#E3F6EA", text: "#0B5D34", border: "#8FD3A9", dot: "#1FA25A" },
+  YELLOW: { bg: "#FEF6E7", text: "#7A4E00", border: "#F0C069", dot: "#E0A100" },
+  RED: { bg: "#FCE9E7", text: "#8C1D18", border: "#EE9A93", dot: "#D93025" },
+};
+
+export const isFlagColor = (value: unknown): value is FlagColor => FLAG_COLORS.includes(value as FlagColor);
+
+// Reads the stored {label: color} map defensively (it is JSON in the database).
+export function parseFlagColors(value: unknown): Record<string, FlagColor> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, FlagColor> = {};
+  for (const [label, color] of Object.entries(value as Record<string, unknown>)) if (isFlagColor(color)) out[label] = color;
+  return out;
+}
+
+export const colorOf = (colors: Record<string, FlagColor>, label: string): FlagColor => colors[label] ?? DEFAULT_FLAG_COLOR;
+
+// The next color when a flag's dot is clicked: green, yellow, red, green...
+export const nextFlagColor = (color: FlagColor): FlagColor => FLAG_COLORS[(FLAG_COLORS.indexOf(color) + 1) % FLAG_COLORS.length];
+
+// For sorting customers: any red beats any yellow beats green; more flags break ties.
+export function flagSeverity(labels: string[], colors: Record<string, FlagColor>): number {
+  const worst = labels.reduce((max, label) => Math.max(max, FLAG_COLORS.indexOf(colorOf(colors, label)) + 1), 0);
+  return worst * 1000 + labels.length;
+}
+
 export const withoutFlag = (flags: string[], label: string) => flags.filter((f) => f.toLowerCase() !== label.toLowerCase());

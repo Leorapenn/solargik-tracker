@@ -9,6 +9,7 @@ import { SpreadBar } from "@/components/SpreadBar";
 import { SortLink } from "@/components/SortTh";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagChip } from "@/components/FlagChip";
+import { colorOf, flagSeverity, parseFlagColors } from "@/lib/flags";
 import { ImportanceSelect } from "@/components/ImportanceSelect";
 import { updateCustomerImportance } from "@/server/actions/updateCustomerImportance";
 import {
@@ -56,7 +57,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       spread: phaseSpread(customer.projects),
       progress: progressScore(customer.projects),
       blocked,
-      flags: customer.flags.length + customer._count.aliases + (blocked > 0 ? 1 : 0),
+      flags: flagSeverity(customer.flags, parseFlagColors(customer.flagColors)) + customer._count.aliases + (blocked > 0 ? 1 : 0),
     };
   });
 
@@ -198,7 +199,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 </div>
                 <div style={{ ...bodyCell, display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {customer.flags.map((flag) => (
-                    <FlagChip key={flag} label={flag} />
+                    <FlagChip key={flag} label={flag} color={colorOf(parseFlagColors(customer.flagColors), flag)} />
                   ))}
                   {customer._count.aliases > 0 && (
                     <span style={chip("#7A4E00", "#FEF6E7")}>
