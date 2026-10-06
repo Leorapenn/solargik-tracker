@@ -6,6 +6,7 @@ import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
 import { addFlag, knownFlags, removeFlag, setFlagColor } from "./flags";
 import { getProfile, saveProfile } from "./projectProfile";
+import { getPaymentData, savePayments } from "./payments";
 import { EMPTY_PROFILE } from "@/lib/projectProfile";
 import { parseFlagColors } from "@/lib/flags";
 import { NOT_APPLICABLE, patchSubStages, type SubStagePatch } from "./subStages";
@@ -169,6 +170,39 @@ describe("patchSubStages", () => {
     await expect(saveProfile(projectId, { ...EMPTY_PROFILE, projectEngineerId: "nobody" })).rejects.toBeInstanceOf(UserError);
     await expect(saveProfile(projectId, { ...EMPTY_PROFILE, bomStatus: "NOPE" })).rejects.toBeInstanceOf(UserError);
     await expect(saveProfile("missing", EMPTY_PROFILE)).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("saves milestones and change orders as one list, and enforces the rules", async () => {
+    const ms = (over: Record<string, unknown> = {}) => ({ id: "", label: "Milestone 1 (AP)", optional: false, percent: "20", amountOverride: "", linkedSubStageId: "", dueDate: "2026-11-01", status: "NOT_DUE", invoiceSentDate: "", paidDate: "", ...over });
+    const co = (over: Record<string, unknown> = {}) => ({ id: "", reason: "Extra piles", status: "SENT", amount: "12000", dateSent: "2026-09-01", invoicedDate: "", invoiceStatus: "", fileLink: "", ...over });
+
+    await savePayments(projectId, {
+      milestones: [ms({ label: "NTP / NTD", optional: true, percent: "10" }), ms({ linkedSubStageId: supplyIds[0], status: "INVOICE_SENT", invoiceSentDate: "2026-10-01", paidDate: "2026-10-02" })],
+      changeOrders: [co({ invoiceStatus: "PAID" })],
+    });
+    let data = (await getPaymentData(projectId))!;
+    expect(data.milestones.map((m) => [m.order, m.label, m.status])).toEqual([[0, "NTP / NTD", "NOT_DUE"], [1, "Milestone 1 (AP)", "INVOICE_SENT"]]);
+    expect(data.milestones[1]).toMatchObject({ invoiceSentDate: "2026-10-01", paidDate: null, linkedSubStageId: supplyIds[0] });
+    expect(data.milestones[0].optional).toBe(true);
+    expect(data.changeOrders[0]).toMatchObject({ status: "COMPLETE", invoiceStatus: "PAID", amount: 12000 }); // paid invoice completes it
+
+    // saving again keeps ids, reorders by position, and drops what is no longer sent
+    const [first, second] = data.milestones;
+    await savePayments(projectId, {
+      milestones: [{ ...ms({ id: second.id, label: "Milestone 1 (AP)", status: "PAYMENT_RECEIVED", invoiceSentDate: "2026-10-01", paidDate: "2026-10-05" }) }],
+      changeOrders: [],
+    });
+    data = (await getPaymentData(projectId))!;
+    expect(data.milestones).toHaveLength(1);
+    expect(data.milestones[0]).toMatchObject({ id: second.id, order: 0, status: "PAYMENT_RECEIVED", paidDate: "2026-10-05" });
+    expect(data.changeOrders).toHaveLength(0);
+    expect(await prisma.milestone.count({ where: { id: first.id } })).toBe(0);
+
+    await expect(savePayments(projectId, { milestones: [ms({ status: "OVERDUE" })], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments(projectId, { milestones: [ms({ linkedSubStageId: "someone-elses-item" })], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments(projectId, { milestones: [ms({ id: "not-mine" })], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments("missing", { milestones: [], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
+    expect((await getPaymentData(projectId))!.milestones).toHaveLength(1); // failed saves changed nothing
   });
 
   it("rejects an owner that doesn't exist", async () => {

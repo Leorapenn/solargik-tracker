@@ -10,6 +10,8 @@ import { matchesFilters, parseRowFilters } from "@/lib/rowFilters";
 import { ProjectProfileCard } from "@/components/ProjectProfileCard";
 import { linkedValues } from "@/lib/projectProfile";
 import { getProfile } from "@/server/services/projectProfile";
+import { getPaymentData } from "@/server/services/payments";
+import { PaymentsCard } from "@/components/PaymentsCard";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
 import { knownFlags } from "@/server/services/flags";
@@ -40,7 +42,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions, profile] = await Promise.all([
+  const [project, people, flagSuggestions, profile, payments] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -54,6 +56,7 @@ export default async function ProjectDetailPage({
     prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     knownFlags(),
     getProfile(id),
+    getPaymentData(id),
   ]);
 
   if (!project) notFound();
@@ -229,6 +232,8 @@ export default async function ProjectDetailPage({
           )}
         />
       </details>
+
+      {payments && <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />}
 
       <details style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -6 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 600 }}>

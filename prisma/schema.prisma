@@ -120,6 +120,8 @@ model Project {
   phases        Phase[]
   contacts      Contact[]
   profile       ProjectProfile?
+  milestones    Milestone[]
+  changeOrders  ChangeOrder[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 }
@@ -206,6 +208,52 @@ model SubStage {
   // as opposed to simply not set yet. An N/A date stays empty and never raises a missing-date warning.
   naDates     String[]         @default([])
   events      StatusEvent[]
+  // Payment milestones triggered by this item (e.g. a Delivery item): see Milestone.
+  milestones  Milestone[]
+}
+
+// A payment milestone of a project's contract (NTP/NTD, Milestone 1 (AP) ... Milestone 5): a share of the
+// contract value that is invoiced and paid. The amount is percent x the project's contract value unless
+// overridden. The stored status is NOT_DUE, INVOICE_SENT or PAYMENT_RECEIVED; "Overdue" is never stored,
+// it is derived from the due date (see src/lib/payments.ts). An optional link to one of the project's own
+// items (e.g. a Delivery item) makes the milestone active once that item is Done.
+model Milestone {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  order            Int
+  label            String
+  optional         Boolean   @default(false)
+  percent          Decimal?  @db.Decimal(6, 3)
+  amountOverride   Decimal?  @db.Decimal(14, 2)
+  linkedSubStageId String?
+  linkedSubStage   SubStage? @relation(fields: [linkedSubStageId], references: [id], onDelete: SetNull)
+  dueDate          DateTime? @db.Date
+  status           String    @default("NOT_DUE")
+  invoiceSentDate  DateTime? @db.Date
+  paidDate         DateTime? @db.Date
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([projectId, order])
+}
+
+// An extra piece of work agreed after the contract, invoiced separately.
+model ChangeOrder {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reason        String
+  status        String    @default("SENT") // SENT | OVERDUE | COMPLETE (COMPLETE automatically once the invoice is PAID)
+  amount        Decimal?  @db.Decimal(14, 2)
+  dateSent      DateTime? @db.Date
+  invoicedDate  DateTime? @db.Date
+  invoiceStatus String? // SENT | OVERDUE | PAID
+  fileLink      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([projectId, createdAt])
 }
 
 // Every status change, with its timestamp, so dates can always be reconstructed.
