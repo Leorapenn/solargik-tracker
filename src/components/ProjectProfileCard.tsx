@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { extractContract, saveProjectProfile } from "@/server/actions/projectProfile";
 import { CONTRACT_FIELD_LABELS, type ContractFields } from "@/lib/contractExtraction";
+import { CONTRACT_PROMPT, parseContractAnswer } from "@/lib/contractAnswer";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import {
@@ -50,6 +51,10 @@ export function ProjectProfileCard({
   const [pending, startTransition] = useTransition();
   const [reading, startReading] = useTransition();
   const fileInput = useRef<HTMLInputElement>(null);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
 
   // after a save the page re-renders with fresh data; keep what was just saved in the meantime
   const [seen, setSeen] = useState(initial);
@@ -93,29 +98,57 @@ export function ProjectProfileCard({
     startReading(async () => {
       const result = await extractContract(data);
       if (!result.ok) return setMessage({ kind: "error", text: result.error });
-      const next = { ...form };
-      const added: string[] = [];
-      const kept: string[] = [];
-      const touched = new Set(filled);
-      for (const key of Object.keys(CONTRACT_FIELD_LABELS) as (keyof ContractFields)[]) {
-        const found = result.fields[key];
-        if (!found) continue;
-        if (next[key]) kept.push(CONTRACT_FIELD_LABELS[key]);
-        else {
-          next[key] = found;
-          touched.add(key);
-          added.push(CONTRACT_FIELD_LABELS[key]);
-        }
-      }
-      setForm(next);
-      setFilled(touched);
-      setMessage({
-        kind: "ok",
-        text:
-          (added.length ? `Filled in from the contract: ${added.join(", ")}. Review them, then press Save.` : "The contract didn't state anything for the empty fields.") +
-          (kept.length ? ` Kept what you had for: ${kept.join(", ")}.` : ""),
-      });
+      applyFields(result.fields);
     });
+  }
+
+  // Fills only the fields that are still empty (never overwrites what a person typed), highlights them,
+  // and says what happened. Used by both the API button and the paste box.
+  function applyFields(fields: ContractFields) {
+    const next = { ...form };
+    const added: string[] = [];
+    const kept: string[] = [];
+    const touched = new Set(filled);
+    for (const key of Object.keys(CONTRACT_FIELD_LABELS) as (keyof ContractFields)[]) {
+      const found = fields[key];
+      if (!found) continue;
+      if (next[key]) kept.push(CONTRACT_FIELD_LABELS[key]);
+      else {
+        next[key] = found;
+        touched.add(key);
+        added.push(CONTRACT_FIELD_LABELS[key]);
+      }
+    }
+    setForm(next);
+    setFilled(touched);
+    setMessage({
+      kind: "ok",
+      text:
+        (added.length ? `Filled in from the contract: ${added.join(", ")}. Review them, then press Save.` : "The contract didn't state anything for the empty fields.") +
+        (kept.length ? ` Kept what you had for: ${kept.join(", ")}.` : ""),
+    });
+  }
+
+  async function copyPrompt() {
+    setMessage(null);
+    try {
+      await navigator.clipboard.writeText(CONTRACT_PROMPT);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setShowPrompt(true);
+      setMessage({ kind: "error", text: "Couldn't copy automatically. Select the prompt below and copy it yourself." });
+    }
+  }
+
+  function fillFromPaste() {
+    const parsed = parseContractAnswer(pasted);
+    if (parsed.found === 0) {
+      return setMessage({ kind: "error", text: "I couldn't find any of the fields in that text. Paste the AI's full reply to the contract prompt." });
+    }
+    applyFields(parsed.fields);
+    setPasted("");
+    setPasteOpen(false);
   }
 
   const mark = (key: keyof ProfileInput) => (filled.has(key) ? { background: "#F1F8FF", outline: "2px solid #BBD4F7", outlineOffset: 2, borderRadius: 6 } : {});
@@ -245,6 +278,45 @@ export function ProjectProfileCard({
             editing ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <input aria-label="Contract link" placeholder="Paste the SharePoint / OneDrive link to the contract" value={form.contractLink} onChange={(e) => set("contractLink", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <button type="button" style={secondaryButton} onClick={copyPrompt}>
+                    {copied ? "Copied ✓" : "Copy contract prompt"}
+                  </button>
+                  <button type="button" style={secondaryButton} aria-expanded={pasteOpen} onClick={() => setPasteOpen(!pasteOpen)}>
+                    Paste the answer…
+                  </button>
+                  <span style={NOTE}>Attach the contract in Claude or Copilot, send this prompt, then paste the reply here. Check what it fills in, then press Save.</span>
+                </div>
+                {showPrompt && (
+                  <textarea aria-label="Contract prompt to copy" readOnly rows={9} value={CONTRACT_PROMPT} onFocus={(e) => e.currentTarget.select()} style={{ ...inputStyle, width: "100%", fontFamily: "inherit" }} />
+                )}
+                {pasteOpen && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <textarea
+                      aria-label="The AI's answer about the contract"
+                      placeholder="Paste the reply here"
+                      rows={7}
+                      value={pasted}
+                      onChange={(e) => setPasted(e.target.value)}
+                      style={{ ...inputStyle, width: "100%", fontFamily: "inherit" }}
+                    />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button type="button" style={primaryButton} disabled={!pasted.trim()} onClick={fillFromPaste}>
+                        Fill the fields
+                      </button>
+                      <button
+                        type="button"
+                        style={secondaryButton}
+                        onClick={() => {
+                          setPasteOpen(false);
+                          setPasted("");
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <input
                     ref={fileInput}
