@@ -179,11 +179,14 @@ describe("patchSubStages", () => {
     await savePayments(projectId, {
       milestones: [ms({ label: "NTP / NTD", optional: true, percent: "10" }), ms({ linkedSubStageId: supplyIds[0], status: "INVOICE_SENT", invoiceSentDate: "2026-10-01", paidDate: "2026-10-02" })],
       changeOrders: [co({ invoiceStatus: "PAID" })],
+      currency: "EUR",
+      paymentBase: "€899,760",
     });
     let data = (await getPaymentData(projectId))!;
     expect(data.milestones.map((m) => [m.order, m.label, m.status])).toEqual([[0, "NTP / NTD", "NOT_DUE"], [1, "Milestone 1 (AP)", "INVOICE_SENT"]]);
     expect(data.milestones[1]).toMatchObject({ invoiceSentDate: "2026-10-01", paidDate: null, linkedSubStageId: supplyIds[0] });
     expect(data.milestones[0].optional).toBe(true);
+    expect(data).toMatchObject({ currency: "EUR", paymentBase: 899760, contractValue: 899760 }); // the typed base wins
     expect(data.changeOrders[0]).toMatchObject({ status: "COMPLETE", invoiceStatus: "PAID", amount: 12000 }); // paid invoice completes it
 
     // saving again keeps ids, reorders by position, and drops what is no longer sent
@@ -191,17 +194,24 @@ describe("patchSubStages", () => {
     await savePayments(projectId, {
       milestones: [{ ...ms({ id: second.id, label: "Milestone 1 (AP)", status: "PAYMENT_RECEIVED", invoiceSentDate: "2026-10-01", paidDate: "2026-10-05" }) }],
       changeOrders: [],
+      currency: "USD",
+      paymentBase: "",
     });
     data = (await getPaymentData(projectId))!;
+    expect(data).toMatchObject({ currency: "USD", paymentBase: null }); // blank base falls back to the monday.com value
+    expect(data.contractValue).toBe(data.mondayValue);
     expect(data.milestones).toHaveLength(1);
     expect(data.milestones[0]).toMatchObject({ id: second.id, order: 0, status: "PAYMENT_RECEIVED", paidDate: "2026-10-05" });
     expect(data.changeOrders).toHaveLength(0);
     expect(await prisma.milestone.count({ where: { id: first.id } })).toBe(0);
 
-    await expect(savePayments(projectId, { milestones: [ms({ status: "OVERDUE" })], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
-    await expect(savePayments(projectId, { milestones: [ms({ linkedSubStageId: "someone-elses-item" })], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
-    await expect(savePayments(projectId, { milestones: [ms({ id: "not-mine" })], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
-    await expect(savePayments("missing", { milestones: [], changeOrders: [] })).rejects.toBeInstanceOf(UserError);
+    const usd = { currency: "USD", paymentBase: "" };
+    await expect(savePayments(projectId, { milestones: [ms({ status: "OVERDUE" })], changeOrders: [], ...usd })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments(projectId, { milestones: [ms({ linkedSubStageId: "someone-elses-item" })], changeOrders: [], ...usd })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments(projectId, { milestones: [ms({ id: "not-mine" })], changeOrders: [], ...usd })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments("missing", { milestones: [], changeOrders: [], ...usd })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments(projectId, { milestones: [], changeOrders: [], currency: "BTC", paymentBase: "" })).rejects.toBeInstanceOf(UserError);
+    await expect(savePayments(projectId, { milestones: [], changeOrders: [], currency: "EUR", paymentBase: "-5" })).rejects.toBeInstanceOf(UserError);
     expect((await getPaymentData(projectId))!.milestones).toHaveLength(1); // failed saves changed nothing
   });
 

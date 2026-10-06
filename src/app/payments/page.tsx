@@ -28,6 +28,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       id: true,
       name: true,
       contractValue: true,
+      paymentCurrency: true,
+      paymentBase: true,
       customer: { select: { name: true } },
       milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true, linkedSubStage: { select: { status: true } } } },
       changeOrders: { select: { status: true } },
@@ -35,7 +37,9 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   });
 
   const rows = projects.map((p) => {
-    const contract = p.contractValue === null ? null : Number(p.contractValue.toString());
+    // the amount the milestone percentages apply to: the typed payment base, else the monday.com contract value
+    const baseValue = p.paymentBase ?? p.contractValue;
+    const contract = baseValue === null ? null : Number(baseValue.toString());
     const milestones = p.milestones.map((m) => ({
       id: m.id,
       label: m.label,
@@ -52,6 +56,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       id: p.id,
       name: p.name,
       customer: p.customer.name,
+      currency: p.paymentCurrency,
       contract,
       paid: milestoneTotals(milestones, contract).paid,
       hasMilestones: milestones.length > 0,
@@ -109,12 +114,12 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                     </Link>
                   </td>
                   <td style={{ ...bodyCell, color: TEXT_MUTED }}>{r.customer}</td>
-                  <td style={bodyCell}>{money(r.contract)}</td>
-                  <td style={bodyCell}>{r.hasMilestones ? money(r.paid) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
+                  <td style={bodyCell}>{money(r.contract, r.currency)}</td>
+                  <td style={bodyCell}>{r.hasMilestones ? money(r.paid, r.currency) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
                   <td style={bodyCell}>
                     {r.next ? (
                       <>
-                        {r.next.label} <span style={{ color: TEXT_MUTED }}>· {money(r.nextAmount)}</span>
+                        {r.next.label} <span style={{ color: TEXT_MUTED }}>· {money(r.nextAmount, r.currency)}</span>
                       </>
                     ) : (
                       <span style={{ color: TEXT_MUTED }}>{r.hasMilestones ? "None active" : "No milestones yet"}</span>

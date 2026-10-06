@@ -6,7 +6,10 @@ import { run, type ActionResult } from "@/lib/errors";
 import type { ChangeOrderInput, MilestoneInput } from "@/lib/payments";
 import { savePayments as save } from "@/server/services/payments";
 
-export async function savePayments(projectId: string, input: { milestones: MilestoneInput[]; changeOrders: ChangeOrderInput[] }): Promise<ActionResult> {
+export async function savePayments(
+  projectId: string,
+  input: { milestones: MilestoneInput[]; changeOrders: ChangeOrderInput[]; currency: string; paymentBase: string },
+): Promise<ActionResult> {
   await requireActionAuth();
   return run(async () => {
     await save(projectId, input);

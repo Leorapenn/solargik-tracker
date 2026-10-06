@@ -100,30 +100,35 @@ enum ProjectLifecycle {
 }
 
 model Project {
-  id            String           @id @default(cuid())
-  name          String
-  mondayItemId  String           @unique
-  customerId    String
-  customer      Customer         @relation(fields: [customerId], references: [id])
-  contractValue Decimal?
-  capacityMw    Decimal?
-  country       String?
+  id              String           @id @default(cuid())
+  name            String
+  mondayItemId    String           @unique
+  customerId      String
+  customer        Customer         @relation(fields: [customerId], references: [id])
+  contractValue   Decimal?
+  capacityMw      Decimal?
+  country         String?
   // Derived from the Control Table STAGE/Status columns on import (see src/lib/lifecycle.ts);
   // the raw monday labels are kept so the mapping can be re-checked.
-  lifecycle     ProjectLifecycle @default(ACTIVE)
-  mondayStage   String?
-  mondayStatus  String?
+  lifecycle       ProjectLifecycle @default(ACTIVE)
+  mondayStage     String?
+  mondayStatus    String?
   // Fields edited by hand on the site; the importer leaves these alone until they are reset.
-  lockedFields  String[]         @default([])
+  lockedFields    String[]         @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
-  flags         String[]         @default([])
-  phases        Phase[]
-  contacts      Contact[]
-  profile       ProjectProfile?
-  milestones    Milestone[]
-  changeOrders  ChangeOrder[]
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  flags           String[]         @default([])
+  phases          Phase[]
+  contacts        Contact[]
+  profile         ProjectProfile?
+  milestones      Milestone[]
+  changeOrders    ChangeOrder[]
+  // Payments (milestones, change orders) are in this currency (USD, EUR, ILS...). paymentBase is the
+  // contract amount in that currency that milestone percentages apply to; when empty, contractValue
+  // (imported from monday.com) is used.
+  paymentCurrency String           @default("USD")
+  paymentBase     Decimal?         @db.Decimal(14, 2)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 // The "project profile": extra details people fill in by hand (or from the contract), one row per project,

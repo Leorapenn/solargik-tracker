@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { toDateInputValue } from "@/lib/dates";
 import { phaseLabel } from "@/lib/phases";
-import { cleanChangeOrder, cleanMilestone, type ChangeOrderInput, type CleanChangeOrder, type CleanMilestone, type MilestoneInput } from "@/lib/payments";
+import { cleanChangeOrder, cleanMilestone, isCurrency, type ChangeOrderInput, type CleanChangeOrder, type CleanMilestone, type MilestoneInput } from "@/lib/payments";
 
 export const MAX_MILESTONES = 12;
 export const MAX_CHANGE_ORDERS = 50;
@@ -39,7 +39,12 @@ export type ChangeOrderView = {
 };
 export type LinkableItem = { id: string; name: string; phaseLabel: string; status: StageStatus };
 export type PaymentData = {
+  // The amount the milestone percentages apply to, in `currency`: the project's payment base if set,
+  // otherwise the contract value imported from monday.com.
   contractValue: number | null;
+  currency: string;
+  paymentBase: number | null; // what was typed for this project (null = using the monday.com value)
+  mondayValue: number | null;
   milestones: MilestoneView[];
   changeOrders: ChangeOrderView[];
   items: LinkableItem[];
@@ -50,6 +55,8 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
     where: { id: projectId },
     select: {
       contractValue: true,
+      paymentCurrency: true,
+      paymentBase: true,
       milestones: { orderBy: { order: "asc" }, include: { linkedSubStage: { select: { name: true, status: true } } } },
       changeOrders: { orderBy: { createdAt: "asc" } },
       phases: { orderBy: { order: "asc" }, select: { name: true, subStages: { orderBy: { order: "asc" }, select: { id: true, name: true, status: true } } } },
@@ -57,7 +64,10 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
   });
   if (!project) return null;
   return {
-    contractValue: num(project.contractValue),
+    contractValue: num(project.paymentBase) ?? num(project.contractValue),
+    currency: project.paymentCurrency,
+    paymentBase: num(project.paymentBase),
+    mondayValue: num(project.contractValue),
     milestones: project.milestones.map((m) => ({
       id: m.id,
       label: m.label,
@@ -91,9 +101,18 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
 // orders that are no longer in the list are removed, the rest are updated or created, in the order sent.
 export async function savePayments(
   projectId: string,
-  input: { milestones: Partial<Record<keyof MilestoneInput, unknown>>[]; changeOrders: Partial<Record<keyof ChangeOrderInput, unknown>>[] },
+  input: {
+    milestones: Partial<Record<keyof MilestoneInput, unknown>>[];
+    changeOrders: Partial<Record<keyof ChangeOrderInput, unknown>>[];
+    currency: string;
+    paymentBase: string; // "" = use the monday.com contract value
+  },
 ): Promise<void> {
   if (!Array.isArray(input.milestones) || !Array.isArray(input.changeOrders)) throw new UserError("Nothing to save.");
+  if (!isCurrency(input.currency)) throw new UserError("Choose one of the listed currencies.");
+  const baseText = (typeof input.paymentBase === "string" ? input.paymentBase : "").trim().replace(/[$€₪£,\s]/g, "");
+  const base = baseText === "" ? null : Number(baseText);
+  if (base !== null && (!Number.isFinite(base) || base < 0 || base > 1e12)) throw new UserError("The contract amount must be a positive number.");
   if (input.milestones.length > MAX_MILESTONES) throw new UserError(`At most ${MAX_MILESTONES} milestones per project.`);
   if (input.changeOrders.length > MAX_CHANGE_ORDERS) throw new UserError(`At most ${MAX_CHANGE_ORDERS} change orders per project.`);
 
@@ -126,6 +145,8 @@ export async function savePayments(
         if (m.linkedSubStageId && !ownItems.has(m.linkedSubStageId)) throw new UserError(`"${m.label}" is linked to an item that isn't on this project.`);
       }
       for (const c of changeOrders) if (c.id && !ownOrders.has(c.id)) throw new UserError("A change order no longer exists. Reload the page and try again.");
+
+      await tx.project.update({ where: { id: projectId }, data: { paymentCurrency: input.currency, paymentBase: base } });
 
       const keptMilestones = new Set(milestones.map((m) => m.id).filter((id): id is string => !!id));
       const keptOrders = new Set(changeOrders.map((c) => c.id).filter((id): id is string => !!id));

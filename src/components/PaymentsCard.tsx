@@ -33,7 +33,7 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "14px 20px" }}>
         <h2 style={{ margin: 0, fontSize: 17, color: NAVY }}>Payments</h2>
         <span style={{ color: TEXT_MUTED, fontSize: 13.5, flex: 1 }}>
-          Paid <strong style={{ color: NAVY }}>{money(totals.paid)}</strong> of {money(data.contractValue)}
+          Paid <strong style={{ color: NAVY }}>{money(totals.paid, data.currency)}</strong> of {money(data.contractValue, data.currency)}
           {data.changeOrders.length > 0 && ` · ${data.changeOrders.length} change order${data.changeOrders.length === 1 ? "" : "s"}`}
         </span>
         <Link href={`/payments/${projectId}`} style={{ ...secondaryButton, textDecoration: "none", display: "inline-block" }}>
@@ -73,7 +73,7 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
                     {m.label}
                     {isUpcoming && <span style={{ marginLeft: 6, color: "#B85E00" }}>· Upcoming</span>}
                   </span>
-                  <span style={{ fontSize: 17, fontWeight: 700, color: NAVY }}>{money(milestoneAmount(m, data.contractValue))}</span>
+                  <span style={{ fontSize: 17, fontWeight: 700, color: NAVY }}>{money(milestoneAmount(m, data.contractValue), data.currency)}</span>
                   <span>
                     <ChoicePill choice={MILESTONE_STATUS[status]} />
                   </span>
@@ -113,7 +113,7 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
           {data.changeOrders.map((c) => (
             <div key={c.id} style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 14 }} title={`Sent: ${fmt(c.dateSent)}\nInvoiced: ${fmt(c.invoicedDate)}`}>
               <span style={{ flex: "1 1 260px", minWidth: 0 }}>{c.reason}</span>
-              <strong style={{ color: NAVY }}>{money(c.amount)}</strong>
+              <strong style={{ color: NAVY }}>{money(c.amount, data.currency)}</strong>
               <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === c.status) ?? null} />
               <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === c.invoiceStatus) ?? null} />
               {c.fileLink && (

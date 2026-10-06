@@ -5,6 +5,7 @@ import Link from "next/link";
 import { savePayments } from "@/server/actions/payments";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import {
+  CURRENCIES,
   CHANGE_ORDER_INVOICE_STATUS,
   CHANGE_ORDER_STATUS,
   MILESTONE_LABELS,
@@ -56,7 +57,7 @@ let counter = 0;
 const keyed = <T,>(data: T): Keyed<T> => ({ key: `k${++counter}`, data });
 
 const num = (s: string) => {
-  const t = s.trim().replace(/[$,\s]/g, "");
+  const t = s.trim().replace(/[$€₪£,\s]/g, "");
   const n = Number(t);
   return t === "" || !Number.isFinite(n) ? null : n;
 };
@@ -71,6 +72,9 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [addPick, setAddPick] = useState<string | null>(null);
+  // the project's currency and contract amount, editable together with the milestones
+  const [currency, setCurrency] = useState(initial.currency);
+  const [base, setBase] = useState(initial.paymentBase === null ? "" : String(initial.paymentBase));
 
   const [seen, setSeen] = useState(initial);
   if (seen !== initial) {
@@ -81,6 +85,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
   function startEditing() {
     setMilestones(saved.milestones.map((m) => keyed(toMilestoneInput(m))));
     setOrders(saved.changeOrders.map((c) => keyed(toChangeOrderInput(c))));
+    setCurrency(saved.currency);
+    setBase(saved.paymentBase === null ? "" : String(saved.paymentBase));
     setMessage(null);
     setEditing(true);
   }
@@ -91,11 +97,14 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
   function save() {
     setMessage(null);
     startTransition(async () => {
-      const result = await savePayments(projectId, { milestones: milestones.map((m) => m.data), changeOrders: orders.map((o) => o.data) });
+      const result = await savePayments(projectId, { milestones: milestones.map((m) => m.data), changeOrders: orders.map((o) => o.data), currency, paymentBase: base });
       if (!result.ok) return setMessage({ kind: "error", text: result.error });
       // show what was just saved right away; the refreshed page data replaces it a moment later
       setSaved((s) => ({
         ...s,
+        currency,
+        paymentBase: num(base),
+        contractValue: num(base) ?? s.mondayValue,
         milestones: milestones.map(({ key, data: m }, order): MilestoneView => {
           const item = s.items.find((i) => i.id === m.linkedSubStageId);
           const invoiced = m.status === "INVOICE_SENT" || m.status === "PAYMENT_RECEIVED";
@@ -177,9 +186,9 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ color: TEXT_MUTED, fontSize: 14 }}>
-          Contract value <strong style={{ color: NAVY }}>{money(saved.contractValue)}</strong>
-          {" · "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced)}</strong>
-          {" · "}Paid <strong style={{ color: NAVY }}>{money(totals.paid)}</strong>
+          Contract value <strong style={{ color: NAVY }}>{money(saved.contractValue, saved.currency)}</strong>
+          {" · "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced, saved.currency)}</strong>
+          {" · "}Paid <strong style={{ color: NAVY }}>{money(totals.paid, saved.currency)}</strong>
           {totals.percentTotal !== null && (
             <>
               {" · "}Milestones cover{" "}
@@ -210,6 +219,32 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
         </div>
       )}
 
+      {editing && (
+        <section style={{ ...cardStyle, padding: "14px 20px", display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+          {label(
+            "Currency",
+            <select aria-label="Currency" value={currency} onChange={(e) => setCurrency(e.target.value)} style={inputStyle}>
+              {CURRENCIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>,
+          )}
+          {label(
+            "Contract amount for payments",
+            <input
+              aria-label="Contract amount for payments"
+              inputMode="decimal"
+              value={base}
+              placeholder={saved.mondayValue === null ? "" : saved.mondayValue.toLocaleString("en-US")}
+              onChange={(e) => setBase(e.target.value)}
+              style={{ ...inputStyle, width: 200 }}
+            />,
+          )}
+        </section>
+      )}
+
       {/* ---------------- Milestones ---------------- */}
       <section style={cardStyle}>
         <div style={{ padding: "14px 20px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -238,7 +273,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
           <div style={{ display: "flex", flexDirection: "column", gap: 12, padding: "0 20px 20px" }}>
             {milestones.length === 0 && <div style={{ color: TEXT_MUTED }}>No milestones yet. Add the first one above.</div>}
             {milestones.map(({ key, data: m }) => {
-              const calc = milestoneAmount({ percent: num(m.percent), amountOverride: null }, saved.contractValue);
+              const calc = milestoneAmount({ percent: num(m.percent), amountOverride: null }, num(base) ?? saved.mondayValue);
               const invoiced = m.status === "INVOICE_SENT" || m.status === "PAYMENT_RECEIVED";
               return (
                 <div key={key} style={{ border: `1px solid ${ROW_DIVIDER}`, borderRadius: 10, padding: 14, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -251,7 +286,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                         aria-label={`Amount of ${m.label}`}
                         inputMode="decimal"
                         value={m.amountOverride}
-                        placeholder={calc === null ? "" : money(calc)}
+                        placeholder={calc === null ? "" : money(calc, currency)}
                         onChange={(e) => setMilestone(key, { amountOverride: e.target.value })}
                         style={{ ...inputStyle, width: 150 }}
                       />,
@@ -313,7 +348,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                       {m.id === upcoming && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, background: "#F28C28", color: "#fff", borderRadius: 999, padding: "2px 8px" }}>Upcoming</span>}
                     </td>
                     <td style={td}>{m.percent === null ? DASH : `${m.percent}%`}</td>
-                    <td style={td}>{m.amount === null ? DASH : money(m.amount)}</td>
+                    <td style={td}>{m.amount === null ? DASH : money(m.amount, saved.currency)}</td>
                     <td style={{ ...td, color: m.linkedName ? undefined : TEXT_MUTED }} title={m.linkedStatus ? `Item status: ${m.linkedStatus}` : undefined}>
                       {m.linkedName ?? "—"}
                     </td>
@@ -389,7 +424,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                 {saved.changeOrders.map((c) => (
                   <tr key={c.id} style={{ borderBottom: `1px solid ${ROW_DIVIDER}` }}>
                     <td style={{ ...td, maxWidth: 360, whiteSpace: "pre-wrap" }}>{c.reason}</td>
-                    <td style={td}>{c.amount === null ? DASH : money(c.amount)}</td>
+                    <td style={td}>{c.amount === null ? DASH : money(c.amount, saved.currency)}</td>
                     <td style={td}>
                       <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === c.status) ?? null} />
                     </td>

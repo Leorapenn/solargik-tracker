@@ -33,7 +33,25 @@ export const CHANGE_ORDER_INVOICE_STATUS: Choice[] = [
 export const MILESTONE_LABELS = ["NTP / NTD", "Milestone 1 (AP)", "Milestone 2", "Milestone 3", "Milestone 4", "Milestone 5"];
 export const OPTIONAL_LABELS = ["NTP / NTD"];
 
-export const money = (value: number | null | undefined) => (value === null || value === undefined ? "—" : `$${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
+// The currencies a project's payments can be in (set per project on the Payments page).
+export const CURRENCIES = [
+  { code: "USD", label: "US dollar ($)" },
+  { code: "EUR", label: "Euro (€)" },
+  { code: "ILS", label: "Israeli shekel (₪)" },
+  { code: "GBP", label: "British pound (£)" },
+  { code: "CHF", label: "Swiss franc (CHF)" },
+  { code: "CAD", label: "Canadian dollar (CA$)" },
+] as const;
+export const DEFAULT_CURRENCY = "USD";
+export const isCurrency = (code: unknown): code is string => CURRENCIES.some((c) => c.code === code);
+
+// "€899,760", "$202,676.20" (cents only when there are some); "—" for no value.
+export function money(value: number | null | undefined, currency: string = DEFAULT_CURRENCY): string {
+  if (value === null || value === undefined) return "—";
+  const code = isCurrency(currency) ? currency : DEFAULT_CURRENCY;
+  const whole = Number.isInteger(value);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: code, minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 }).format(value);
+}
 
 // ---- calculations ----
 

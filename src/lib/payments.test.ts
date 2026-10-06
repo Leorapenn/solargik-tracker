@@ -4,6 +4,7 @@ import {
   cleanChangeOrder,
   cleanMilestone,
   effectiveStatus,
+  isCurrency,
   milestoneAmount,
   milestoneTotals,
   money,
@@ -15,13 +16,24 @@ const TODAY = "2026-10-05";
 describe("milestoneAmount", () => {
   it("is the percent of the contract value, unless an amount was typed", () => {
     expect(milestoneAmount({ percent: 20, amountOverride: null }, 1_013_381)).toBe(202676.2);
+    expect(milestoneAmount({ percent: 5, amountOverride: null }, 4_450_453.6)).toBe(222522.68);
+    expect(milestoneAmount({ percent: 30, amountOverride: null }, 899_760)).toBe(269928);
     expect(milestoneAmount({ percent: 20, amountOverride: 5000 }, 1_013_381)).toBe(5000);
     expect(milestoneAmount({ percent: 20, amountOverride: null }, null)).toBeNull();
     expect(milestoneAmount({ percent: null, amountOverride: null }, 100)).toBeNull();
   });
-  it("formats money", () => {
-    expect(money(202676.2)).toBe("$202,676.2");
-    expect(money(null)).toBe("—");
+  it("formats money in the project's currency", () => {
+    expect(money(202676.2)).toBe("$202,676.20");
+    expect(money(899760, "EUR")).toBe("€899,760");
+    expect(money(44988, "EUR")).toBe("€44,988");
+    expect(money(222522.68, "EUR")).toBe("€222,522.68");
+    expect(money(1500, "ILS")).toBe("ILS 1,500".replace("ILS ", "₪"));
+    expect(money(null, "EUR")).toBe("—");
+    expect(money(10, "XXX")).toBe("$10"); // unknown code falls back to dollars
+  });
+  it("only accepts the listed currencies", () => {
+    expect(["USD", "EUR", "ILS", "GBP"].every(isCurrency)).toBe(true);
+    expect(isCurrency("BTC")).toBe(false);
   });
 });
 
