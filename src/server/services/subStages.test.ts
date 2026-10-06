@@ -5,7 +5,7 @@ import { todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
 import { addFlag, knownFlags, removeFlag, setFlagColor } from "./flags";
-import { getProfile, saveProfile } from "./projectProfile";
+import { getContractSigningDate, getProfile, saveProfile } from "./projectProfile";
 import { getPaymentData, savePayments } from "./payments";
 import { EMPTY_PROFILE } from "@/lib/projectProfile";
 import { parseFlagColors } from "@/lib/flags";
@@ -166,6 +166,12 @@ describe("patchSubStages", () => {
     await saveProfile(projectId, { ...EMPTY_PROFILE, geotechStatus: "STUCK" });
     expect(await getProfile(projectId)).toEqual({ ...EMPTY_PROFILE, geotechStatus: "STUCK" });
     expect(await prisma.projectProfile.count({ where: { projectId } })).toBe(1);
+
+    // the contract's signing date is not part of the form, so saving the profile must never wipe it
+    await prisma.projectProfile.update({ where: { projectId }, data: { contractSigningDate: new Date("2024-12-27T00:00:00.000Z") } });
+    await saveProfile(projectId, { ...EMPTY_PROFILE, bomStatus: "IFI" });
+    expect(await getContractSigningDate(projectId)).toBe("2024-12-27");
+    expect(await getContractSigningDate("missing")).toBeNull();
 
     await expect(saveProfile(projectId, { ...EMPTY_PROFILE, projectEngineerId: "nobody" })).rejects.toBeInstanceOf(UserError);
     await expect(saveProfile(projectId, { ...EMPTY_PROFILE, bomStatus: "NOPE" })).rejects.toBeInstanceOf(UserError);

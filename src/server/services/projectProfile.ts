@@ -32,6 +32,14 @@ export async function getProfile(projectId: string): Promise<ProfileInput> {
   };
 }
 
+// The signing date taken from the contract itself (set from the contract, not typed in the profile form). When
+// present it is shown as the project's contract signing date instead of the Contract Signing item's date, which
+// is often just the day the item was ticked.
+export async function getContractSigningDate(projectId: string): Promise<string | null> {
+  const p = await prisma.projectProfile.findUnique({ where: { projectId }, select: { contractSigningDate: true } });
+  return p?.contractSigningDate ? toDateInputValue(p.contractSigningDate) : null;
+}
+
 export async function saveProfile(projectId: string, input: Partial<Record<keyof ProfileInput, unknown>>): Promise<void> {
   const cleaned = cleanProfile(input);
   if (!cleaned.ok) throw new UserError(cleaned.error);

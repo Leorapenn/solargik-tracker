@@ -9,7 +9,7 @@ import { FlagsEditor } from "@/components/FlagsEditor";
 import { matchesFilters, parseRowFilters } from "@/lib/rowFilters";
 import { ProjectProfileCard } from "@/components/ProjectProfileCard";
 import { linkedValues } from "@/lib/projectProfile";
-import { getProfile } from "@/server/services/projectProfile";
+import { getContractSigningDate, getProfile } from "@/server/services/projectProfile";
 import { getPaymentData } from "@/server/services/payments";
 import { money, projectContract } from "@/lib/payments";
 import { PaymentsCard } from "@/components/PaymentsCard";
@@ -43,7 +43,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions, profile, payments] = await Promise.all([
+  const [project, people, flagSuggestions, profile, payments, contractSigned] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -58,6 +58,7 @@ export default async function ProjectDetailPage({
     knownFlags(),
     getProfile(id),
     getPaymentData(id),
+    getContractSigningDate(id),
   ]);
 
   if (!project) notFound();
@@ -224,6 +225,7 @@ export default async function ProjectDetailPage({
           initial={profile}
           people={people}
           contractReading={Boolean(process.env.ANTHROPIC_API_KEY)}
+          contractSigned={contractSigned}
           linked={linkedValues(
             project.phases.flatMap((phase) =>
               phase.subStages.map((s) => ({

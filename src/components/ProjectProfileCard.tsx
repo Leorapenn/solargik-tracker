@@ -36,12 +36,15 @@ export function ProjectProfileCard({
   linked,
   people,
   contractReading,
+  contractSigned,
 }: {
   projectId: string;
   initial: ProfileInput;
   linked: Record<LinkedKey, LinkedValue>;
   people: { id: string; name: string }[];
   contractReading: boolean;
+  // the signing date taken from the contract, if known: it wins over the Contract Signing item's own date
+  contractSigned: string | null;
 }) {
   const [saved, setSaved] = useState(initial);
   const [form, setForm] = useState(initial);
@@ -211,9 +214,11 @@ export function ProjectProfileCard({
   // Shown from the project's own item (read-only); hovering explains where it comes from.
   const linkedDate = (key: LinkedKey, label: string) => {
     const l = linked[key];
+    const fromContract = key === "contractSigning" && contractSigned ? contractSigned : null;
+    const shown = fromContract ?? l.date;
     return (
-      <div title={`From the “${LINKED_ITEMS[key].name}” item`}>
-        {field(label, l.date ? fmt(l.date) : <span style={{ color: TEXT_MUTED }}>—</span>)}
+      <div title={fromContract ? "From the signed contract" : `From the “${LINKED_ITEMS[key].name}” item`}>
+        {field(label, shown ? fmt(shown) : <span style={{ color: TEXT_MUTED }}>—</span>)}
       </div>
     );
   };
