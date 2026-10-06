@@ -149,7 +149,7 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
       <div>
         <h1 style={pageTitleStyle}>Phases</h1>
         <div style={pageSubtitleStyle}>
-          Where every project stands across the six delivery phases (hover a phase for its owner and done date). Tick phases to update them
+          Where every project stands across the six delivery phases (hover a phase for its owner and dates). Tick phases to update them
           in bulk, or open a project to edit its items one by one.
         </div>
       </div>

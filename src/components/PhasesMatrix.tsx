@@ -304,10 +304,11 @@ export function PhasesMatrix({
                       const started = fmt(cell.startedAt);
                       const completed = fmt(cell.completedAt);
                       const due = fmt(cell.targetDate);
-                      // The done date and owner are not printed in the cell; they appear on hover.
+                      // The owner, done date and since date are not printed in the cell; they appear on hover.
                       const hover = [
                         cell.owners.length ? `Owner: ${cell.owners.join(", ")}` : "No owner assigned",
                         completed && cell.status === "DONE" ? `Done ${completed}` : null,
+                        started && cell.status !== "DONE" ? `Since ${started}` : null,
                       ]
                         .filter(Boolean)
                         .join("\n");
@@ -330,7 +331,6 @@ export function PhasesMatrix({
                               {cell.status === "DONE" && !completed && (
                                 <span style={{ fontSize: 12, color: "#9A4B00", fontWeight: 600 }}>⚠ no date</span>
                               )}
-                              {cell.status !== "DONE" && started && <span style={{ fontSize: 12, color: TEXT_MUTED }}>Since {started}</span>}
                               {cell.status !== "DONE" && due && (
                                 <span style={{ fontSize: 12, color: cell.overdue ? "#B3261E" : TEXT_MUTED, fontWeight: cell.overdue ? 600 : 400 }}>
                                   Due {due}
