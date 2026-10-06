@@ -12,7 +12,9 @@ import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
-import { money, projectContract } from "@/lib/payments";
+import { milestoneProgress, money, projectContract } from "@/lib/payments";
+import { MilestoneCell } from "@/components/MilestoneCell";
+import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { knownFlags } from "@/server/services/flags";
 import { SortTh } from "@/components/SortTh";
 import {
@@ -37,6 +39,7 @@ const SORT_LABELS = {
   country: "Country",
   capacity: "Capacity",
   contract: "Contract value",
+  milestone: "Milestone",
   spread: "Phase spread",
   flags: "Flags",
 };
@@ -47,12 +50,27 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const filter = parseLifecycle(typeof params.lifecycle === "string" ? params.lifecycle : undefined);
 
   const [all, flagSuggestions] = await Promise.all([
-    prisma.project.findMany({ include: { customer: true, phases: true }, orderBy: { name: "asc" } }),
+    prisma.project.findMany({
+      include: {
+        customer: true,
+        phases: true,
+        milestones: { orderBy: { order: "asc" }, select: { label: true, order: true, status: true, dueDate: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
     knownFlags(),
   ]);
 
   const counts = Object.fromEntries(LIFECYCLE_ORDER.map((l) => [l, 0])) as Record<ProjectLifecycle, number>;
   for (const project of all) counts[project.lifecycle] += 1;
+
+  // which milestone each project is up to, with its status
+  const todayIso = toDateInputValue(todayInAppTz());
+  const progressOf = (p: (typeof all)[number]) =>
+    milestoneProgress(
+      p.milestones.map((m) => ({ label: m.label, order: m.order, status: m.status, dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null })),
+      todayIso,
+    );
 
   const accessors = {
     name: (p: (typeof all)[number]) => p.name,
@@ -61,6 +79,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     country: (p: (typeof all)[number]) => p.country,
     capacity: (p: (typeof all)[number]) => (p.capacityMw ? Number(p.capacityMw) : null),
     contract: (p: (typeof all)[number]) => projectContract(p).amount,
+    milestone: (p: (typeof all)[number]) => progressOf(p).sortKey,
     spread: (p: (typeof all)[number]) => progressScore([p]),
     flags: (p: (typeof all)[number]) => p.flags.length,
   };
@@ -112,7 +131,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       <div style={cardStyle}>
         <SortSummary basePath="/projects" params={params} current={sort} labels={SORT_LABELS} />
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 960 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
             <thead>
               <tr style={{ background: NAVY, color: "#fff" }}>
                 <SortTh label="Project" sortKey="name" {...th} />
@@ -121,6 +140,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 <SortTh label="Country" sortKey="country" {...th} />
                 <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
                 <SortTh label="Contract value" sortKey="contract" {...th} />
+                <SortTh label="Milestone" sortKey="milestone" {...th} />
                 <SortTh label="Phase spread" sortKey="spread" {...th} />
                 <SortTh label="Flags" sortKey="flags" {...th} />
                 <SortTh style={headCell} />
@@ -165,6 +185,9 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                         return contract.amount ? money(contract.amount, contract.currency) : "—";
                       })()}
                     </td>
+                    <td style={bodyCell}>
+                      <MilestoneCell progress={progressOf(project)} />
+                    </td>
                     <td style={{ ...bodyCell, width: 200 }}>
                       <SpreadBar segments={phaseSpread([project])} />
                     </td>
@@ -188,7 +211,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
               })}
               {projects.length === 0 && (
                 <tr>
-                  <td colSpan={9} style={{ ...bodyCell, color: TEXT_MUTED }}>
+                  <td colSpan={10} style={{ ...bodyCell, color: TEXT_MUTED }}>
                     {filter ? "No projects with this status." : "No projects yet — run the monday.com importer to bring some in."}
                   </td>
                 </tr>

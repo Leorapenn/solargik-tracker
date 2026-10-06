@@ -107,6 +107,21 @@ export function upcomingMilestoneId(
   return next?.id ?? null;
 }
 
+// Which milestone a project is "up to": the first one (in order) that has not been paid, with its status;
+// "all-paid" once every milestone is paid, "none" when the project has no milestones.
+export type MilestoneProgress =
+  | { kind: "none"; sortKey: null }
+  | { kind: "all-paid"; count: number; sortKey: number }
+  | { kind: "current"; label: string; status: MilestoneStatus; dueDate: string | null; count: number; sortKey: number };
+
+export function milestoneProgress(milestones: { label: string; order: number; status: string; dueDate: string | null }[], todayIso: string): MilestoneProgress {
+  if (milestones.length === 0) return { kind: "none", sortKey: null };
+  const ordered = [...milestones].sort((a, b) => a.order - b.order);
+  const current = ordered.find((m) => m.status !== "PAYMENT_RECEIVED");
+  if (!current) return { kind: "all-paid", count: ordered.length, sortKey: 1000 };
+  return { kind: "current", label: current.label, status: effectiveStatus(current, todayIso), dueDate: current.dueDate, count: ordered.length, sortKey: ordered.indexOf(current) + 1 };
+}
+
 export type Totals = { contract: number | null; invoiced: number; paid: number; percentTotal: number | null };
 
 export function milestoneTotals(

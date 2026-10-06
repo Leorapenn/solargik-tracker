@@ -18,7 +18,9 @@ import { CustomerEditor } from "@/components/CustomerEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { FlagChip } from "@/components/FlagChip";
 import { parseFlagColors } from "@/lib/flags";
-import { formatTotals, money, projectContract, totalsByCurrency } from "@/lib/payments";
+import { formatTotals, milestoneProgress, money, projectContract, totalsByCurrency } from "@/lib/payments";
+import { MilestoneCell } from "@/components/MilestoneCell";
+import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { knownFlags } from "@/server/services/flags";
 import {
   NAVY,
@@ -54,7 +56,13 @@ export default async function CustomerDetailPage({
       where: { id },
       include: {
         aliases: { orderBy: { alias: "asc" } },
-        projects: { orderBy: { name: "asc" }, include: { phases: { select: { name: true, status: true } } } },
+        projects: {
+          orderBy: { name: "asc" },
+          include: {
+            phases: { select: { name: true, status: true } },
+            milestones: { orderBy: { order: "asc" }, select: { label: true, order: true, status: true, dueDate: true } },
+          },
+        },
         contacts: { include: { project: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
       },
     }),
@@ -67,12 +75,20 @@ export default async function CustomerDetailPage({
   for (const project of all) counts[project.lifecycle] += 1;
 
   type Project = (typeof all)[number];
+  // which milestone each project is up to, with its status
+  const todayIso = toDateInputValue(todayInAppTz());
+  const progressOf = (p: Project) =>
+    milestoneProgress(
+      p.milestones.map((m) => ({ label: m.label, order: m.order, status: m.status, dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null })),
+      todayIso,
+    );
   const accessors = {
     name: (p: Project) => p.name,
     status: (p: Project) => LIFECYCLE_ORDER.indexOf(p.lifecycle),
     spread: (p: Project) => progressScore([p]),
     capacity: (p: Project) => (p.capacityMw ? Number(p.capacityMw) : null),
     contract: (p: Project) => projectContract(p).amount,
+    milestone: (p: Project) => progressOf(p).sortKey,
   };
   const sort = parseSort(query, Object.keys(accessors), { key: "name", dir: "asc" });
   const projects = sortRows(filter ? all.filter((p) => p.lifecycle === filter) : all, accessors, sort);
@@ -153,10 +169,10 @@ export default async function CustomerDetailPage({
             basePath={basePath}
             params={query}
             current={sort}
-            labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value" }}
+            labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value", milestone: "Milestone" }}
           />
           <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
                   <SortTh label="Project" sortKey="name" {...th} />
@@ -164,6 +180,7 @@ export default async function CustomerDetailPage({
                   <SortTh label="Phase spread" sortKey="spread" {...th} />
                   <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
                   <SortTh label="Contract value" sortKey="contract" {...th} />
+                  <SortTh label="Milestone" sortKey="milestone" {...th} />
                   <SortTh style={headCell} />
                 </tr>
               </thead>
@@ -208,6 +225,9 @@ export default async function CustomerDetailPage({
                         return contract.amount ? money(contract.amount, contract.currency) : "—";
                       })()}
                     </td>
+                    <td style={bodyCell}>
+                      <MilestoneCell progress={progressOf(project)} />
+                    </td>
                     <td style={{ ...bodyCell, textAlign: "right" }}>
                       <Link href={`/projects/${project.id}`} aria-label={`Open ${project.name}`} style={{ color: TEXT_MUTED }}>
                         ›
@@ -217,7 +237,7 @@ export default async function CustomerDetailPage({
                 ))}
                 {projects.length === 0 && (
                   <tr>
-                    <td colSpan={6} style={{ ...bodyCell, color: TEXT_MUTED }}>
+                    <td colSpan={7} style={{ ...bodyCell, color: TEXT_MUTED }}>
                       {filter ? "No projects with this status." : "No projects imported for this customer yet."}
                     </td>
                   </tr>

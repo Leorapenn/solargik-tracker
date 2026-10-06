@@ -7,6 +7,7 @@ import {
   formatTotals,
   isCurrency,
   milestoneAmount,
+  milestoneProgress,
   projectContract,
   totalsByCurrency,
   milestoneTotals,
@@ -89,6 +90,25 @@ describe("upcomingMilestoneId", () => {
     expect(upcomingMilestoneId(list.slice(0, 2))).toBeNull();
     expect(upcomingMilestoneId([{ id: "z", order: 1, status: "INVOICE_SENT", linkedStatus: null }])).toBe("z");
     expect(upcomingMilestoneId([])).toBeNull();
+  });
+});
+
+describe("milestoneProgress", () => {
+  const m = (order: number, status: string, dueDate: string | null = null) => ({ label: `Milestone ${order + 1}`, order, status, dueDate });
+
+  it("is the first unpaid milestone with its status", () => {
+    const p = milestoneProgress([m(0, "PAYMENT_RECEIVED"), m(1, "PAYMENT_RECEIVED"), m(2, "INVOICE_SENT"), m(3, "NOT_DUE"), m(4, "NOT_DUE")], TODAY);
+    expect(p).toMatchObject({ kind: "current", label: "Milestone 3", status: "INVOICE_SENT", sortKey: 3, count: 5 });
+  });
+  it("does not depend on the order the list arrives in", () => {
+    expect(milestoneProgress([m(2, "NOT_DUE"), m(0, "PAYMENT_RECEIVED"), m(1, "NOT_DUE")], TODAY)).toMatchObject({ label: "Milestone 2", sortKey: 2 });
+  });
+  it("shows Overdue when the due date has passed", () => {
+    expect(milestoneProgress([m(0, "NOT_DUE", "2026-09-01")], TODAY)).toMatchObject({ kind: "current", status: "OVERDUE" });
+  });
+  it("says all paid, or none when there are no milestones", () => {
+    expect(milestoneProgress([m(0, "PAYMENT_RECEIVED"), m(1, "PAYMENT_RECEIVED")], TODAY)).toEqual({ kind: "all-paid", count: 2, sortKey: 1000 });
+    expect(milestoneProgress([], TODAY)).toEqual({ kind: "none", sortKey: null });
   });
 });
 
