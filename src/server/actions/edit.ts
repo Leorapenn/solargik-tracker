@@ -8,6 +8,7 @@ import { requireActionAuth } from "@/lib/auth";
 import { run, UserError, type ActionResult } from "@/lib/errors";
 import { LIFECYCLE_ORDER } from "@/lib/lifecycle";
 import { CUSTOMER_LOCKABLE, PROJECT_LOCKABLE } from "@/lib/lockable";
+import { capacityKwp } from "@/lib/capacity";
 
 const IMPORTANCES: CustomerImportance[] = ["NORMAL", "SEMI_STRATEGIC", "STRATEGIC"];
 
@@ -41,7 +42,7 @@ function withLocks(current: string[], lock: string[], unlock: string[]): string[
 export type ProjectEdit = {
   name: string;
   country: string;
-  capacityMw: string;
+  capacityKwp: string;
   contractValue: string;
   lifecycle: ProjectLifecycle;
   unlock: string[];
@@ -56,7 +57,8 @@ export async function updateProject(projectId: string, input: ProjectEdit): Prom
 
     const name = text(input.name, "Name", 200, true)!;
     const country = text(input.country, "Country", 100);
-    const capacityMw = amount(input.capacityMw, "Capacity");
+    const kwp = amount(input.capacityKwp, "Capacity");
+    const capacityNew = kwp === null ? null : Math.round(kwp * 100) / 100;
     const contractValue = amount(input.contractValue, "Contract value");
 
     const data: Prisma.ProjectUpdateInput = {};
@@ -70,8 +72,11 @@ export async function updateProject(projectId: string, input: ProjectEdit): Prom
       data.country = country;
       locked.push("country");
     }
-    if (!same(project.capacityMw, capacityMw)) {
-      data.capacityMw = capacityMw;
+    // Capacity is edited in kWp. The exact figure goes in capacityKwp; capacityMw is kept in step and is the
+    // field that is locked against the importer.
+    if (capacityNew !== capacityKwp(project)) {
+      data.capacityKwp = capacityNew;
+      data.capacityMw = capacityNew === null ? null : capacityNew / 1000;
       locked.push("capacityMw");
     }
     if (!same(project.contractValue, contractValue)) {
@@ -88,6 +93,8 @@ export async function updateProject(projectId: string, input: ProjectEdit): Prom
     );
     const lockedFields = withLocks(project.lockedFields, locked, unlock);
     if (lockedFields.join() !== project.lockedFields.join()) data.lockedFields = lockedFields;
+    // Going back to monday.com's value also drops the exact kWp, so the imported size shows again.
+    if (unlock.includes("capacityMw")) data.capacityKwp = null;
 
     if (Object.keys(data).length > 0) await prisma.project.update({ where: { id: projectId }, data });
     revalidatePath("/projects", "layout");

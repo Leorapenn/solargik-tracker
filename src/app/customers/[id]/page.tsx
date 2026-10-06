@@ -20,6 +20,7 @@ import { FlagChip } from "@/components/FlagChip";
 import { parseFlagColors } from "@/lib/flags";
 import { formatTotals, milestoneProgress, money, projectContract, totalsByCurrency } from "@/lib/payments";
 import { MilestoneCell } from "@/components/MilestoneCell";
+import { capacityKwp, formatKwp } from "@/lib/capacity";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { knownFlags } from "@/server/services/flags";
 import {
@@ -86,7 +87,7 @@ export default async function CustomerDetailPage({
     name: (p: Project) => p.name,
     status: (p: Project) => LIFECYCLE_ORDER.indexOf(p.lifecycle),
     spread: (p: Project) => progressScore([p]),
-    capacity: (p: Project) => (p.capacityMw ? Number(p.capacityMw) : null),
+    capacity: (p: Project) => capacityKwp(p),
     contract: (p: Project) => projectContract(p).amount,
     milestone: (p: Project) => progressOf(p).sortKey,
   };
@@ -108,7 +109,7 @@ export default async function CustomerDetailPage({
 
   // each project's contract amount is in its own currency, so the total is shown per currency
   const contractTotals = totalsByCurrency(all.map((p) => projectContract(p)).filter((c) => (c.amount ?? 0) > 0));
-  const totalCapacity = all.reduce((sum, p) => sum + (p.capacityMw ? Number(p.capacityMw) : 0), 0);
+  const totalCapacity = all.reduce((sum, p) => sum + (capacityKwp(p) ?? 0), 0);
   const withoutContract = all.filter((p) => projectContract(p).amount === null).length;
   const strategic = customer.importance === "STRATEGIC";
   const basePath = `/customers/${customer.id}`;
@@ -178,7 +179,7 @@ export default async function CustomerDetailPage({
                   <SortTh label="Project" sortKey="name" {...th} />
                   <SortTh label="Status" sortKey="status" {...th} />
                   <SortTh label="Phase spread" sortKey="spread" {...th} />
-                  <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
+                  <SortTh label="Capacity (kWp)" sortKey="capacity" {...th} />
                   <SortTh label="Contract value" sortKey="contract" {...th} />
                   <SortTh label="Milestone" sortKey="milestone" {...th} />
                   <SortTh style={headCell} />
@@ -218,7 +219,7 @@ export default async function CustomerDetailPage({
                     <td style={{ ...bodyCell, width: 220 }}>
                       <SpreadBar segments={phaseSpread([project])} />
                     </td>
-                    <td style={bodyCell}>{project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"}</td>
+                    <td style={bodyCell}>{formatKwp(capacityKwp(project))}</td>
                     <td style={bodyCell}>
                       {(() => {
                         const contract = projectContract(project);
@@ -255,7 +256,7 @@ export default async function CustomerDetailPage({
 
           <SideCard title="Commercial">
             <Row label="Contract value" value={formatTotals(contractTotals)} />
-            <Row label="Capacity" value={totalCapacity > 0 ? `${totalCapacity.toFixed(2)} MW` : "—"} />
+            <Row label="Capacity" value={totalCapacity > 0 ? `${formatKwp(totalCapacity)} kWp` : "—"} />
             <Row
               label="Pre-contract projects"
               value={String(withoutContract)}

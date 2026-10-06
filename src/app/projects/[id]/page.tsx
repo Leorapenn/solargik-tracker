@@ -12,6 +12,7 @@ import { linkedValues } from "@/lib/projectProfile";
 import { getContractSigningDate, getProfile } from "@/server/services/projectProfile";
 import { getPaymentData } from "@/server/services/payments";
 import { money, projectContract } from "@/lib/payments";
+import { capacityKwp, formatKwp } from "@/lib/capacity";
 import { PaymentsCard } from "@/components/PaymentsCard";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
@@ -163,7 +164,7 @@ export default async function ProjectDetailPage({
           {project.customer.name}
         </Link>{" "}
         · {project.country ?? "—"} ·{" "}
-        {project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"} MW ·{" "}
+        {capacityKwp(project) === null ? "—" : `${formatKwp(capacityKwp(project))} kWp`} ·{" "}
         {(() => {
           const contract = projectContract(project);
           return contract.amount ? money(contract.amount, contract.currency) : "—";
@@ -175,7 +176,7 @@ export default async function ProjectDetailPage({
           id: project.id,
           name: project.name,
           country: project.country ?? "",
-          capacityMw: project.capacityMw ? String(Number(project.capacityMw)) : "",
+          capacityKwp: capacityKwp(project)?.toString() ?? "",
           contractValue: project.contractValue ? String(Number(project.contractValue)) : "",
           lifecycle: project.lifecycle,
           lockedFields: project.lockedFields,

@@ -107,6 +107,9 @@ model Project {
   customer        Customer         @relation(fields: [customerId], references: [id])
   contractValue   Decimal?
   capacityMw      Decimal?
+  // Exact size in kWp as written in the contract (e.g. 996.84). When set it is what the site shows; when
+  // empty the site shows capacityMw (imported from monday.com, rounded to 1 kWp) x 1000. Never imported.
+  capacityKwp     Decimal?         @db.Decimal(12, 2)
   country         String?
   // Derived from the Control Table STAGE/Status columns on import (see src/lib/lifecycle.ts);
   // the raw monday labels are kept so the mapping can be re-checked.

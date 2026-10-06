@@ -13,6 +13,7 @@ import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { milestoneProgress, money, projectContract } from "@/lib/payments";
+import { capacityKwp, formatKwp } from "@/lib/capacity";
 import { MilestoneCell } from "@/components/MilestoneCell";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { knownFlags } from "@/server/services/flags";
@@ -77,7 +78,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     status: (p: (typeof all)[number]) => LIFECYCLE_ORDER.indexOf(p.lifecycle),
     customer: (p: (typeof all)[number]) => p.customer.name,
     country: (p: (typeof all)[number]) => p.country,
-    capacity: (p: (typeof all)[number]) => (p.capacityMw ? Number(p.capacityMw) : null),
+    capacity: (p: (typeof all)[number]) => capacityKwp(p),
     contract: (p: (typeof all)[number]) => projectContract(p).amount,
     milestone: (p: (typeof all)[number]) => progressOf(p).sortKey,
     spread: (p: (typeof all)[number]) => progressScore([p]),
@@ -90,7 +91,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const needsDataCount = all.filter(
     (p) =>
       ["ACTIVE", "ON_HOLD", "SUSPENDED"].includes(p.lifecycle) &&
-      (projectContract(p).amount === null || p.capacityMw === null || p.country === null),
+      (projectContract(p).amount === null || capacityKwp(p) === null || p.country === null),
   ).length;
 
   const th = { current: sort, basePath: "/projects", params, style: headCell };
@@ -138,7 +139,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 <SortTh label="Status" sortKey="status" {...th} />
                 <SortTh label="Customer" sortKey="customer" {...th} />
                 <SortTh label="Country" sortKey="country" {...th} />
-                <SortTh label="Capacity (MW)" sortKey="capacity" {...th} />
+                <SortTh label="Capacity (kWp)" sortKey="capacity" {...th} />
                 <SortTh label="Contract value" sortKey="contract" {...th} />
                 <SortTh label="Milestone" sortKey="milestone" {...th} />
                 <SortTh label="Phase spread" sortKey="spread" {...th} />
@@ -178,7 +179,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                       </Link>
                     </td>
                     <td style={bodyCell}>{project.country ?? "—"}</td>
-                    <td style={bodyCell}>{project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"}</td>
+                    <td style={bodyCell}>{formatKwp(capacityKwp(project))}</td>
                     <td style={bodyCell}>
                       {(() => {
                         const contract = projectContract(project);

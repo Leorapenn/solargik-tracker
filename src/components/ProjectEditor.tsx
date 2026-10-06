@@ -11,7 +11,7 @@ export type EditableProject = {
   id: string;
   name: string;
   country: string;
-  capacityMw: string;
+  capacityKwp: string;
   contractValue: string;
   lifecycle: ProjectLifecycle;
   lockedFields: string[];
@@ -20,7 +20,7 @@ export type EditableProject = {
 const FIELD_LABEL: Record<string, string> = {
   name: "Name",
   country: "Country",
-  capacityMw: "Capacity (MW)",
+  capacityKwp: "Capacity (kWp)",
   contractValue: "Contract value (USD)",
   lifecycle: "Project status",
 };
@@ -31,7 +31,7 @@ export function ProjectEditor({ project }: { project: EditableProject }) {
   const [form, setForm] = useState({
     name: project.name,
     country: project.country,
-    capacityMw: project.capacityMw,
+    capacityKwp: project.capacityKwp,
     contractValue: project.contractValue,
     lifecycle: project.lifecycle,
   });
@@ -42,7 +42,7 @@ export function ProjectEditor({ project }: { project: EditableProject }) {
     setForm({
       name: project.name,
       country: project.country,
-      capacityMw: project.capacityMw,
+      capacityKwp: project.capacityKwp,
       contractValue: project.contractValue,
       lifecycle: project.lifecycle,
     });
@@ -65,7 +65,7 @@ export function ProjectEditor({ project }: { project: EditableProject }) {
       </span>
     );
 
-  const text = (field: "name" | "country" | "capacityMw" | "contractValue", numeric = false) => (
+  const text = (field: "name" | "country" | "capacityKwp" | "contractValue", numeric = false) => (
     <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: TEXT_MUTED }}>
       {FIELD_LABEL[field]}
       <input
@@ -74,7 +74,7 @@ export function ProjectEditor({ project }: { project: EditableProject }) {
         onChange={(e) => setForm({ ...form, [field]: e.target.value })}
         style={inputStyle}
       />
-      {lockNote(field)}
+      {lockNote(field === "capacityKwp" ? "capacityMw" : field)}
     </label>
   );
 
@@ -119,7 +119,7 @@ export function ProjectEditor({ project }: { project: EditableProject }) {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             {text("name")}
             {text("country")}
-            {text("capacityMw", true)}
+            {text("capacityKwp", true)}
             {text("contractValue", true)}
             <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13, color: TEXT_MUTED }}>
               {FIELD_LABEL.lifecycle}
@@ -160,3 +160,4 @@ export function ProjectEditor({ project }: { project: EditableProject }) {
     </div>
   );
 }
+
