@@ -53,6 +53,27 @@ export function money(value: number | null | undefined, currency: string = DEFAU
   return new Intl.NumberFormat("en-US", { style: "currency", currency: code, minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: 2 }).format(value);
 }
 
+// ---- a project's contract amount and its currency ----
+
+type DecimalLike = { toString(): string };
+const toNumber = (v: DecimalLike | number | null | undefined) => (v === null || v === undefined ? null : Number(v.toString()));
+
+// What to show as a project's contract value: the amount typed for payments if there is one, else the value
+// imported from monday.com, always in the project's payments currency.
+export function projectContract(p: { contractValue: DecimalLike | number | null; paymentBase: DecimalLike | number | null; paymentCurrency: string }): { amount: number | null; currency: string } {
+  return { amount: toNumber(p.paymentBase) ?? toNumber(p.contractValue), currency: isCurrency(p.paymentCurrency) ? p.paymentCurrency : DEFAULT_CURRENCY };
+}
+
+// Amounts in different currencies can't be added together, so totals are kept per currency.
+export function totalsByCurrency(list: { amount: number | null; currency: string }[]): { currency: string; amount: number }[] {
+  const sums = new Map<string, number>();
+  for (const { amount, currency } of list) if (amount !== null) sums.set(currency, (sums.get(currency) ?? 0) + amount);
+  return [...sums.entries()].map(([currency, amount]) => ({ currency, amount: Math.round(amount * 100) / 100 })).sort((a, b) => b.amount - a.amount);
+}
+
+// "€4,450,453.60 + $1,013,381", or "—" when there is nothing.
+export const formatTotals = (totals: { currency: string; amount: number }[]) => (totals.length === 0 ? "—" : totals.map((t) => money(t.amount, t.currency)).join(" + "));
+
 // ---- calculations ----
 
 export type MilestoneCore = {

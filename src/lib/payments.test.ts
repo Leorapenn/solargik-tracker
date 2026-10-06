@@ -4,8 +4,11 @@ import {
   cleanChangeOrder,
   cleanMilestone,
   effectiveStatus,
+  formatTotals,
   isCurrency,
   milestoneAmount,
+  projectContract,
+  totalsByCurrency,
   milestoneTotals,
   money,
   upcomingMilestoneId,
@@ -34,6 +37,30 @@ describe("milestoneAmount", () => {
   it("only accepts the listed currencies", () => {
     expect(["USD", "EUR", "ILS", "GBP"].every(isCurrency)).toBe(true);
     expect(isCurrency("BTC")).toBe(false);
+  });
+});
+
+describe("project contract amount and totals", () => {
+  const dec = (s: string) => ({ toString: () => s }); // like a Prisma Decimal
+  it("prefers the payment base and uses the project's currency", () => {
+    expect(projectContract({ contractValue: dec("1013381"), paymentBase: dec("899760"), paymentCurrency: "EUR" })).toEqual({ amount: 899760, currency: "EUR" });
+    expect(projectContract({ contractValue: dec("733704"), paymentBase: null, paymentCurrency: "USD" })).toEqual({ amount: 733704, currency: "USD" });
+    expect(projectContract({ contractValue: null, paymentBase: null, paymentCurrency: "USD" })).toEqual({ amount: null, currency: "USD" });
+    expect(projectContract({ contractValue: 5, paymentBase: null, paymentCurrency: "???" }).currency).toBe("USD");
+  });
+  it("totals per currency, never mixing them", () => {
+    const totals = totalsByCurrency([
+      { amount: 899760, currency: "EUR" },
+      { amount: 689020.8, currency: "EUR" },
+      { amount: 500000, currency: "USD" },
+      { amount: null, currency: "EUR" },
+    ]);
+    expect(totals).toEqual([
+      { currency: "EUR", amount: 1588780.8 },
+      { currency: "USD", amount: 500000 },
+    ]);
+    expect(formatTotals(totals)).toBe("€1,588,780.80 + $500,000");
+    expect(formatTotals([])).toBe("—");
   });
 });
 

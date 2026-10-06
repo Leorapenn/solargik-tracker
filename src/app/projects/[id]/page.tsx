@@ -11,6 +11,7 @@ import { ProjectProfileCard } from "@/components/ProjectProfileCard";
 import { linkedValues } from "@/lib/projectProfile";
 import { getProfile } from "@/server/services/projectProfile";
 import { getPaymentData } from "@/server/services/payments";
+import { money, projectContract } from "@/lib/payments";
 import { PaymentsCard } from "@/components/PaymentsCard";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
@@ -162,7 +163,10 @@ export default async function ProjectDetailPage({
         </Link>{" "}
         · {project.country ?? "—"} ·{" "}
         {project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"} MW ·{" "}
-        {project.contractValue ? `$${Number(project.contractValue).toLocaleString()}` : "—"}
+        {(() => {
+          const contract = projectContract(project);
+          return contract.amount ? money(contract.amount, contract.currency) : "—";
+        })()}
       </p>
 
       <ProjectEditor

@@ -12,6 +12,7 @@ import { ProjectStatusSelect } from "@/components/ProjectStatusSelect";
 import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
+import { money, projectContract } from "@/lib/payments";
 import { knownFlags } from "@/server/services/flags";
 import { SortTh } from "@/components/SortTh";
 import {
@@ -59,7 +60,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     customer: (p: (typeof all)[number]) => p.customer.name,
     country: (p: (typeof all)[number]) => p.country,
     capacity: (p: (typeof all)[number]) => (p.capacityMw ? Number(p.capacityMw) : null),
-    contract: (p: (typeof all)[number]) => (p.contractValue ? Number(p.contractValue) : null),
+    contract: (p: (typeof all)[number]) => projectContract(p).amount,
     spread: (p: (typeof all)[number]) => progressScore([p]),
     flags: (p: (typeof all)[number]) => p.flags.length,
   };
@@ -70,7 +71,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const needsDataCount = all.filter(
     (p) =>
       ["ACTIVE", "ON_HOLD", "SUSPENDED"].includes(p.lifecycle) &&
-      (p.contractValue === null || p.capacityMw === null || p.country === null),
+      (projectContract(p).amount === null || p.capacityMw === null || p.country === null),
   ).length;
 
   const th = { current: sort, basePath: "/projects", params, style: headCell };
@@ -159,7 +160,10 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                     <td style={bodyCell}>{project.country ?? "—"}</td>
                     <td style={bodyCell}>{project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"}</td>
                     <td style={bodyCell}>
-                      {project.contractValue ? `$${Number(project.contractValue).toLocaleString()}` : "—"}
+                      {(() => {
+                        const contract = projectContract(project);
+                        return contract.amount ? money(contract.amount, contract.currency) : "—";
+                      })()}
                     </td>
                     <td style={{ ...bodyCell, width: 200 }}>
                       <SpreadBar segments={phaseSpread([project])} />

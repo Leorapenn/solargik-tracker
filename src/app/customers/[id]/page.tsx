@@ -18,6 +18,7 @@ import { CustomerEditor } from "@/components/CustomerEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { FlagChip } from "@/components/FlagChip";
 import { parseFlagColors } from "@/lib/flags";
+import { formatTotals, money, projectContract, totalsByCurrency } from "@/lib/payments";
 import { knownFlags } from "@/server/services/flags";
 import {
   NAVY,
@@ -71,7 +72,7 @@ export default async function CustomerDetailPage({
     status: (p: Project) => LIFECYCLE_ORDER.indexOf(p.lifecycle),
     spread: (p: Project) => progressScore([p]),
     capacity: (p: Project) => (p.capacityMw ? Number(p.capacityMw) : null),
-    contract: (p: Project) => (p.contractValue ? Number(p.contractValue) : null),
+    contract: (p: Project) => projectContract(p).amount,
   };
   const sort = parseSort(query, Object.keys(accessors), { key: "name", dir: "asc" });
   const projects = sortRows(filter ? all.filter((p) => p.lifecycle === filter) : all, accessors, sort);
@@ -89,9 +90,10 @@ export default async function CustomerDetailPage({
     })),
   );
 
-  const totalContract = all.reduce((sum, p) => sum + (p.contractValue ? Number(p.contractValue) : 0), 0);
+  // each project's contract amount is in its own currency, so the total is shown per currency
+  const contractTotals = totalsByCurrency(all.map((p) => projectContract(p)).filter((c) => (c.amount ?? 0) > 0));
   const totalCapacity = all.reduce((sum, p) => sum + (p.capacityMw ? Number(p.capacityMw) : 0), 0);
-  const withoutContract = all.filter((p) => p.contractValue === null).length;
+  const withoutContract = all.filter((p) => projectContract(p).amount === null).length;
   const strategic = customer.importance === "STRATEGIC";
   const basePath = `/customers/${customer.id}`;
   const th = { current: sort, basePath, params: query, style: headCell };
@@ -201,7 +203,10 @@ export default async function CustomerDetailPage({
                     </td>
                     <td style={bodyCell}>{project.capacityMw ? Number(project.capacityMw).toFixed(2) : "—"}</td>
                     <td style={bodyCell}>
-                      {project.contractValue ? `$${Number(project.contractValue).toLocaleString()}` : "—"}
+                      {(() => {
+                        const contract = projectContract(project);
+                        return contract.amount ? money(contract.amount, contract.currency) : "—";
+                      })()}
                     </td>
                     <td style={{ ...bodyCell, textAlign: "right" }}>
                       <Link href={`/projects/${project.id}`} aria-label={`Open ${project.name}`} style={{ color: TEXT_MUTED }}>
@@ -229,7 +234,7 @@ export default async function CustomerDetailPage({
           <ContactsCard customerId={customer.id} people={people} />
 
           <SideCard title="Commercial">
-            <Row label="Contract value" value={totalContract > 0 ? `$${totalContract.toLocaleString()}` : "—"} />
+            <Row label="Contract value" value={formatTotals(contractTotals)} />
             <Row label="Capacity" value={totalCapacity > 0 ? `${totalCapacity.toFixed(2)} MW` : "—"} />
             <Row
               label="Pre-contract projects"
