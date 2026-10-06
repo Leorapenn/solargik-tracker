@@ -304,8 +304,15 @@ export function PhasesMatrix({
                       const started = fmt(cell.startedAt);
                       const completed = fmt(cell.completedAt);
                       const due = fmt(cell.targetDate);
+                      // The done date and owner are not printed in the cell; they appear on hover.
+                      const hover = [
+                        cell.owners.length ? `Owner: ${cell.owners.join(", ")}` : "No owner assigned",
+                        completed && cell.status === "DONE" ? `Done ${completed}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join("\n");
                       return (
-                        <td key={phase} style={td} title={cell.owners.length ? `Owner: ${cell.owners.join(", ")}` : "No owner assigned"}>
+                        <td key={phase} style={td} title={hover}>
                           <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                             {editing && (
                               <input
@@ -320,10 +327,8 @@ export function PhasesMatrix({
                               <span style={{ alignSelf: "flex-start", background: bg, color: text, borderRadius: 999, padding: "3px 10px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}>
                                 {STATUS_LABELS[cell.status]}
                               </span>
-                              {cell.status === "DONE" && (
-                                <span style={{ fontSize: 12, color: completed ? TEXT_MUTED : "#9A4B00", fontWeight: completed ? 400 : 600 }}>
-                                  {completed ? `Done ${completed}` : "⚠ no date"}
-                                </span>
+                              {cell.status === "DONE" && !completed && (
+                                <span style={{ fontSize: 12, color: "#9A4B00", fontWeight: 600 }}>⚠ no date</span>
                               )}
                               {cell.status !== "DONE" && started && <span style={{ fontSize: 12, color: TEXT_MUTED }}>Since {started}</span>}
                               {cell.status !== "DONE" && due && (
@@ -335,9 +340,6 @@ export function PhasesMatrix({
                               {cell.doneWithoutDate > 0 && cell.status !== "DONE" && (
                                 <span style={{ fontSize: 12, color: "#9A4B00" }}>⚠ {cell.doneWithoutDate} done without date</span>
                               )}
-                              <span style={{ fontSize: 12, color: TEXT_MUTED }}>
-                                {cell.owners.length ? cell.owners.join(", ") : "No owner"}
-                              </span>
                             </div>
                           </div>
                         </td>
