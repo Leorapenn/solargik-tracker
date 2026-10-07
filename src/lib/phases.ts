@@ -19,6 +19,11 @@ const PHASE_NAMES: Record<PhaseName, string> = {
   OM: "O&M",
 };
 
+// "Design", without the "01" prefix.
+export function phaseShortName(name: PhaseName): string {
+  return PHASE_NAMES[name];
+}
+
 export function phaseLabel(name: PhaseName): string {
   const index = PHASE_ORDER.indexOf(name);
   return `${String(index).padStart(2, "0")} ${PHASE_NAMES[name]}`;

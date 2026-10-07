@@ -13,6 +13,7 @@ import type { SortState } from "@/lib/sort";
 import { DateField, type DateChoice } from "@/components/DateField";
 import { SortSummary } from "@/components/SortSummary";
 import { SortLink, SortTh } from "@/components/SortTh";
+import { PhaseUpdate } from "@/components/PhaseUpdate";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 export type MatrixCell = {
@@ -26,6 +27,8 @@ export type MatrixCell = {
   owners: string[];
   doneWithoutDate: number;
   overdue: boolean;
+  statusUpdate: string | null;
+  statusUpdateAt: string | null;
 };
 
 export type MatrixRow = {
@@ -304,11 +307,13 @@ export function PhasesMatrix({
                       const started = fmt(cell.startedAt);
                       const completed = fmt(cell.completedAt);
                       const due = fmt(cell.targetDate);
+                      const updatedOn = fmt(cell.statusUpdateAt);
                       // The owner, done date and since date are not printed in the cell; they appear on hover.
                       const hover = [
                         cell.owners.length ? `Owner: ${cell.owners.join(", ")}` : "No owner assigned",
                         completed && cell.status === "DONE" ? `Done ${completed}` : null,
                         started && cell.status !== "DONE" ? `Since ${started}` : null,
+                        cell.statusUpdate ? `Update${updatedOn ? ` (${updatedOn})` : ""}: ${cell.statusUpdate}` : null,
                       ]
                         .filter(Boolean)
                         .join("\n");
@@ -340,6 +345,14 @@ export function PhasesMatrix({
                               {cell.doneWithoutDate > 0 && cell.status !== "DONE" && (
                                 <span style={{ fontSize: 12, color: "#9A4B00" }}>⚠ {cell.doneWithoutDate} done without date</span>
                               )}
+                              <PhaseUpdate
+                                compact
+                                phaseId={cell.phaseId}
+                                text={cell.statusUpdate}
+                                updatedOn={updatedOn}
+                                editable={editing}
+                                label={`${phaseLabel(phase)} status update for ${row.projectName}`}
+                              />
                             </div>
                           </div>
                         </td>

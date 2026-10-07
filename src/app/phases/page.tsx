@@ -42,6 +42,8 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
             id: true,
             name: true,
             status: true,
+            statusUpdate: true,
+            statusUpdateAt: true,
             subStages: {
               // With a department filter, only those departments' items count towards each phase.
               where: departments.length > 0 ? { department: { in: departments } } : undefined,
@@ -96,6 +98,8 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
         owners: rollup.owners,
         doneWithoutDate: rollup.doneWithoutDate,
         overdue: rollup.overdueSince !== null,
+        statusUpdate: phase.statusUpdate,
+        statusUpdateAt: iso(phase.statusUpdateAt),
       };
       const date = rollup.completedAt ?? rollup.startedAt ?? rollup.targetDate;
       sortDates[name] = date ? date.getTime() : 0;

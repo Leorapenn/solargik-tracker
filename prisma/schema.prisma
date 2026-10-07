@@ -120,6 +120,9 @@ model Project {
   lockedFields    String[]         @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
   flags           String[]         @default([])
+  // Typed-over project status summary. When empty the summary is generated from the phases' statuses
+  // (src/lib/statusUpdate.ts) every time it is shown.
+  statusSummaryOverride String?
   phases          Phase[]
   contacts        Contact[]
   profile         ProjectProfile?
@@ -178,6 +181,9 @@ model Phase {
   status    StageStatus @default(NOT_STARTED)
   order     Int
   subStages SubStage[]
+  // Free-text status update typed by hand, and the calendar day it was last changed (set automatically).
+  statusUpdate   String?
+  statusUpdateAt DateTime? @db.Date
 
   @@unique([projectId, name])
 }

@@ -22,9 +22,12 @@ import { phaseLabel } from "@/lib/phases";
 import { departmentLabel } from "@/lib/departments";
 import { LIFECYCLE_NOTES, LIFECYCLE_STYLES } from "@/lib/lifecycle";
 import { rollupPhase } from "@/lib/phaseRollup";
-import { toDateInputValue, todayInAppTz } from "@/lib/dates";
+import { formatDate, toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { parseSort, sortRows } from "@/lib/sort";
-import { NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
+import { projectSummary } from "@/lib/statusUpdate";
+import { PhaseUpdate } from "@/components/PhaseUpdate";
+import { ProjectSummary } from "@/components/ProjectSummary";
+import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 // Reading a contract with Claude (a Server Action used on this page) can take a while.
@@ -66,6 +69,16 @@ export default async function ProjectDetailPage({
 
   const today = todayInAppTz();
   const todayIso = toDateInputValue(today);
+  // The summary always looks at every item, whatever filter the table below has on.
+  const summary = projectSummary(
+    project.statusSummaryOverride,
+    project.phases.map((phase) => ({
+      name: phase.name,
+      status: phase.status,
+      done: phase.subStages.filter((s) => s.status === "DONE").length,
+      total: phase.subStages.length,
+    })),
+  );
   const filters = parseRowFilters(query);
   // The phase cards follow the department filter only; the other column filters narrow the table below.
   const departments = filters.dept;
@@ -219,6 +232,34 @@ export default async function ProjectDetailPage({
           );
         })}
       </div>
+      <details open style={{ marginTop: 4 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Status update</summary>
+        <div style={{ ...cardStyle, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: TEXT_MUTED, marginBottom: 6 }}>
+              Project summary
+            </div>
+            <ProjectSummary projectId={project.id} text={summary.text} manual={summary.manual} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {project.phases.map((phase) => (
+              <div
+                key={phase.id}
+                style={{ display: "grid", gridTemplateColumns: "minmax(130px, 170px) 1fr", gap: 16, padding: "12px 0", borderTop: `1px solid ${ROW_DIVIDER}` }}
+              >
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: NAVY }}>{phaseLabel(phase.name)}</div>
+                <PhaseUpdate
+                  phaseId={phase.id}
+                  text={phase.statusUpdate}
+                  updatedOn={phase.statusUpdateAt ? formatDate(phase.statusUpdateAt) : null}
+                  editable
+                  label={`${phaseLabel(phase.name)} status update for ${project.name}`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </details>
       <details open style={{ marginTop: 4 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Project profile</summary>
         <ProjectProfileCard
