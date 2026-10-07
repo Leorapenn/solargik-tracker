@@ -121,12 +121,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 20 }}>
         <StatCard label="Customers" value={rows.length} />
         <StatCard label="Projects" value={projectTotal} />
-        <StatCard
-          label="Missing customer link"
-          value={reviewCount}
-          accent={reviewCount > 0 ? "#B3261E" : undefined}
-          href="/import"
-        />
         <StatCard label="Blocked phases" value={blockedPhaseCount} accent={blockedPhaseCount > 0 ? "#B3261E" : undefined} />
       </div>
 
