@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 type Params = Record<string, string | string[] | undefined>;
 
 const STATUS_RANK: Record<MilestoneStatus, number> = { OVERDUE: 0, NOT_DUE: 1, INVOICE_SENT: 2, PAYMENT_RECEIVED: 3 };
-const SORT_LABELS = { project: "Project", customer: "Customer", contract: "Contract value", paid: "Paid", next: "Next milestone", due: "Milestone due date", status: "Status", orders: "Open change orders" };
+const SORT_LABELS = { project: "Project", customer: "Customer", contract: "Contract value", paid: "Paid", next: "Next milestone", due: "Milestone due date", status: "Milestone status", orders: "Open change orders" };
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
@@ -101,7 +101,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <SortTh label="Paid" sortKey="paid" {...th} />
                 <SortTh label="Next milestone" sortKey="next" {...th} />
                 <SortTh label="Milestone due date" sortKey="due" {...th} />
-                <SortTh label="Status" sortKey="status" {...th} />
+                <SortTh label="Milestone status" sortKey="status" {...th} />
                 <SortTh label="Open change orders" sortKey="orders" {...th} />
               </tr>
             </thead>
