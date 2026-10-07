@@ -1,8 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { APP_TIMEZONE } from "@/lib/dates";
 
-// Vercel calls a cron route with "Authorization: Bearer <CRON_SECRET>". Fails closed when no secret is set.
-export function isAuthorizedCron(header: string | null, secret: string | undefined): boolean {
+// A request is authorised when it carries "Authorization: Bearer <secret>" (Vercel Cron sends CRON_SECRET this way;
+// the Inbox intake uses INTAKE_TOKEN). Fails closed when no (or a short) secret is set; compares in constant time.
+export function isAuthorizedBearer(header: string | null, secret: string | undefined): boolean {
   if (!secret || secret.length < 16 || !header) return false;
   const given = Buffer.from(header);
   const wanted = Buffer.from(`Bearer ${secret}`);

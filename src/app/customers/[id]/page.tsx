@@ -173,8 +173,8 @@ export default async function CustomerDetailPage({
             current={sort}
             labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value", milestone: "Milestone" }}
           />
-          {/* A fixed-height box: scrolls down for long lists and sideways on narrow screens; the header stays put. */}
-          <div style={{ overflow: "auto", maxHeight: 400 }}>
+          {/* A fixed-height box (about six projects): scrolls down for long lists and sideways on narrow screens; the header stays put. */}
+          <div style={{ overflow: "auto", maxHeight: 610 }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>

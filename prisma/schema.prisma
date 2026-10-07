@@ -135,6 +135,7 @@ model Project {
   profile         ProjectProfile?
   milestones      Milestone[]
   changeOrders    ChangeOrder[]
+  suggestions     Suggestion[]
   // Payments (milestones, change orders) are in this currency (USD, EUR, ILS...). paymentBase is the
   // contract amount in that currency that milestone percentages apply to; when empty, contractValue
   // (imported from monday.com) is used.
@@ -288,6 +289,32 @@ model ChangeOrder {
   updatedAt     DateTime  @updatedAt
 
   @@index([projectId, createdAt])
+}
+
+// A change proposed by an outside reader (e.g. a Dots agent reading Outlook), waiting for a person to approve it.
+// Nothing is applied until it is approved on the Inbox page. `payload` holds the kind-specific fields (validated
+// in src/lib/suggestions.ts); `projectId` is the matched project (null = the reviewer picks one).
+model Suggestion {
+  id               String    @id @default(cuid())
+  kind             String // PHASE_UPDATE | ITEM_UPDATE | MILESTONE_UPDATE | CONTACT | NOTE
+  payload          Json
+  projectId        String?
+  project          Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectRef       String? // what the sender called the project, as written
+  summary          String // one line for the reviewer
+  evidence         String? // the part of the email that supports it
+  sourceFrom       String?
+  sourceSubject    String?
+  sourceReceivedAt DateTime?
+  sourceLink       String? // link to the email (e.g. Outlook on the web)
+  externalId       String?   @unique // the sender's own id for it, so a retry doesn't create a duplicate
+  status           String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  resultNote       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status, createdAt])
 }
 
 // Every status change, with its timestamp, so dates can always be reconstructed.

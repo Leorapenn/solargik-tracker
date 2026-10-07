@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MailError, graphConfigFromEnv, recipientsFromEnv, sendMail } from "./graphMail";
-import { isAuthorizedCron, isSundayMorningSlot } from "./cron";
+import { isAuthorizedBearer, isSundayMorningSlot } from "./cron";
 import { buildWeeklyEmail, escapeHtml } from "./weeklyEmail";
 import type { ProjectUpdates } from "@/server/services/weeklyUpdates";
 
@@ -52,11 +52,11 @@ describe("sendMail", () => {
 describe("cron guards", () => {
   const secret = "a-long-random-secret-123";
   it("accepts only the exact bearer secret, and fails closed without one", () => {
-    expect(isAuthorizedCron(`Bearer ${secret}`, secret)).toBe(true);
-    expect(isAuthorizedCron("Bearer wrong-secret-of-same-len", secret)).toBe(false);
-    expect(isAuthorizedCron(null, secret)).toBe(false);
-    expect(isAuthorizedCron(`Bearer ${secret}`, undefined)).toBe(false);
-    expect(isAuthorizedCron("Bearer short", "short")).toBe(false); // too-short secrets are refused
+    expect(isAuthorizedBearer(`Bearer ${secret}`, secret)).toBe(true);
+    expect(isAuthorizedBearer("Bearer wrong-secret-of-same-len", secret)).toBe(false);
+    expect(isAuthorizedBearer(null, secret)).toBe(false);
+    expect(isAuthorizedBearer(`Bearer ${secret}`, undefined)).toBe(false);
+    expect(isAuthorizedBearer("Bearer short", "short")).toBe(false); // too-short secrets are refused
   });
   it("is the Sunday 07:xx slot in Israel, in summer and winter time", () => {
     expect(isSundayMorningSlot(new Date("2026-10-18T04:10:00Z"))).toBe(true); // IDT = UTC+3 -> 07:10

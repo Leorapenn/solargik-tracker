@@ -8,6 +8,8 @@ export async function proxy(request: NextRequest) {
   if (pathname === "/login") return NextResponse.next();
   // Vercel Cron has no login session; the cron route checks its own secret (CRON_SECRET) and fails closed.
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
+  // Same for the Inbox intake (an outside agent posting suggestions): it checks INTAKE_TOKEN itself and fails closed.
+  if (pathname.startsWith("/api/intake/")) return NextResponse.next();
 
   if (await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value)) {
     return NextResponse.next();
