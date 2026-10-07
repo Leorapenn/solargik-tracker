@@ -14,6 +14,7 @@ import {
   LINKED_ITEMS,
   LONG_TEXT_MAX,
   SHORT_TEXT_MAX,
+  CONTRACT_TYPES,
   SOIL_TESTS,
   choiceFor,
   type ChoiceField,
@@ -21,6 +22,7 @@ import {
   type LinkedValue,
   type ProfileInput,
 } from "@/lib/projectProfile";
+import { CUSTOMER_TYPES } from "@/lib/customerType";
 import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
@@ -270,6 +272,8 @@ export function ProjectProfileCard({
           {text("deliveryExpectations", "Delivery expectations", { long: true })}
           {text("supplyTerms", "Contractual supply terms", { long: true })}
           {text("supplyObligations", "Contractual supply obligations", { long: true })}
+          {choose("contractType", "Contract type", CONTRACT_TYPES)}
+          {choose("customerType", "Customer type", CUSTOMER_TYPES)}
           {choose("soilTest", "SPT or GPT", SOIL_TESTS)}
           {text("intercoms", "Intercoms")}
           {text("soma", "SOMA")}

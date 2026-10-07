@@ -180,6 +180,12 @@ describe("patchSubStages", () => {
 
     await expect(saveProfile(projectId, { ...EMPTY_PROFILE, projectEngineerId: "nobody" })).rejects.toBeInstanceOf(UserError);
     await expect(saveProfile(projectId, { ...EMPTY_PROFILE, bomStatus: "NOPE" })).rejects.toBeInstanceOf(UserError);
+
+    // contract type and this project's own customer type are dropdowns of fixed options, blank by default
+    await saveProfile(projectId, { ...EMPTY_PROFILE, contractType: "TRACKER_SUPPLY", customerType: "DEVELOPER_EPC" });
+    expect(await getProfile(projectId)).toEqual({ ...EMPTY_PROFILE, contractType: "TRACKER_SUPPLY", customerType: "DEVELOPER_EPC" });
+    await expect(saveProfile(projectId, { ...EMPTY_PROFILE, contractType: "TURNKEY" })).rejects.toBeInstanceOf(UserError);
+    await expect(saveProfile(projectId, { ...EMPTY_PROFILE, customerType: "Developer" })).rejects.toBeInstanceOf(UserError);
     await expect(saveProfile("missing", EMPTY_PROFILE)).rejects.toBeInstanceOf(UserError);
   });
 

@@ -15,6 +15,7 @@ import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { ContactsCard } from "@/components/ContactsCard";
 import { CustomerEditor } from "@/components/CustomerEditor";
+import { CustomerTypeSelect } from "@/components/CustomerTypeSelect";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { FlagChip } from "@/components/FlagChip";
 import { colorOf, parseFlagColors } from "@/lib/flags";
@@ -148,6 +149,8 @@ export default async function CustomerDetailPage({
               {all.length} project{all.length === 1 ? "" : "s"} · {people.length} contact{people.length === 1 ? "" : "s"}
             </div>
           </div>
+
+          <CustomerTypeSelect customerId={customer.id} value={customer.customerType} />
 
           <div>
             <CustomerEditor

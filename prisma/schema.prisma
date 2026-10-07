@@ -49,6 +49,9 @@ model Customer {
   flags        String[]           @default([])
   // Green / yellow / red per flag label: {"Payment risk": "RED"}. A flag with no entry counts as yellow.
   flagColors   Json               @default("{}")
+  // What kind of customer it is: EPC / DEVELOPER / DEVELOPER_EPC / INVESTOR / END_USER (src/lib/customerType.ts).
+  // Set by hand, or filled once from the monday.com Control Table when empty; the importer never overwrites it.
+  customerType String?
   aliases      CustomerAlias[]
   projects     Project[]
   contacts     Contact[]
@@ -174,6 +177,9 @@ model ProjectProfile {
   contractLink         String? // link to the contract file (e.g. SharePoint)
   shippingAddress      String?
   deliveryAddress      String?
+  contractType         String? // EPC / TRACKER_SUPPLY / PILOT (see src/lib/projectProfile.ts); blank by default
+  // The customer type of this deal (EPC / DEVELOPER / ... see src/lib/customerType.ts); it can differ between projects of one customer.
+  customerType         String?
 
   // Design details
   projectEngineerId           String?

@@ -31,12 +31,16 @@ export async function setPhaseDefaultOwner(phase: PhaseName, personId: string | 
   await prisma.phaseDefaultOwner.upsert({ where: { phase }, update: { personId }, create: { phase, personId } });
 }
 
-// Gives every phase that has no owner yet its default owner. Existing owners are never changed.
-export async function applyDefaultPhaseOwners(): Promise<number> {
+// Gives every phase that has no owner yet its default owner. Existing owners are never changed. `onlyProjectIds`
+// limits it to those projects (used by the tests, which must never touch real projects).
+export async function applyDefaultPhaseOwners(onlyProjectIds?: string[]): Promise<number> {
   const defaults = await prisma.phaseDefaultOwner.findMany({ where: { person: { active: true } } });
   let assigned = 0;
   for (const { phase, personId } of defaults) {
-    const result = await prisma.phase.updateMany({ where: { name: phase, ownerId: null }, data: { ownerId: personId } });
+    const result = await prisma.phase.updateMany({
+      where: { name: phase, ownerId: null, ...(onlyProjectIds ? { projectId: { in: onlyProjectIds } } : {}) },
+      data: { ownerId: personId },
+    });
     assigned += result.count;
   }
   return assigned;

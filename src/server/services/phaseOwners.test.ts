@@ -60,16 +60,15 @@ describe("phase owners", () => {
   });
 
   it("gives new projects the default phase owner, and fills only phases that have none", async () => {
+    // (real default owners may exist for other phases, so only DESIGN is looked at, and only these test projects)
     await setPhaseDefaultOwner("DESIGN", personId);
     const fresh = await createProject({ name: `Test Project B ${RUN}`, mondayItemId: `monday-b-${RUN}`, customerId });
     expect(fresh.phases.find((p) => p.name === "DESIGN")!.ownerId).toBe(personId);
-    expect(fresh.phases.find((p) => p.name === "SUPPLY")!.ownerId).toBeNull();
 
     // an existing phase with another owner keeps it; one with none is filled
     await setPhaseOwners([phaseIds.DESIGN], otherId);
-    await prisma.phase.update({ where: { id: phaseIds.INITIATION }, data: { ownerId: null } });
-    await setPhaseDefaultOwner("DESIGN", personId);
-    await applyDefaultPhaseOwners();
+    await prisma.phase.update({ where: { id: fresh.phases.find((p) => p.name === "DESIGN")!.id }, data: { ownerId: null } });
+    await applyDefaultPhaseOwners([projectId, fresh.id]);
     expect(await owner("DESIGN")).toBe(otherId);
     const afterFill = await prisma.phase.findUniqueOrThrow({ where: { id: fresh.phases.find((p) => p.name === "DESIGN")!.id } });
     expect(afterFill.ownerId).toBe(personId);

@@ -1,4 +1,5 @@
 import type { StageStatus } from "@prisma/client";
+import { CUSTOMER_TYPES } from "@/lib/customerType";
 
 // The project profile: dropdown options (all colored), what each field accepts, and the values that are
 // shown from existing sub-stages instead of being stored again.
@@ -26,8 +27,13 @@ export const BOM_STATUS: Choice[] = [
   choice("COMPLETE_IFC", "Complete BOM (IFC)", ...GREEN),
 ];
 
-export type ChoiceField = "soilTest" | "designInfoStatus" | "geotechStatus" | "genioCivileStatus" | "bomStatus";
+// The kind of contract, the same three options as the "Contract Type" column of the monday.com Control Table.
+export const CONTRACT_TYPES: Choice[] = [choice("EPC", "EPC", ...BLUE), choice("TRACKER_SUPPLY", "Tracker Supply", ...GREEN), choice("PILOT", "Pilot", ...PURPLE)];
+
+export type ChoiceField = "contractType" | "customerType" | "soilTest" | "designInfoStatus" | "geotechStatus" | "genioCivileStatus" | "bomStatus";
 export const CHOICES: Record<ChoiceField, Choice[]> = {
+  contractType: CONTRACT_TYPES,
+  customerType: CUSTOMER_TYPES, // the customer type of this deal; the customer itself has one too
   soilTest: SOIL_TESTS,
   designInfoStatus: DESIGN_INFO,
   geotechStatus: GEOTECH,
@@ -46,6 +52,8 @@ export type ProfileInput = {
   deliveryExpectations: string;
   supplyTerms: string;
   supplyObligations: string;
+  contractType: string;
+  customerType: string;
   soilTest: string;
   intercoms: string;
   soma: string;
@@ -69,6 +77,8 @@ export const EMPTY_PROFILE: ProfileInput = {
   deliveryExpectations: "",
   supplyTerms: "",
   supplyObligations: "",
+  contractType: "",
+  customerType: "",
   soilTest: "",
   intercoms: "",
   soma: "",
@@ -116,7 +126,7 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
   const result: CleanProfile = {
     text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, intercoms: null, soma: null, projectType: null, designNotes: null, shippingAddress: null, deliveryAddress: null },
     dates: { pileDrivingStart: null, ntpDate: null, designQuestionnaireReceived: null, initialLayoutSent: null },
-    choices: { soilTest: null, designInfoStatus: null, geotechStatus: null, genioCivileStatus: null, bomStatus: null },
+    choices: { contractType: null, customerType: null, soilTest: null, designInfoStatus: null, geotechStatus: null, genioCivileStatus: null, bomStatus: null },
     contractLink: null,
     projectEngineerId: null,
   };
