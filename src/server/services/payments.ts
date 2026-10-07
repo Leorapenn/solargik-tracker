@@ -35,6 +35,7 @@ export type ChangeOrderView = {
   dateSent: string | null;
   invoicedDate: string | null;
   invoiceStatus: string | null;
+  paymentTermsDays: number | null;
   fileLink: string | null;
 };
 export type LinkableItem = { id: string; name: string; phaseLabel: string; status: StageStatus };
@@ -91,6 +92,7 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
       dateSent: iso(c.dateSent),
       invoicedDate: iso(c.invoicedDate),
       invoiceStatus: c.invoiceStatus,
+      paymentTermsDays: c.paymentTermsDays,
       fileLink: c.fileLink,
     })),
     items: project.phases.flatMap((p) => p.subStages.map((s) => ({ id: s.id, name: s.name, phaseLabel: phaseLabel(p.name), status: s.status }))),
@@ -177,6 +179,7 @@ export async function savePayments(
           dateSent: day(c.dateSent),
           invoicedDate: day(c.invoicedDate),
           invoiceStatus: c.invoiceStatus,
+          paymentTermsDays: c.paymentTermsDays,
           fileLink: c.fileLink,
         };
         if (c.id) await tx.changeOrder.update({ where: { id: c.id }, data });

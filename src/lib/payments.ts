@@ -151,6 +151,33 @@ export function changeOrderStatusFor(status: string, invoiceStatus: string | nul
   return invoiceStatus === "PAID" ? "COMPLETE" : status;
 }
 
+// Payment terms are days after the invoice date ("Net+10" = 10). The due date is calculated, never stored.
+export function changeOrderDueDate(invoicedDate: string | null, termsDays: number | null): string | null {
+  if (!invoicedDate || termsDays === null || !validDate(invoicedDate)) return null;
+  const due = new Date(`${invoicedDate}T00:00:00Z`);
+  due.setUTCDate(due.getUTCDate() + termsDays);
+  return due.toISOString().slice(0, 10);
+}
+
+export const formatTerms = (termsDays: number | null) => (termsDays === null ? null : termsDays === 0 ? "Due on invoice" : `Net+${termsDays}`);
+
+// What to show: an unpaid, invoiced change order whose due date has passed is Overdue (derived, like milestones).
+// A Paid invoice is never overdue, and a status or invoice status someone set to Overdue by hand stays.
+export function changeOrderDisplay(
+  c: { status: string; invoiceStatus: string | null; invoicedDate: string | null; paymentTermsDays: number | null },
+  todayIso: string,
+): { status: string; invoiceStatus: string | null; dueDate: string | null; overdue: boolean } {
+  const dueDate = changeOrderDueDate(c.invoicedDate, c.paymentTermsDays);
+  const unpaid = c.invoiceStatus !== "PAID" && c.status !== "COMPLETE";
+  const late = unpaid && c.invoiceStatus !== null && dueDate !== null && dueDate < todayIso;
+  return {
+    status: late ? "OVERDUE" : c.status,
+    invoiceStatus: late ? "OVERDUE" : c.invoiceStatus,
+    dueDate,
+    overdue: late || (unpaid && (c.status === "OVERDUE" || c.invoiceStatus === "OVERDUE")),
+  };
+}
+
 // ---- validation of what the editor sends ----
 
 export type MilestoneInput = {
@@ -173,6 +200,7 @@ export type ChangeOrderInput = {
   dateSent: string;
   invoicedDate: string;
   invoiceStatus: string;
+  paymentTermsDays: string; // days after the invoice date, "" = none
   fileLink: string;
 };
 export type CleanMilestone = {
@@ -195,6 +223,7 @@ export type CleanChangeOrder = {
   dateSent: string | null;
   invoicedDate: string | null;
   invoiceStatus: string | null;
+  paymentTermsDays: number | null;
   fileLink: string | null;
 };
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -276,6 +305,9 @@ export function cleanChangeOrder(input: Partial<Record<keyof ChangeOrderInput, u
   if (!invoiced.ok) return invoiced;
   const file = link(input.fileLink);
   if (!file.ok) return file;
+  const terms = number(input.paymentTermsDays, "Payment terms", 365);
+  if (!terms.ok) return terms;
+  if (terms.value !== null && !Number.isInteger(terms.value)) return { ok: false, error: "Payment terms must be a whole number of days." };
   const status = str(input.status) || "SENT";
   if (!CHANGE_ORDER_STATUS.some((c) => c.value === status)) return { ok: false, error: "A change order has a status that doesn't exist." };
   const invoiceStatus = str(input.invoiceStatus);
@@ -291,6 +323,7 @@ export function cleanChangeOrder(input: Partial<Record<keyof ChangeOrderInput, u
       dateSent: sent.value,
       invoicedDate: invoiced.value,
       invoiceStatus: invoiceStatus || null,
+      paymentTermsDays: terms.value,
       fileLink: file.value,
     },
   };

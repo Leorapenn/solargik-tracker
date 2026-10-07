@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_STATUS, MILESTONE_STATUS, effectiveStatus, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
+import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, effectiveStatus, formatTerms, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
 import type { PaymentData } from "@/server/services/payments";
 import { ChoicePill } from "@/components/ColorSelect";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib/theme";
@@ -110,19 +110,29 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
       {data.changeOrders.length > 0 && (
         <div style={{ borderTop: `1px solid ${ROW_DIVIDER}`, padding: "12px 20px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TEXT_MUTED }}>Change orders</div>
-          {data.changeOrders.map((c) => (
-            <div key={c.id} style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 14 }} title={`Sent: ${fmt(c.dateSent)}\nInvoiced: ${fmt(c.invoicedDate)}`}>
-              <span style={{ flex: "1 1 260px", minWidth: 0 }}>{c.reason}</span>
-              <strong style={{ color: NAVY }}>{money(c.amount, data.currency)}</strong>
-              <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === c.status) ?? null} />
-              <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === c.invoiceStatus) ?? null} />
-              {c.fileLink && (
-                <a href={c.fileLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
-                  File
-                </a>
-              )}
-            </div>
-          ))}
+          {data.changeOrders.map((c) => {
+            const shown = changeOrderDisplay(c, todayIso);
+            return (
+              <div
+                key={c.id}
+                style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 14 }}
+                title={`Sent: ${fmt(c.dateSent)}\nInvoiced: ${fmt(c.invoicedDate)}\nTerms: ${formatTerms(c.paymentTermsDays) ?? "—"}\nDue: ${fmt(shown.dueDate)}`}
+              >
+                <span style={{ flex: "1 1 260px", minWidth: 0 }}>{c.reason}</span>
+                <strong style={{ color: NAVY }}>{money(c.amount, data.currency)}</strong>
+                {shown.dueDate && c.invoiceStatus !== "PAID" && (
+                  <span style={{ fontSize: 13, color: shown.overdue ? "#8C1D18" : TEXT_MUTED, fontWeight: shown.overdue ? 600 : 400 }}>Due {fmt(shown.dueDate)}</span>
+                )}
+                <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === shown.status) ?? null} />
+                <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === shown.invoiceStatus) ?? null} />
+                {c.fileLink && (
+                  <a href={c.fileLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                    File
+                  </a>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

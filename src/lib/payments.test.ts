@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  changeOrderDisplay,
+  changeOrderDueDate,
   changeOrderStatusFor,
   cleanChangeOrder,
+  formatTerms,
   cleanMilestone,
   effectiveStatus,
   formatTotals,
@@ -155,7 +158,7 @@ describe("cleanMilestone", () => {
 });
 
 describe("change orders", () => {
-  const base = { id: "", reason: "Extra piles", status: "SENT", amount: "$12,000", dateSent: "2026-09-01", invoicedDate: "", invoiceStatus: "", fileLink: "" };
+  const base = { id: "", reason: "Extra piles", status: "SENT", amount: "$12,000", dateSent: "2026-09-01", invoicedDate: "", invoiceStatus: "", paymentTermsDays: "", fileLink: "" };
 
   it("completes the change order when its invoice is paid", () => {
     expect(changeOrderStatusFor("SENT", "PAID")).toBe("COMPLETE");
@@ -163,6 +166,37 @@ describe("change orders", () => {
     const r = cleanChangeOrder({ ...base, invoiceStatus: "PAID" });
     expect(r.ok && r.value.status).toBe("COMPLETE");
     expect(r.ok && r.value.amount).toBe(12000);
+  });
+
+  it("calculates the due date from the invoiced date and the payment terms", () => {
+    expect(changeOrderDueDate("2026-10-07", 10)).toBe("2026-10-17");
+    expect(changeOrderDueDate("2026-10-25", 10)).toBe("2026-11-04");
+    expect(changeOrderDueDate("2026-12-25", 30)).toBe("2027-01-24");
+    expect(changeOrderDueDate("2026-10-07", 0)).toBe("2026-10-07");
+    expect(changeOrderDueDate(null, 10)).toBeNull();
+    expect(changeOrderDueDate("2026-10-07", null)).toBeNull();
+    expect(formatTerms(10)).toBe("Net+10");
+    expect(formatTerms(0)).toBe("Due on invoice");
+    expect(formatTerms(null)).toBeNull();
+  });
+
+  it("shows an unpaid invoice as Overdue once its calculated due date has passed", () => {
+    const base = { status: "SENT", invoiceStatus: "SENT", invoicedDate: "2026-10-07", paymentTermsDays: 10 };
+    expect(changeOrderDisplay(base, "2026-10-17")).toMatchObject({ status: "SENT", invoiceStatus: "SENT", dueDate: "2026-10-17", overdue: false }); // due today is not overdue
+    expect(changeOrderDisplay(base, "2026-10-18")).toMatchObject({ status: "OVERDUE", invoiceStatus: "OVERDUE", overdue: true });
+    expect(changeOrderDisplay({ ...base, invoiceStatus: "PAID", status: "COMPLETE" }, "2027-01-01")).toMatchObject({ status: "COMPLETE", invoiceStatus: "PAID", overdue: false });
+    expect(changeOrderDisplay({ ...base, paymentTermsDays: null }, "2027-01-01")).toMatchObject({ status: "SENT", dueDate: null, overdue: false });
+    // set to Overdue by hand: stays overdue even with no terms
+    expect(changeOrderDisplay({ ...base, paymentTermsDays: null, invoiceStatus: "OVERDUE" }, TODAY).overdue).toBe(true);
+  });
+
+  it("validates the payment terms", () => {
+    const ok = cleanChangeOrder({ ...base, paymentTermsDays: "10" });
+    expect(ok.ok && ok.value.paymentTermsDays).toBe(10);
+    expect(cleanChangeOrder({ ...base, paymentTermsDays: "" }).ok && true).toBe(true);
+    expect(cleanChangeOrder({ ...base, paymentTermsDays: "2.5" }).ok).toBe(false);
+    expect(cleanChangeOrder({ ...base, paymentTermsDays: "-3" }).ok).toBe(false);
+    expect(cleanChangeOrder({ ...base, paymentTermsDays: "400" }).ok).toBe(false);
   });
 
   it("validates reason, status values and the file link", () => {

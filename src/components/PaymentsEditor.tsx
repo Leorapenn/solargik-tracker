@@ -12,8 +12,11 @@ import {
   MILESTONE_STATUS,
   OPTIONAL_LABELS,
   SETTABLE_MILESTONE_STATUSES,
+  changeOrderDisplay,
+  changeOrderDueDate,
   changeOrderStatusFor,
   effectiveStatus,
+  formatTerms,
   milestoneAmount,
   milestoneTotals,
   money,
@@ -49,6 +52,7 @@ const toChangeOrderInput = (c: ChangeOrderView): ChangeOrderInput => ({
   dateSent: c.dateSent ?? "",
   invoicedDate: c.invoicedDate ?? "",
   invoiceStatus: c.invoiceStatus ?? "",
+  paymentTermsDays: c.paymentTermsDays === null ? "" : String(c.paymentTermsDays),
   fileLink: c.fileLink ?? "",
 });
 
@@ -132,6 +136,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
           dateSent: o.dateSent || null,
           invoicedDate: o.invoicedDate || null,
           invoiceStatus: o.invoiceStatus || null,
+          paymentTermsDays: num(o.paymentTermsDays),
           fileLink: o.fileLink.trim() || null,
         })),
       }));
@@ -375,7 +380,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
               type="button"
               style={secondaryButton}
               aria-label="Add a change order"
-              onClick={() => setOrders((list) => [...list, keyed<ChangeOrderInput>({ id: "", reason: "", status: "SENT", amount: "", dateSent: "", invoicedDate: "", invoiceStatus: "", fileLink: "" })])}
+              onClick={() => setOrders((list) => [...list, keyed<ChangeOrderInput>({ id: "", reason: "", status: "SENT", amount: "", dateSent: "", invoicedDate: "", invoiceStatus: "", paymentTermsDays: "", fileLink: "" })])}
             >
               +
             </button>
@@ -400,6 +405,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                   {label("Status", <ColorSelect ariaLabel={`Status of change order ${index + 1}`} value={o.status} options={CHANGE_ORDER_STATUS} onChange={(v) => setOrder(key, { status: v || "SENT" })} />)}
                   {label("Date sent", <DateField ariaLabel={`Date sent of change order ${index + 1}`} value={o.dateSent || null} onCommit={(c) => setOrder(key, { dateSent: c.date ?? "" })} />)}
                   {label("Invoiced date", <DateField ariaLabel={`Invoiced date of change order ${index + 1}`} value={o.invoicedDate || null} onCommit={(c) => setOrder(key, { invoicedDate: c.date ?? "" })} />)}
+                  {label("Payment terms (days)", <input aria-label={`Payment terms in days of change order ${index + 1}`} inputMode="numeric" placeholder="e.g. 10" value={o.paymentTermsDays} onChange={(e) => setOrder(key, { paymentTermsDays: e.target.value })} style={{ ...inputStyle, width: 110 }} />)}
+                  {label("Due date", <span style={{ padding: "7px 0", fontSize: 14 }}>{(() => { const due = changeOrderDueDate(o.invoicedDate || null, num(o.paymentTermsDays)); return due ? fmt(due) : <span style={{ color: TEXT_MUTED }}>Set the invoiced date and terms</span>; })()}</span>)}
                   {label("Invoice status", <ColorSelect ariaLabel={`Invoice status of change order ${index + 1}`} value={o.invoiceStatus} options={CHANGE_ORDER_INVOICE_STATUS} onChange={(v) => setOrder(key, { invoiceStatus: v })} />)}
                 </div>
                 {label("File link", <input aria-label={`File link of change order ${index + 1}`} placeholder="Paste the SharePoint / OneDrive link to the change order" value={o.fileLink} onChange={(e) => setOrder(key, { fileLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
@@ -413,7 +420,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
-                  {["Reason", "Amount", "Status", "Date sent", "Invoiced", "Invoice status", "File"].map((h) => (
+                  {["Reason", "Amount", "Status", "Date sent", "Invoiced", "Terms", "Due date", "Invoice status", "File"].map((h) => (
                     <th key={h} style={th}>
                       {h}
                     </th>
@@ -421,17 +428,21 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                 </tr>
               </thead>
               <tbody>
-                {saved.changeOrders.map((c) => (
+                {saved.changeOrders.map((c) => {
+                  const shown = changeOrderDisplay(c, todayIso);
+                  return (
                   <tr key={c.id} style={{ borderBottom: `1px solid ${ROW_DIVIDER}` }}>
                     <td style={{ ...td, maxWidth: 360, whiteSpace: "pre-wrap" }}>{c.reason}</td>
                     <td style={td}>{c.amount === null ? DASH : money(c.amount, saved.currency)}</td>
                     <td style={td}>
-                      <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === c.status) ?? null} />
+                      <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === shown.status) ?? null} />
                     </td>
                     <td style={td}>{c.dateSent ? fmt(c.dateSent) : DASH}</td>
                     <td style={td}>{c.invoicedDate ? fmt(c.invoicedDate) : DASH}</td>
+                    <td style={td}>{formatTerms(c.paymentTermsDays) ?? DASH}</td>
+                    <td style={{ ...td, color: shown.overdue ? "#8C1D18" : undefined, fontWeight: shown.overdue ? 600 : 400 }}>{shown.dueDate ? fmt(shown.dueDate) : DASH}</td>
                     <td style={td}>
-                      <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === c.invoiceStatus) ?? null} />
+                      <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === shown.invoiceStatus) ?? null} />
                     </td>
                     <td style={td}>
                       {c.fileLink ? (
@@ -443,7 +454,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

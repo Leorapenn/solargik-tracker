@@ -263,6 +263,8 @@ model ChangeOrder {
   dateSent      DateTime? @db.Date
   invoicedDate  DateTime? @db.Date
   invoiceStatus String? // SENT | OVERDUE | PAID
+  // Payment terms in days after the invoice date (Net+10 = 10). The due date is calculated from it, never stored.
+  paymentTermsDays Int?
   fileLink      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
