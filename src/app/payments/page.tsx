@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { toDateInputValue, todayInAppTz, formatDate, parseDateInput } from "@/lib/dates";
-import { MILESTONE_STATUS, effectiveStatus, milestoneAmount, milestoneTotals, money, upcomingMilestoneId, type MilestoneStatus } from "@/lib/payments";
+import { MILESTONE_STATUS, effectiveStatus, milestoneAmount, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
 import { parseSort, sortRows } from "@/lib/sort";
 import { ChoicePill } from "@/components/ColorSelect";
 import { SortSummary } from "@/components/SortSummary";
@@ -31,7 +31,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       paymentCurrency: true,
       paymentBase: true,
       customer: { select: { name: true } },
-      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true, linkedSubStage: { select: { status: true } } } },
+      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true } },
       changeOrders: { select: { status: true } },
     },
   });
@@ -48,10 +48,10 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       amountOverride: m.amountOverride === null ? null : Number(m.amountOverride.toString()),
       status: m.status,
       dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null,
-      linkedStatus: m.linkedSubStage?.status ?? null,
     }));
-    const upcomingId = upcomingMilestoneId(milestones);
-    const next = milestones.find((m) => m.id === upcomingId) ?? null;
+    // The next milestone is the first one (in order) that hasn't been paid, whether or not its linked item is done
+    // yet; its status ("Not due yet", "Invoice sent", "Overdue") says where it stands.
+    const next = [...milestones].sort((a, b) => a.order - b.order).find((m) => m.status !== "PAYMENT_RECEIVED") ?? null;
     return {
       id: p.id,
       name: p.name,
@@ -122,7 +122,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                         {r.next.label} <span style={{ color: TEXT_MUTED }}>· {money(r.nextAmount, r.currency)}</span>
                       </>
                     ) : (
-                      <span style={{ color: TEXT_MUTED }}>{r.hasMilestones ? "None active" : "No milestones yet"}</span>
+                      <span style={{ color: TEXT_MUTED }}>{r.hasMilestones ? "All paid" : "No milestones yet"}</span>
                     )}
                   </td>
                   <td style={bodyCell}>{r.next?.dueDate ? formatDate(parseDateInput(r.next.dueDate)) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
