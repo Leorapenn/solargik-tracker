@@ -1,4 +1,4 @@
-import type { Department } from "@prisma/client";
+import type { Department, PhaseName } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { parseSort, sortRows } from "@/lib/sort";
@@ -13,9 +13,10 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
   await requirePageAuth();
   const params = await searchParams;
 
-  const [people, departmentOwners] = await Promise.all([
+  const [people, departmentOwners, phaseOwners] = await Promise.all([
     prisma.person.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { subStages: true } } } }),
     prisma.departmentOwner.findMany(),
+    prisma.phaseDefaultOwner.findMany(),
   ]);
 
   const rows: PersonRow[] = people.map((p) => ({
@@ -44,7 +45,13 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
           Who can own phase items, and who owns each department&apos;s items by default on new projects
         </div>
       </div>
-      <PeopleManager people={sortRows(rows, accessors, sort)} defaults={defaults} sort={sort} params={params} />
+      <PeopleManager
+        people={sortRows(rows, accessors, sort)}
+        defaults={defaults}
+        phaseDefaults={Object.fromEntries(phaseOwners.map((o) => [o.phase, o.personId])) as Partial<Record<PhaseName, string>>}
+        sort={sort}
+        params={params}
+      />
     </main>
   );
 }

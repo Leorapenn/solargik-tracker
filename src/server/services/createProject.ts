@@ -37,12 +37,18 @@ export async function createProject(input: CreateProjectInput) {
       (await tx.departmentOwner.findMany({ where: { person: { active: true } } })).map((o) => [o.department, o.personId]),
     );
 
+    // ...and each phase starts with its default phase owner, if one is set.
+    const defaultPhaseOwners = new Map(
+      (await tx.phaseDefaultOwner.findMany({ where: { person: { active: true } } })).map((o) => [o.phase, o.personId]),
+    );
+
     for (const [index, phaseName] of PHASE_ORDER.entries()) {
       const phase = await tx.phase.create({
         data: {
           projectId: project.id,
           name: phaseName,
           order: index + 1,
+          ownerId: defaultPhaseOwners.get(phaseName) ?? null,
         },
       });
 

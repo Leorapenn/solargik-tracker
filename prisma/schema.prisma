@@ -200,6 +200,9 @@ model Phase {
   // Free-text status update typed by hand, and the calendar day it was last changed (set automatically).
   statusUpdate   String?
   statusUpdateAt DateTime? @db.Date
+  // The person responsible for the phase as a whole (separate from the owners of its items).
+  ownerId        String?
+  owner          Person?   @relation("PhaseOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@unique([projectId, name])
 }
@@ -343,6 +346,8 @@ model Person {
   active             Boolean           @default(true)
   subStages          SubStage[]
   defaultFor         DepartmentOwner[]
+  ownedPhases        Phase[]           @relation("PhaseOwner")
+  defaultForPhases   PhaseDefaultOwner[]
   engineeredProfiles ProjectProfile[]
   createdAt          DateTime          @default(now())
 }
@@ -352,6 +357,13 @@ model DepartmentOwner {
   department Department @id
   personId   String
   person     Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
+}
+
+// The person who owns a phase by default on newly created projects (set on the People page).
+model PhaseDefaultOwner {
+  phase    PhaseName @id
+  personId String
+  person   Person    @relation(fields: [personId], references: [id], onDelete: Cascade)
 }
 
 model ImportReviewItem {

@@ -3,6 +3,7 @@ import { STATUS_COLORS, STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusCo
 import { phaseLabel } from "@/lib/phases";
 import { formatDate } from "@/lib/dates";
 import type { PhaseRollup } from "@/lib/phaseRollup";
+import { PhaseOwner } from "@/components/PhaseOwner";
 import { BORDER, TEXT_MUTED } from "@/lib/theme";
 
 // Display only: the status is derived from the phase's sub-stages (see derivePhaseStatus), and the
@@ -11,10 +12,13 @@ export function PhaseCard({
   name,
   status,
   rollup,
+  owner,
 }: {
   name: PhaseName;
   status: StageStatus;
   rollup: PhaseRollup;
+  // the person responsible for the whole phase, with the people who can be chosen
+  owner: { phaseId: string; ownerId: string | null; ownerName: string | null; people: { id: string; name: string }[] };
 }) {
   const color = STATUS_COLORS[status];
   const { bg, text } = STATUS_PILL_STYLES[status];
@@ -81,7 +85,8 @@ export function PhaseCard({
           ⚠ {rollup.doneWithoutDate} done item{rollup.doneWithoutDate === 1 ? "" : "s"} without a date
         </div>
       )}
-      <div style={small}>{rollup.owners.length ? `Owner${rollup.owners.length > 1 ? "s" : ""}: ${rollup.owners.join(", ")}` : "No owner assigned"}</div>
+      <PhaseOwner phaseId={owner.phaseId} ownerId={owner.ownerId} ownerName={owner.ownerName} people={owner.people} label={`${phaseLabel(name)} phase owner`} />
+      <div style={small}>{rollup.owners.length ? `Item owner${rollup.owners.length > 1 ? "s" : ""}: ${rollup.owners.join(", ")}` : "No item owners"}</div>
     </div>
   );
 }

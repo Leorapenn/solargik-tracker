@@ -60,7 +60,10 @@ export default async function ProjectDetailPage({
         customer: true,
         phases: {
           orderBy: { order: "asc" },
-          include: { subStages: { orderBy: { order: "asc" }, include: { owner: { select: { id: true, name: true } } } } },
+          include: {
+            owner: { select: { id: true, name: true } },
+            subStages: { orderBy: { order: "asc" }, include: { owner: { select: { id: true, name: true } } } },
+          },
         },
       },
     }),
@@ -250,6 +253,7 @@ export default async function ProjectDetailPage({
           return (
             <PhaseCard
               key={phase.id}
+              owner={{ phaseId: phase.id, ownerId: phase.ownerId, ownerName: phase.owner?.name ?? null, people }}
               name={phase.name}
               status={departments.length > 0 ? (derivePhaseStatus(items.map((s) => s.status)) ?? phase.status) : phase.status}
               rollup={rollupPhase(

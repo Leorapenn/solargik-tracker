@@ -14,6 +14,7 @@ import { DateField, type DateChoice } from "@/components/DateField";
 import { SortSummary } from "@/components/SortSummary";
 import { SortLink, SortTh } from "@/components/SortTh";
 import { PhaseUpdate } from "@/components/PhaseUpdate";
+import { assignPhaseOwners } from "@/server/actions/phaseOwners";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 export type MatrixCell = {
@@ -29,6 +30,9 @@ export type MatrixCell = {
   overdue: boolean;
   statusUpdate: string | null;
   statusUpdateAt: string | null;
+  // the person responsible for the whole phase
+  ownerId: string | null;
+  ownerName: string | null;
 };
 
 export type MatrixRow = {
@@ -40,11 +44,12 @@ export type MatrixRow = {
 };
 
 type Params = Record<string, string | string[] | undefined>;
-type BulkField = "status" | "ownerId" | "targetDate" | "startedAt" | "completedAt";
+type BulkField = "status" | "phaseOwner" | "ownerId" | "targetDate" | "startedAt" | "completedAt";
 
 const FIELD_LABELS: Record<BulkField, string> = {
   status: "Status",
-  ownerId: "Owner",
+  phaseOwner: "Phase owner",
+  ownerId: "Item owner",
   targetDate: "Target date",
   startedAt: "Start date",
   completedAt: "Completed date",
@@ -104,7 +109,7 @@ export function PhasesMatrix({
     setDateChoice(null);
   }
 
-  const isDateField = field !== "status" && field !== "ownerId";
+  const isDateField = field !== "status" && field !== "ownerId" && field !== "phaseOwner";
   const choiceText = !dateChoice
     ? "Choose a date, N/A or Clear"
     : dateChoice.notApplicable
@@ -116,6 +121,19 @@ export function PhasesMatrix({
   function apply() {
     if (isDateField && !dateChoice) return;
     const ids = [...selected];
+    if (field === "phaseOwner") {
+      // the owner of the whole phases; the phases' items keep their own owners
+      const who = people.find((p) => p.id === value)?.name ?? null;
+      if (!window.confirm(`${who ? `Make ${who}` : "Clear"} the phase owner of ${ids.length} phase${ids.length === 1 ? "" : "s"}? The owners of their items are not changed.`)) return;
+      setMessage(null);
+      startTransition(async () => {
+        const result = await assignPhaseOwners(ids, value || null);
+        if (!result.ok) return setMessage({ kind: "error", text: result.error });
+        setSelected(new Set());
+        setMessage({ kind: "ok", text: `Updated the phase owner of ${result.updated} phase${result.updated === 1 ? "" : "s"}.` });
+      });
+      return;
+    }
     const patch: PatchInput =
       field === "status"
         ? { status: value as StageStatus }
@@ -169,7 +187,7 @@ export function PhasesMatrix({
             {selected.size} phase{selected.size === 1 ? "" : "s"} selected ({itemCount} items)
           </strong>
           <span style={{ color: TEXT_MUTED, fontSize: 13 }}>
-            {departments.length > 0 ? `Set the ${departments.map(departmentLabel).join(" / ")} items' (only)` : "Set every item's"}
+            {field === "phaseOwner" ? "Set the" : departments.length > 0 ? `Set the ${departments.map(departmentLabel).join(" / ")} items' (only)` : "Set every item's"}
           </span>
           <select aria-label="Field to change" value={field} onChange={(e) => chooseField(e.target.value as BulkField)} style={inputStyle}>
             {(Object.keys(FIELD_LABELS) as BulkField[]).map((f) => (
@@ -188,8 +206,8 @@ export function PhasesMatrix({
               ))}
             </select>
           )}
-          {field === "ownerId" && (
-            <select aria-label="New owner" value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle}>
+          {(field === "ownerId" || field === "phaseOwner") && (
+            <select aria-label={field === "phaseOwner" ? "New phase owner" : "New owner"} value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle}>
               <option value="">Unassigned</option>
               {people.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -310,7 +328,8 @@ export function PhasesMatrix({
                       const updatedOn = fmt(cell.statusUpdateAt);
                       // The owner, done date and since date are not printed in the cell; they appear on hover.
                       const hover = [
-                        cell.owners.length ? `Owner: ${cell.owners.join(", ")}` : "No owner assigned",
+                        cell.ownerName ? `Phase owner: ${cell.ownerName}` : "No phase owner",
+                        cell.owners.length ? `Item owners: ${cell.owners.join(", ")}` : "No item owners",
                         completed && cell.status === "DONE" ? `Done ${completed}` : null,
                         started && cell.status !== "DONE" ? `Since ${started}` : null,
                         cell.statusUpdate ? `Update${updatedOn ? ` (${updatedOn})` : ""}: ${cell.statusUpdate}` : null,
@@ -344,6 +363,28 @@ export function PhasesMatrix({
                               )}
                               {cell.doneWithoutDate > 0 && cell.status !== "DONE" && (
                                 <span style={{ fontSize: 12, color: "#9A4B00" }}>⚠ {cell.doneWithoutDate} done without date</span>
+                              )}
+                              {editing && (
+                                <select
+                                  aria-label={`Phase owner of ${phaseLabel(phase)} for ${row.projectName}`}
+                                  value={cell.ownerId ?? ""}
+                                  disabled={pending}
+                                  style={{ ...inputStyle, padding: "3px 6px", fontSize: 12, maxWidth: 170 }}
+                                  onChange={(e) =>
+                                    startTransition(async () => {
+                                      const result = await assignPhaseOwners([cell.phaseId], e.target.value || null);
+                                      if (!result.ok) setMessage({ kind: "error", text: result.error });
+                                    })
+                                  }
+                                >
+                                  <option value="">Phase owner…</option>
+                                  {cell.ownerId && !people.some((p) => p.id === cell.ownerId) && <option value={cell.ownerId}>{cell.ownerName} (inactive)</option>}
+                                  {people.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name}
+                                    </option>
+                                  ))}
+                                </select>
                               )}
                               <PhaseUpdate
                                 compact

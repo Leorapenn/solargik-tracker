@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { Department } from "@prisma/client";
+import type { Department, PhaseName } from "@prisma/client";
 import { applyDefaultOwners, createPerson, setDepartmentOwner, updatePerson } from "@/server/actions/people";
+import { assignPhaseDefaultOwner, fillDefaultPhaseOwners } from "@/server/actions/phaseOwners";
+import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
 import { departmentLabel, DEPARTMENTS } from "@/lib/departments";
 import type { SortState } from "@/lib/sort";
 import { SortSummary } from "@/components/SortSummary";
@@ -19,11 +21,13 @@ const td = { padding: "12px 18px", fontSize: 14.5, verticalAlign: "middle" as co
 export function PeopleManager({
   people,
   defaults,
+  phaseDefaults,
   sort,
   params,
 }: {
   people: PersonRow[];
   defaults: Partial<Record<Department, string>>;
+  phaseDefaults: Partial<Record<PhaseName, string>>;
   sort: SortState;
   params: Params;
 }) {
@@ -211,6 +215,55 @@ export function PeopleManager({
           }
         >
           Assign defaults to items with no owner
+        </button>
+      </div>
+
+      <div style={{ ...cardStyle, padding: 20 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: NAVY }}>
+          Default owner by phase
+        </div>
+        <p style={{ color: TEXT_MUTED, fontSize: 14, margin: "8px 0 16px", maxWidth: 720 }}>
+          The person responsible for a whole phase. New projects give each phase to its default owner. Existing phases keep
+          the owner they have; use the button below to fill in phases that have no owner yet. The owners of the items inside a
+          phase are separate (see above).
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+          {PHASE_ORDER.map((phase) => (
+            <label key={phase} style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: TEXT_MUTED }}>
+              {phaseLabel(phase)}
+              <select
+                value={phaseDefaults[phase] ?? ""}
+                disabled={pending}
+                style={inputStyle}
+                onChange={(e) =>
+                  startTransition(async () => {
+                    const result = await assignPhaseDefaultOwner(phase, e.target.value || null);
+                    report(result, `${phaseLabel(phase)} default owner saved.`);
+                  })
+                }
+              >
+                <option value="">No default</option>
+                {activePeople.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+        <button
+          type="button"
+          disabled={pending}
+          style={{ ...secondaryButton, marginTop: 18 }}
+          onClick={() =>
+            startTransition(async () => {
+              const result = await fillDefaultPhaseOwners();
+              report(result, result.ok ? `Assigned ${result.assigned} phase${result.assigned === 1 ? "" : "s"} that had no owner.` : "");
+            })
+          }
+        >
+          Assign defaults to phases with no owner
         </button>
       </div>
     </div>
