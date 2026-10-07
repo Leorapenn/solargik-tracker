@@ -13,6 +13,9 @@ export async function requirePageAuth() {
   if (!(await isAuthenticated())) redirect("/login");
 }
 
+// For route handlers (file downloads), which answer 401 themselves instead of redirecting.
+export const hasSession = isAuthenticated;
+
 export async function requireActionAuth() {
   if (!(await isAuthenticated())) throw new Error("Unauthorized");
 }
