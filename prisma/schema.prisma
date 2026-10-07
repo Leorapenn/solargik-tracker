@@ -121,6 +121,10 @@ model Project {
   lockedFields    String[]         @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
   flags           String[]         @default([])
+  // Warranty periods in years when a project's contract differs from the Framework Agreement's 10 (structural
+  // units) and 5 (drive unit). Empty = the default; see src/lib/warranty.ts.
+  warrantyStructuralYears Int?
+  warrantyDriveYears      Int?
   // Link to the project's folder in SharePoint (the EXECUTION library); a link only, nothing is copied.
   sharepointLink  String?
   // Severity of each project flag: {label: GREEN | YELLOW | RED}, like Customer.flagColors. Never imported.

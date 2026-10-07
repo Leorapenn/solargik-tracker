@@ -17,6 +17,8 @@ import { parseFlagColors } from "@/lib/flags";
 import { groupContacts } from "@/lib/contacts";
 import { CustomerManager } from "@/components/CustomerManager";
 import { SharePointLink } from "@/components/SharePointLink";
+import { WarrantyCard } from "@/components/WarrantyCard";
+import { describeLeft, warrantyLines } from "@/lib/warranty";
 import { PaymentsCard } from "@/components/PaymentsCard";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
@@ -315,6 +317,20 @@ export default async function ProjectDetailPage({
       </details>
 
       {payments && <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />}
+
+      <WarrantyCard
+        projectId={project.id}
+        structuralYears={project.warrantyStructuralYears}
+        driveYears={project.warrantyDriveYears}
+        rows={warrantyLines(
+          {
+            items: project.phases.flatMap((phase) => phase.subStages.map((s) => ({ name: s.name, status: s.status, completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null }))),
+            structuralYears: project.warrantyStructuralYears,
+            driveYears: project.warrantyDriveYears,
+          },
+          todayIso,
+        ).map((l) => ({ ...l, leftText: l.daysLeft === null || !l.expiresOn ? null : describeLeft(l.daysLeft, todayIso, l.expiresOn) }))}
+      />
 
       <details style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -6 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 600 }}>
