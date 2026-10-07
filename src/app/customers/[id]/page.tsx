@@ -17,7 +17,7 @@ import { ContactsCard } from "@/components/ContactsCard";
 import { CustomerEditor } from "@/components/CustomerEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { FlagChip } from "@/components/FlagChip";
-import { parseFlagColors } from "@/lib/flags";
+import { colorOf, parseFlagColors } from "@/lib/flags";
 import { formatTotals, milestoneProgress, money, projectContract, totalsByCurrency } from "@/lib/payments";
 import { MilestoneCell } from "@/components/MilestoneCell";
 import { capacityKwp, formatKwp } from "@/lib/capacity";
@@ -99,6 +99,7 @@ export default async function CustomerDetailPage({
       id: c.id,
       name: c.name,
       email: c.email,
+      phone: c.phone,
       role: c.role,
       englishLevel: c.englishLevel,
       source: c.source,
@@ -172,7 +173,8 @@ export default async function CustomerDetailPage({
             current={sort}
             labels={{ name: "Project", status: "Status", spread: "Phase spread", capacity: "Capacity", contract: "Contract value", milestone: "Milestone" }}
           />
-          <div style={{ overflowX: "auto" }}>
+          {/* A fixed-height box: scrolls down for long lists and sideways on narrow screens; the header stays put. */}
+          <div style={{ overflow: "auto", maxHeight: 400 }}>
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
@@ -201,7 +203,7 @@ export default async function CustomerDetailPage({
                       {project.flags.length > 0 && (
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                           {project.flags.map((flag) => (
-                            <FlagChip key={flag} label={flag} color={null} />
+                            <FlagChip key={flag} label={flag} color={colorOf(parseFlagColors(project.flagColors), flag)} />
                           ))}
                         </div>
                       )}
@@ -306,6 +308,10 @@ function Row({ label, value, hint }: { label: string; value: string; hint?: stri
 }
 
 const headCell: CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 1,
+  background: NAVY,
   padding: "15px 20px",
   textAlign: "left",
   fontSize: 11.5,

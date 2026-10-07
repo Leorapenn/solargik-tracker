@@ -145,12 +145,17 @@ describe("patchSubStages", () => {
     await expect(addFlag("project", projectId, "payment RISK")).rejects.toBeInstanceOf(UserError);
     expect(await addFlag("customer", customerId, "Strategic push", "GREEN")).toEqual(["Strategic push"]);
     expect(parseFlagColors((await prisma.customer.findUniqueOrThrow({ where: { id: customerId } })).flagColors)).toEqual({ "Strategic push": "GREEN" });
-    await setFlagColor(customerId, "strategic PUSH", "RED");
+    await setFlagColor("customer", customerId, "strategic PUSH", "RED");
     expect(parseFlagColors((await prisma.customer.findUniqueOrThrow({ where: { id: customerId } })).flagColors)).toEqual({ "Strategic push": "RED" });
-    await expect(setFlagColor(customerId, "nope", "RED")).rejects.toBeInstanceOf(UserError);
+    await expect(setFlagColor("customer", customerId, "nope", "RED")).rejects.toBeInstanceOf(UserError);
+    // project flags have a severity color too
+    expect(parseFlagColors((await prisma.project.findUniqueOrThrow({ where: { id: projectId } })).flagColors)).toEqual({ "Payment risk": "YELLOW" });
+    await setFlagColor("project", projectId, "payment risk", "RED");
+    expect(parseFlagColors((await prisma.project.findUniqueOrThrow({ where: { id: projectId } })).flagColors)).toEqual({ "Payment risk": "RED" });
     await expect(addFlag("customer", customerId, "Bad color", "PURPLE" as never)).rejects.toBeInstanceOf(UserError);
     expect(await knownFlags()).toEqual(expect.arrayContaining(["Payment risk", "Strategic push"]));
     expect(await removeFlag("project", projectId, "payment risk")).toEqual([]);
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: projectId } })).flagColors).toEqual({});
     expect((await prisma.customer.findUniqueOrThrow({ where: { id: customerId } })).flags).toEqual(["Strategic push"]);
     await removeFlag("customer", customerId, "Strategic push");
     expect((await prisma.customer.findUniqueOrThrow({ where: { id: customerId } })).flagColors).toEqual({});

@@ -2,10 +2,10 @@ import type { CSSProperties } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
-import { phaseSpread, progressScore } from "@/lib/phaseSpread";
+import { phaseBreakdown, phaseSpread, progressScore } from "@/lib/phaseSpread";
 import { parseSort, sortRows } from "@/lib/sort";
 import { StatCard } from "@/components/StatCard";
-import { SpreadBar } from "@/components/SpreadBar";
+import { SpreadBreakdown } from "@/components/SpreadBreakdown";
 import { SortLink } from "@/components/SortTh";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
@@ -39,7 +39,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const [customers, reviewCount, blockedPhaseCount, flagSuggestions] = await Promise.all([
     prisma.customer.findMany({
       include: {
-        projects: { select: { phases: { select: { name: true, status: true } } } },
+        projects: { select: { id: true, name: true, phases: { select: { name: true, status: true } } } },
         _count: { select: { aliases: true } },
       },
     }),
@@ -57,6 +57,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       customer,
       projectCount: customer.projects.length,
       spread: phaseSpread(customer.projects),
+      breakdown: phaseBreakdown(customer.projects),
       progress: progressScore(customer.projects),
       blocked,
       flags: flagSeverity(customer.flags, parseFlagColors(customer.flagColors)) + customer._count.aliases + (blocked > 0 ? 1 : 0),
@@ -172,7 +173,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
               <div style={{ padding: 24, color: TEXT_MUTED }}>No customers yet — run the monday.com importer.</div>
             )}
 
-            {rows.map(({ customer, projectCount, spread, blocked }, index) => (
+            {rows.map(({ customer, projectCount, spread, breakdown, blocked }, index) => (
               <div
                 key={customer.id}
                 style={{
@@ -190,7 +191,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 </div>
                 <div style={{ ...bodyCell, color: TEXT_BODY }}>{projectCount}</div>
                 <div style={bodyCell}>
-                  <SpreadBar segments={spread} />
+                  <SpreadBreakdown segments={spread} breakdown={breakdown} customer={customer.name} />
                 </div>
                 <div style={bodyCell}>
                   <ImportanceSelect

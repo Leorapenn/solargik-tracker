@@ -31,6 +31,15 @@ import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, se
 
 const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "—");
 const DASH = <span style={{ color: TEXT_MUTED }}>—</span>;
+// "Open" for a stored file link, a dash when there is none.
+const fileLinkCell = (url: string | null) =>
+  url ? (
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+      Open
+    </a>
+  ) : (
+    DASH
+  );
 
 const toMilestoneInput = (m: MilestoneView): MilestoneInput => ({
   id: m.id,
@@ -43,6 +52,8 @@ const toMilestoneInput = (m: MilestoneView): MilestoneInput => ({
   status: m.status,
   invoiceSentDate: m.invoiceSentDate ?? "",
   paidDate: m.paidDate ?? "",
+  invoiceLink: m.invoiceLink ?? "",
+  payslipLink: m.payslipLink ?? "",
 });
 const toChangeOrderInput = (c: ChangeOrderView): ChangeOrderInput => ({
   id: c.id,
@@ -54,6 +65,8 @@ const toChangeOrderInput = (c: ChangeOrderView): ChangeOrderInput => ({
   invoiceStatus: c.invoiceStatus ?? "",
   paymentTermsDays: c.paymentTermsDays === null ? "" : String(c.paymentTermsDays),
   fileLink: c.fileLink ?? "",
+  invoiceLink: c.invoiceLink ?? "",
+  payslipLink: c.payslipLink ?? "",
 });
 
 type Keyed<T> = { key: string; data: T };
@@ -125,6 +138,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
             dueDate: m.dueDate || null,
             invoiceSentDate: invoiced ? m.invoiceSentDate || null : null,
             paidDate: m.status === "PAYMENT_RECEIVED" ? m.paidDate || null : null,
+            invoiceLink: m.invoiceLink.trim() || null,
+            payslipLink: m.payslipLink.trim() || null,
             order,
           };
         }),
@@ -138,6 +153,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
           invoiceStatus: o.invoiceStatus || null,
           paymentTermsDays: num(o.paymentTermsDays),
           fileLink: o.fileLink.trim() || null,
+          invoiceLink: o.invoiceLink.trim() || null,
+          payslipLink: o.payslipLink.trim() || null,
         })),
       }));
       setEditing(false);
@@ -167,6 +184,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
     status: "NOT_DUE",
     invoiceSentDate: "",
     paidDate: "",
+    invoiceLink: "",
+    payslipLink: "",
   });
   const unusedLabels = MILESTONE_LABELS.filter((l) => !milestones.some((m) => m.data.label === l));
   // the dropdown offers the standard names not used yet, starting with the next one; "Other…" is a plain "Milestone N"
@@ -326,6 +345,14 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     {invoiced && label("Invoice sent", <DateField ariaLabel={`Invoice sent date of ${m.label}`} value={m.invoiceSentDate || null} onCommit={(c) => setMilestone(key, { invoiceSentDate: c.date ?? "" })} />)}
                     {m.status === "PAYMENT_RECEIVED" && label("Paid on", <DateField ariaLabel={`Paid date of ${m.label}`} value={m.paidDate || null} onCommit={(c) => setMilestone(key, { paidDate: c.date ?? "" })} />)}
                   </div>
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 280px" }}>
+                      {label("Invoice file link", <input aria-label={`Invoice link of ${m.label}`} placeholder="Paste the SharePoint / OneDrive link to the invoice" value={m.invoiceLink} onChange={(e) => setMilestone(key, { invoiceLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                    </div>
+                    <div style={{ flex: "1 1 280px" }}>
+                      {label("Payslip file link", <input aria-label={`Payslip link of ${m.label}`} placeholder="Paste the link to the payslip / proof of payment" value={m.payslipLink} onChange={(e) => setMilestone(key, { payslipLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -337,7 +364,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
-                  {["Milestone", "%", "Amount", "Triggered by", "Due", "Status", "Invoice sent", "Paid"].map((h) => (
+                  {["Milestone", "%", "Amount", "Triggered by", "Due", "Status", "Invoice sent", "Paid", "Invoice", "Payslip"].map((h) => (
                     <th key={h} style={th}>
                       {h}
                     </th>
@@ -363,6 +390,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     </td>
                     <td style={td}>{m.invoiceSentDate ? fmt(m.invoiceSentDate) : DASH}</td>
                     <td style={td}>{m.paidDate ? fmt(m.paidDate) : DASH}</td>
+                    <td style={td}>{fileLinkCell(m.invoiceLink)}</td>
+                    <td style={td}>{fileLinkCell(m.payslipLink)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -380,7 +409,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
               type="button"
               style={secondaryButton}
               aria-label="Add a change order"
-              onClick={() => setOrders((list) => [...list, keyed<ChangeOrderInput>({ id: "", reason: "", status: "SENT", amount: "", dateSent: "", invoicedDate: "", invoiceStatus: "", paymentTermsDays: "", fileLink: "" })])}
+              onClick={() => setOrders((list) => [...list, keyed<ChangeOrderInput>({ id: "", reason: "", status: "SENT", amount: "", dateSent: "", invoicedDate: "", invoiceStatus: "", paymentTermsDays: "", fileLink: "", invoiceLink: "", payslipLink: "" })])}
             >
               +
             </button>
@@ -410,6 +439,14 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                   {label("Invoice status", <ColorSelect ariaLabel={`Invoice status of change order ${index + 1}`} value={o.invoiceStatus} options={CHANGE_ORDER_INVOICE_STATUS} onChange={(v) => setOrder(key, { invoiceStatus: v })} />)}
                 </div>
                 {label("File link", <input aria-label={`File link of change order ${index + 1}`} placeholder="Paste the SharePoint / OneDrive link to the change order" value={o.fileLink} onChange={(e) => setOrder(key, { fileLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ flex: "1 1 280px" }}>
+                    {label("Invoice file link", <input aria-label={`Invoice link of change order ${index + 1}`} placeholder="Paste the link to the invoice" value={o.invoiceLink} onChange={(e) => setOrder(key, { invoiceLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                  </div>
+                  <div style={{ flex: "1 1 280px" }}>
+                    {label("Payslip file link", <input aria-label={`Payslip link of change order ${index + 1}`} placeholder="Paste the link to the payslip / proof of payment" value={o.payslipLink} onChange={(e) => setOrder(key, { payslipLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -420,7 +457,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
-                  {["Reason", "Amount", "Status", "Date sent", "Invoiced", "Terms", "Due date", "Invoice status", "File"].map((h) => (
+                  {["Reason", "Amount", "Status", "Date sent", "Invoiced", "Terms", "Due date", "Invoice status", "File", "Invoice", "Payslip"].map((h) => (
                     <th key={h} style={th}>
                       {h}
                     </th>
@@ -453,6 +490,8 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                         DASH
                       )}
                     </td>
+                    <td style={td}>{fileLinkCell(c.invoiceLink)}</td>
+                    <td style={td}>{fileLinkCell(c.payslipLink)}</td>
                   </tr>
                   );
                 })}

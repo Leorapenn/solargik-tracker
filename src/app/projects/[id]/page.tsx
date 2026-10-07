@@ -13,6 +13,9 @@ import { getContractSigningDate, getProfile } from "@/server/services/projectPro
 import { getPaymentData } from "@/server/services/payments";
 import { money, projectContract } from "@/lib/payments";
 import { capacityKwp, formatKwp } from "@/lib/capacity";
+import { parseFlagColors } from "@/lib/flags";
+import { groupContacts } from "@/lib/contacts";
+import { CustomerManager } from "@/components/CustomerManager";
 import { PaymentsCard } from "@/components/PaymentsCard";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
@@ -66,6 +69,21 @@ export default async function ProjectDetailPage({
   ]);
 
   if (!project) notFound();
+
+  // the customer's people, for picking the customer-side project manager
+  const customerPeople = groupContacts(
+    (await prisma.contact.findMany({ where: { customerId: project.customerId } })).map((c) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      role: c.role,
+      englishLevel: c.englishLevel,
+      source: c.source,
+      projectId: null,
+      projectName: null,
+    })),
+  ).map((p) => ({ name: p.name, email: p.email ?? "", phone: p.phone ?? "" }));
 
   const today = todayInAppTz();
   const todayIso = toDateInputValue(today);
@@ -200,7 +218,15 @@ export default async function ProjectDetailPage({
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: -4 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Flags</span>
-        <FlagsEditor compact kind="project" id={project.id} name={project.name} flags={project.flags} suggestions={flagSuggestions} />
+        <FlagsEditor compact kind="project" id={project.id} name={project.name} flags={project.flags} colors={parseFlagColors(project.flagColors)} suggestions={flagSuggestions} />
+      </div>
+
+      <div style={{ marginTop: -4 }}>
+        <CustomerManager
+          projectId={project.id}
+          current={{ name: project.customerManagerName ?? "", email: project.customerManagerEmail ?? "", phone: project.customerManagerPhone ?? "" }}
+          contacts={customerPeople}
+        />
       </div>
 
       <div

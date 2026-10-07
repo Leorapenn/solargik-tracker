@@ -14,6 +14,7 @@ import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { milestoneProgress, money, projectContract } from "@/lib/payments";
 import { capacityKwp, formatKwp } from "@/lib/capacity";
+import { flagSeverity, parseFlagColors } from "@/lib/flags";
 import { MilestoneCell } from "@/components/MilestoneCell";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { knownFlags } from "@/server/services/flags";
@@ -82,7 +83,8 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
     contract: (p: (typeof all)[number]) => projectContract(p).amount,
     milestone: (p: (typeof all)[number]) => progressOf(p).sortKey,
     spread: (p: (typeof all)[number]) => progressScore([p]),
-    flags: (p: (typeof all)[number]) => p.flags.length,
+    // red first, then yellow, then green; more flags break ties
+    flags: (p: (typeof all)[number]) => flagSeverity(p.flags, parseFlagColors(p.flagColors)),
   };
   const sort = parseSort(params, Object.keys(accessors), { key: "name", dir: "asc" });
   const projects = sortRows(filter ? all.filter((p) => p.lifecycle === filter) : all, accessors, sort);
@@ -199,6 +201,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                         id={project.id}
                         name={project.name}
                         flags={project.flags}
+                        colors={parseFlagColors(project.flagColors)}
                         suggestions={flagSuggestions}
                       />
                     </td>

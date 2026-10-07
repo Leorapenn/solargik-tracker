@@ -10,6 +10,16 @@ import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib
 
 const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "—");
 
+function FileLink({ url }: { url: string | null }) {
+  return url ? (
+    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+      Open
+    </a>
+  ) : (
+    <span style={{ color: TEXT_MUTED }}>—</span>
+  );
+}
+
 // Read-only payments on the project page. Each milestone shows its amount and status; hover (or click) it to see
 // the due date, the date the invoice was sent and the date it was paid. Finance edits these on the Payments tab.
 export function PaymentsCard({ projectId, data, todayIso }: { projectId: string; data: PaymentData; todayIso: string }) {
@@ -102,6 +112,15 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
                   {selected.linkedStatus === "DONE" ? " (done)" : ""}
                 </span>
               )}
+              {/* the same links that are stored on the Payments page */}
+              <span>
+                <span style={{ color: TEXT_MUTED }}>Invoice </span>
+                <FileLink url={selected.invoiceLink} />
+              </span>
+              <span>
+                <span style={{ color: TEXT_MUTED }}>Payslip </span>
+                <FileLink url={selected.payslipLink} />
+              </span>
             </div>
           )}
         </div>
@@ -128,6 +147,16 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
                 {c.fileLink && (
                   <a href={c.fileLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
                     File
+                  </a>
+                )}
+                {c.invoiceLink && (
+                  <a href={c.invoiceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                    Invoice
+                  </a>
+                )}
+                {c.payslipLink && (
+                  <a href={c.payslipLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                    Payslip
                   </a>
                 )}
               </div>

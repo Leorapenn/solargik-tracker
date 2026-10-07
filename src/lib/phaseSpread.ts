@@ -18,6 +18,20 @@ export function progressScore(projects: ProjectWithPhases[]): number {
   return score;
 }
 
+export type PhaseBreakdown = Record<PhaseName, { id: string; name: string; status: StageStatus }[]>;
+
+// For each phase, every project with that phase's status, so a click on the spread bar can say which projects
+// are where. Projects without the phase count as not started. Sorted by name.
+export function phaseBreakdown(projects: { id: string; name: string; phases: { name: PhaseName; status: StageStatus }[] }[]): PhaseBreakdown {
+  const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name));
+  return Object.fromEntries(
+    PHASE_ORDER.map((phase) => [
+      phase,
+      sorted.map((p) => ({ id: p.id, name: p.name, status: p.phases.find((x) => x.name === phase)?.status ?? ("NOT_STARTED" as StageStatus) })),
+    ]),
+  ) as PhaseBreakdown;
+}
+
 // One segment per phase, summarising every project: any blocked → orange,
 // all done → navy, some started/done → blue, nothing started → grey.
 export function phaseSpread(projects: ProjectWithPhases[]): SpreadSegment[] {

@@ -9,6 +9,7 @@ import { run, UserError, type ActionResult } from "@/lib/errors";
 import { LIFECYCLE_ORDER } from "@/lib/lifecycle";
 import { CUSTOMER_LOCKABLE, PROJECT_LOCKABLE } from "@/lib/lockable";
 import { capacityKwp } from "@/lib/capacity";
+import { checkPhone } from "@/lib/contacts";
 
 const IMPORTANCES: CustomerImportance[] = ["NORMAL", "SEMI_STRATEGIC", "STRATEGIC"];
 
@@ -170,6 +171,7 @@ export type ContactInput = {
   ids?: string[];
   name: string;
   email: string;
+  phone: string;
   role: string;
   englishLevel: string;
 };
@@ -181,7 +183,9 @@ export async function saveContact(customerId: string, input: ContactInput): Prom
     const name = text(input.name, "Name", 120, true)!;
     const email = text(input.email, "Email", 200);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new UserError("That email address doesn't look right.");
-    const data = { name, email, role: text(input.role, "Role", 80), englishLevel: text(input.englishLevel, "English level", 40) };
+    const phone = checkPhone(input.phone);
+    if (!phone.ok) throw new UserError(phone.error);
+    const data = { name, email, phone: phone.value, role: text(input.role, "Role", 80), englishLevel: text(input.englishLevel, "English level", 40) };
 
     if (input.ids && input.ids.length > 0) {
       const found = await prisma.contact.count({ where: { id: { in: input.ids }, customerId } });

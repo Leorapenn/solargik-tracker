@@ -72,6 +72,7 @@ model Contact {
   slot         Int?
   name         String
   email        String?
+  phone        String?
   role         String?
   englishLevel String?
   source       ContactSource @default(IMPORTED)
@@ -120,6 +121,12 @@ model Project {
   lockedFields    String[]         @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
   flags           String[]         @default([])
+  // Severity of each project flag: {label: GREEN | YELLOW | RED}, like Customer.flagColors. Never imported.
+  flagColors      Json             @default("{}")
+  // The project manager on the customer's side (typed or copied from one of the customer's contacts).
+  customerManagerName  String?
+  customerManagerEmail String?
+  customerManagerPhone String?
   // Typed-over project status summary. When empty the summary is generated from the phases' statuses
   // (src/lib/statusUpdate.ts) every time it is shown.
   statusSummaryOverride String?
@@ -158,6 +165,8 @@ model ProjectProfile {
   ntpDate              DateTime?
   projectType          String?
   contractLink         String? // link to the contract file (e.g. SharePoint)
+  shippingAddress      String?
+  deliveryAddress      String?
 
   // Design details
   projectEngineerId           String?
@@ -249,6 +258,9 @@ model Milestone {
   status           String    @default("NOT_DUE")
   invoiceSentDate  DateTime? @db.Date
   paidDate         DateTime? @db.Date
+  // Links (SharePoint etc.) to the invoice and to the payslip / proof of payment; links only, no file storage.
+  invoiceLink      String?
+  payslipLink      String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
@@ -269,6 +281,9 @@ model ChangeOrder {
   // Payment terms in days after the invoice date (Net+10 = 10). The due date is calculated from it, never stored.
   paymentTermsDays Int?
   fileLink      String?
+  // Links to the invoice and to the payslip / proof of payment.
+  invoiceLink   String?
+  payslipLink   String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

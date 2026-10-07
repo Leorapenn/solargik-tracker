@@ -14,7 +14,7 @@ function refresh(kind: FlagTarget) {
 
 const valid = (kind: unknown): kind is FlagTarget => kind === "customer" || kind === "project";
 
-// color only applies to customer flags (green / yellow / red); it is ignored for projects.
+// Every flag has a severity color (green / yellow / red), for customers and projects alike.
 export async function addFlag(kind: FlagTarget, id: string, label: string, color?: FlagColor): Promise<ActionResult> {
   await requireActionAuth();
   return run(async () => {
@@ -35,11 +35,12 @@ export async function removeFlag(kind: FlagTarget, id: string, label: string): P
   });
 }
 
-export async function setCustomerFlagColor(customerId: string, label: string, color: FlagColor): Promise<ActionResult> {
+export async function setFlagColor(kind: FlagTarget, id: string, label: string, color: FlagColor): Promise<ActionResult> {
   await requireActionAuth();
   return run(async () => {
-    await recolor(customerId, label, color);
-    refresh("customer");
+    if (!valid(kind)) throw new Error("bad kind");
+    await recolor(kind, id, label, color);
+    refresh(kind);
     return {};
   });
 }

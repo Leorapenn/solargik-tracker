@@ -1,5 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { groupContacts, type ContactRow } from "./contacts";
+import { checkPhone, cleanCustomerManager, groupContacts, type ContactRow } from "./contacts";
+
+describe("checkPhone", () => {
+  it("accepts ordinary phone numbers and tidies the spacing", () => {
+    expect(checkPhone("  +39  06 1234 5678 ")).toEqual({ ok: true, value: "+39 06 1234 5678" });
+    expect(checkPhone("(050) 791-7125")).toEqual({ ok: true, value: "(050) 791-7125" });
+    expect(checkPhone("")).toEqual({ ok: true, value: null });
+    expect(checkPhone(null)).toEqual({ ok: true, value: null });
+  });
+  it("rejects letters, too few or too many digits", () => {
+    expect(checkPhone("call me").ok).toBe(false);
+    expect(checkPhone("123").ok).toBe(false);
+    expect(checkPhone("1".repeat(25)).ok).toBe(false);
+    expect(checkPhone("<script>").ok).toBe(false);
+  });
+  it("is carried through when people are grouped", () => {
+    const people = groupContacts([{ id: "a", name: "Dana", email: "d@x.com", phone: "+39 06 1234 5678", role: null, englishLevel: null, source: "MANUAL", projectId: null, projectName: null }]);
+    expect(people[0].phone).toBe("+39 06 1234 5678");
+  });
+});
+
+describe("cleanCustomerManager", () => {
+  it("needs a name once anything is given, and clears when everything is empty", () => {
+    expect(cleanCustomerManager({ name: " Dana  Levi ", email: "d@x.com", phone: "+39 06 1234 5678" })).toEqual({ ok: true, value: { name: "Dana Levi", email: "d@x.com", phone: "+39 06 1234 5678" } });
+    expect(cleanCustomerManager({ name: "", email: "", phone: "" })).toEqual({ ok: true, value: { name: null, email: null, phone: null } });
+    expect(cleanCustomerManager({ name: "", email: "d@x.com", phone: "" }).ok).toBe(false);
+    expect(cleanCustomerManager({ name: "Dana", email: "nope", phone: "" }).ok).toBe(false);
+    expect(cleanCustomerManager({ name: "Dana", email: "", phone: "abc" }).ok).toBe(false);
+  });
+});
 
 const row = (over: Partial<ContactRow> & { id: string }): ContactRow => ({
   name: "Dana Levi",

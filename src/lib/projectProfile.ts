@@ -51,6 +51,8 @@ export type ProfileInput = {
   soma: string;
   ntpDate: DateText;
   projectType: string;
+  shippingAddress: string;
+  deliveryAddress: string;
   contractLink: string;
   projectEngineerId: string;
   designNotes: string;
@@ -72,6 +74,8 @@ export const EMPTY_PROFILE: ProfileInput = {
   soma: "",
   ntpDate: "",
   projectType: "",
+  shippingAddress: "",
+  deliveryAddress: "",
   contractLink: "",
   projectEngineerId: "",
   designNotes: "",
@@ -87,7 +91,7 @@ export const LONG_TEXT_MAX = 4000;
 export const SHORT_TEXT_MAX = 200;
 
 export type CleanProfile = {
-  text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "intercoms" | "soma" | "projectType" | "designNotes", string | null>;
+  text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "intercoms" | "soma" | "projectType" | "designNotes" | "shippingAddress" | "deliveryAddress", string | null>;
   dates: Record<"pileDrivingStart" | "ntpDate" | "designQuestionnaireReceived" | "initialLayoutSent", string | null>;
   choices: Record<ChoiceField, string | null>;
   contractLink: string | null;
@@ -110,14 +114,14 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
   };
 
   const result: CleanProfile = {
-    text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, intercoms: null, soma: null, projectType: null, designNotes: null },
+    text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, intercoms: null, soma: null, projectType: null, designNotes: null, shippingAddress: null, deliveryAddress: null },
     dates: { pileDrivingStart: null, ntpDate: null, designQuestionnaireReceived: null, initialLayoutSent: null },
     choices: { soilTest: null, designInfoStatus: null, geotechStatus: null, genioCivileStatus: null, bomStatus: null },
     contractLink: null,
     projectEngineerId: null,
   };
 
-  const longText = { deliveryExpectations: "Delivery expectations", supplyTerms: "Supply terms", supplyObligations: "Supply obligations", designNotes: "Design notes" } as const;
+  const longText = { deliveryExpectations: "Delivery expectations", supplyTerms: "Supply terms", supplyObligations: "Supply obligations", designNotes: "Design notes", shippingAddress: "Shipping address", deliveryAddress: "Delivery address" } as const;
   const shortText = { intercoms: "Intercoms", soma: "SOMA", projectType: "Type" } as const;
   for (const [key, label] of Object.entries(longText)) {
     const v = text(key as keyof ProfileInput, label, LONG_TEXT_MAX);

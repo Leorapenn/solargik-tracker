@@ -191,6 +191,8 @@ export type MilestoneInput = {
   status: string;
   invoiceSentDate: string;
   paidDate: string;
+  invoiceLink: string; // link to the invoice file
+  payslipLink: string; // link to the payslip / proof of payment
 };
 export type ChangeOrderInput = {
   id: string; // "" for a new one
@@ -202,6 +204,8 @@ export type ChangeOrderInput = {
   invoiceStatus: string;
   paymentTermsDays: string; // days after the invoice date, "" = none
   fileLink: string;
+  invoiceLink: string;
+  payslipLink: string;
 };
 export type CleanMilestone = {
   id: string | null;
@@ -214,6 +218,8 @@ export type CleanMilestone = {
   status: "NOT_DUE" | "INVOICE_SENT" | "PAYMENT_RECEIVED";
   invoiceSentDate: string | null;
   paidDate: string | null;
+  invoiceLink: string | null;
+  payslipLink: string | null;
 };
 export type CleanChangeOrder = {
   id: string | null;
@@ -225,6 +231,8 @@ export type CleanChangeOrder = {
   invoiceStatus: string | null;
   paymentTermsDays: number | null;
   fileLink: string | null;
+  invoiceLink: string | null;
+  payslipLink: string | null;
 };
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -271,6 +279,10 @@ export function cleanMilestone(input: Partial<Record<keyof MilestoneInput, unkno
   if (!sent.ok) return sent;
   const paid = date(input.paidDate, `Paid date of "${label}"`);
   if (!paid.ok) return paid;
+  const invoiceLink = link(input.invoiceLink);
+  if (!invoiceLink.ok) return invoiceLink;
+  const payslipLink = link(input.payslipLink);
+  if (!payslipLink.ok) return payslipLink;
   const status = str(input.status) || "NOT_DUE";
   if (!SETTABLE_MILESTONE_STATUSES.includes(status as MilestoneStatus)) return { ok: false, error: `"${label}" has a status that doesn't exist.` };
 
@@ -289,6 +301,8 @@ export function cleanMilestone(input: Partial<Record<keyof MilestoneInput, unkno
       status: status as CleanMilestone["status"],
       invoiceSentDate: invoiced ? sent.value : null,
       paidDate: status === "PAYMENT_RECEIVED" ? paid.value : null,
+      invoiceLink: invoiceLink.value,
+      payslipLink: payslipLink.value,
     },
   };
 }
@@ -305,6 +319,10 @@ export function cleanChangeOrder(input: Partial<Record<keyof ChangeOrderInput, u
   if (!invoiced.ok) return invoiced;
   const file = link(input.fileLink);
   if (!file.ok) return file;
+  const invoiceLink = link(input.invoiceLink);
+  if (!invoiceLink.ok) return invoiceLink;
+  const payslipLink = link(input.payslipLink);
+  if (!payslipLink.ok) return payslipLink;
   const terms = number(input.paymentTermsDays, "Payment terms", 365);
   if (!terms.ok) return terms;
   if (terms.value !== null && !Number.isInteger(terms.value)) return { ok: false, error: "Payment terms must be a whole number of days." };
@@ -325,6 +343,8 @@ export function cleanChangeOrder(input: Partial<Record<keyof ChangeOrderInput, u
       invoiceStatus: invoiceStatus || null,
       paymentTermsDays: terms.value,
       fileLink: file.value,
+      invoiceLink: invoiceLink.value,
+      payslipLink: payslipLink.value,
     },
   };
 }

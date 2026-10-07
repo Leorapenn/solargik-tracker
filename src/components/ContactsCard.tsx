@@ -5,8 +5,8 @@ import { deleteContact, saveContact } from "@/server/actions/edit";
 import type { ContactPerson } from "@/lib/contacts";
 import { NAVY, ORANGE, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
-type Draft = { ids: string[]; name: string; email: string; role: string; englishLevel: string };
-const blank: Draft = { ids: [], name: "", email: "", role: "", englishLevel: "" };
+type Draft = { ids: string[]; name: string; email: string; phone: string; role: string; englishLevel: string };
+const blank: Draft = { ids: [], name: "", email: "", phone: "", role: "", englishLevel: "" };
 
 export function ContactsCard({ customerId, people }: { customerId: string; people: ContactPerson[] }) {
   const [pending, startTransition] = useTransition();
@@ -88,6 +88,13 @@ export function ContactsCard({ customerId, people }: { customerId: string; peopl
                       {person.email}
                     </a>
                   )}
+                  {person.phone && (
+                    <div>
+                      <a href={`tel:${person.phone.replace(/[^\d+]/g, "")}`} style={{ fontSize: 13.5, color: NAVY }}>
+                        {person.phone}
+                      </a>
+                    </div>
+                  )}
                 </div>
                 {editMode && (
                   <div style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
@@ -95,7 +102,7 @@ export function ContactsCard({ customerId, people }: { customerId: string; peopl
                       type="button"
                       style={secondaryButton}
                       onClick={() =>
-                        setDraft({ ids: person.ids, name: person.name, email: person.email ?? "", role: person.role ?? "", englishLevel: person.englishLevel ?? "" })
+                        setDraft({ ids: person.ids, name: person.name, email: person.email ?? "", phone: person.phone ?? "", role: person.role ?? "", englishLevel: person.englishLevel ?? "" })
                       }
                     >
                       Edit
@@ -126,7 +133,7 @@ export function ContactsCard({ customerId, people }: { customerId: string; peopl
           onSubmit={(e) => {
             e.preventDefault();
             run(
-              () => saveContact(customerId, { ids: draft.ids, name: draft.name, email: draft.email, role: draft.role, englishLevel: draft.englishLevel }),
+              () => saveContact(customerId, { ids: draft.ids, name: draft.name, email: draft.email, phone: draft.phone, role: draft.role, englishLevel: draft.englishLevel }),
               draft.ids.length ? "Contact saved. Imports won't overwrite it." : "Contact added.",
               () => setDraft(null),
             );
@@ -135,6 +142,7 @@ export function ContactsCard({ customerId, people }: { customerId: string; peopl
           <strong style={{ fontSize: 13, color: NAVY }}>{draft.ids.length ? "Edit contact" : "New contact"}</strong>
           {field("Name", "name")}
           {field("Email", "email", { type: "email" })}
+          {field("Phone", "phone", { type: "tel" })}
           {field("Role (e.g. CEO, Site manager)", "role")}
           {field("English level", "englishLevel")}
           <div style={{ display: "flex", gap: 8 }}>

@@ -137,6 +137,12 @@ describe("cleanMilestone", () => {
     expect(r.ok && r.value).toMatchObject({ id: null, label: "Milestone 1 (AP)", percent: 20, amountOverride: null, status: "NOT_DUE", dueDate: "2026-11-01" });
   });
 
+  it("keeps the invoice and payslip links of a milestone and validates them", () => {
+    const ok = cleanMilestone({ ...base, invoiceLink: "https://x.sharepoint.com/inv.pdf", payslipLink: "" });
+    expect(ok.ok && [ok.value.invoiceLink, ok.value.payslipLink]).toEqual(["https://x.sharepoint.com/inv.pdf", null]);
+    expect(cleanMilestone({ ...base, payslipLink: "ftp://x/y" }).ok).toBe(false);
+  });
+
   it("only keeps the dates that fit the status", () => {
     const dates = { invoiceSentDate: "2026-10-01", paidDate: "2026-10-04" };
     const notDue = cleanMilestone({ ...base, ...dates });
@@ -188,6 +194,15 @@ describe("change orders", () => {
     expect(changeOrderDisplay({ ...base, paymentTermsDays: null }, "2027-01-01")).toMatchObject({ status: "SENT", dueDate: null, overdue: false });
     // set to Overdue by hand: stays overdue even with no terms
     expect(changeOrderDisplay({ ...base, paymentTermsDays: null, invoiceStatus: "OVERDUE" }, TODAY).overdue).toBe(true);
+  });
+
+  it("keeps invoice and payslip links, and rejects ones that aren't web addresses", () => {
+    const ok = cleanChangeOrder({ ...base, invoiceLink: "https://solargik.sharepoint.com/inv.pdf", payslipLink: "https://solargik.sharepoint.com/slip.pdf" });
+    expect(ok.ok && [ok.value.invoiceLink, ok.value.payslipLink]).toEqual(["https://solargik.sharepoint.com/inv.pdf", "https://solargik.sharepoint.com/slip.pdf"]);
+    expect(cleanChangeOrder({ ...base, invoiceLink: "javascript:alert(1)" }).ok).toBe(false);
+    expect(cleanChangeOrder({ ...base, payslipLink: "not a link" }).ok).toBe(false);
+    const none = cleanChangeOrder(base);
+    expect(none.ok && [none.value.invoiceLink, none.value.payslipLink]).toEqual([null, null]);
   });
 
   it("validates the payment terms", () => {

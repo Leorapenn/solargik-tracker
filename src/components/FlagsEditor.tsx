@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState, useTransition, type ReactNode } from "react";
-import { addFlag, removeFlag, setCustomerFlagColor } from "@/server/actions/flags";
+import { addFlag, removeFlag, setFlagColor } from "@/server/actions/flags";
 import {
   DEFAULT_FLAG_COLOR,
   FLAG_COLORS,
@@ -44,7 +44,7 @@ export function FlagsEditor({
   const [color, setColor] = useState<FlagColor>(DEFAULT_FLAG_COLOR);
   const [error, setError] = useState<string | null>(null);
   const listId = useId();
-  const colored = kind === "customer";
+  const colored = true; // customer and project flags both have a severity color
 
   const submit = () => {
     const label = text;
@@ -76,7 +76,7 @@ export function FlagsEditor({
                   ? () => {
                       setError(null);
                       startTransition(async () => {
-                        const result = await setCustomerFlagColor(id, flag, nextFlagColor(flagColor));
+                        const result = await setFlagColor(kind, id, flag, nextFlagColor(flagColor));
                         if (!result.ok) setError(result.error);
                       });
                     }

@@ -278,6 +278,8 @@ export function ProjectProfileCard({
           {linkedDate("clientKickoff", "Client kickoff")}
           {date("ntpDate", "NTP date")}
           {text("projectType", "Type")}
+          {text("shippingAddress", "Shipping address", { long: true })}
+          {text("deliveryAddress", "Delivery address (site)", { long: true })}
           {field(
             "Contract file",
             editing ? (

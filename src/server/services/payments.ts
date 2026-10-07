@@ -25,6 +25,8 @@ export type MilestoneView = {
   dueDate: string | null;
   invoiceSentDate: string | null;
   paidDate: string | null;
+  invoiceLink: string | null;
+  payslipLink: string | null;
   order: number;
 };
 export type ChangeOrderView = {
@@ -37,6 +39,8 @@ export type ChangeOrderView = {
   invoiceStatus: string | null;
   paymentTermsDays: number | null;
   fileLink: string | null;
+  invoiceLink: string | null;
+  payslipLink: string | null;
 };
 export type LinkableItem = { id: string; name: string; phaseLabel: string; status: StageStatus };
 export type PaymentData = {
@@ -82,6 +86,8 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
       dueDate: iso(m.dueDate),
       invoiceSentDate: iso(m.invoiceSentDate),
       paidDate: iso(m.paidDate),
+      invoiceLink: m.invoiceLink,
+      payslipLink: m.payslipLink,
       order: m.order,
     })),
     changeOrders: project.changeOrders.map((c) => ({
@@ -94,6 +100,8 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
       invoiceStatus: c.invoiceStatus,
       paymentTermsDays: c.paymentTermsDays,
       fileLink: c.fileLink,
+      invoiceLink: c.invoiceLink,
+      payslipLink: c.payslipLink,
     })),
     items: project.phases.flatMap((p) => p.subStages.map((s) => ({ id: s.id, name: s.name, phaseLabel: phaseLabel(p.name), status: s.status }))),
   };
@@ -167,6 +175,8 @@ export async function savePayments(
           status: m.status,
           invoiceSentDate: day(m.invoiceSentDate),
           paidDate: day(m.paidDate),
+          invoiceLink: m.invoiceLink,
+          payslipLink: m.payslipLink,
         };
         if (m.id) await tx.milestone.update({ where: { id: m.id }, data });
         else await tx.milestone.create({ data: { projectId, ...data } });
@@ -181,6 +191,8 @@ export async function savePayments(
           invoiceStatus: c.invoiceStatus,
           paymentTermsDays: c.paymentTermsDays,
           fileLink: c.fileLink,
+          invoiceLink: c.invoiceLink,
+          payslipLink: c.payslipLink,
         };
         if (c.id) await tx.changeOrder.update({ where: { id: c.id }, data });
         else await tx.changeOrder.create({ data: { projectId, ...data } });
