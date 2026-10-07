@@ -24,6 +24,19 @@ export async function setPhaseUpdate(phaseId: string, raw: string): Promise<{ pr
   return { projectId: phase.projectId };
 }
 
+// The same for a sub-phase (an item of a phase): typed text, date stamped automatically when the text changes.
+export async function setSubStageUpdate(subStageId: string, raw: string): Promise<void> {
+  const text = clean(raw);
+  const item = await prisma.subStage.findUnique({ where: { id: subStageId }, select: { statusUpdate: true } });
+  if (!item) throw new UserError("That item no longer exists.");
+  if ((item.statusUpdate ?? null) !== text) {
+    await prisma.subStage.update({
+      where: { id: subStageId },
+      data: { statusUpdate: text, statusUpdateAt: text === null ? null : todayInAppTz() },
+    });
+  }
+}
+
 // A typed project summary replaces the automatic one; an empty one (null) goes back to automatic.
 export async function setProjectSummary(projectId: string, raw: string | null): Promise<void> {
   const text = clean(raw);

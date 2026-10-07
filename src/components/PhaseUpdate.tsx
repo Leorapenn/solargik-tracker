@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { savePhaseUpdate } from "@/server/actions/statusUpdates";
+import { savePhaseUpdate, saveSubStageUpdate } from "@/server/actions/statusUpdates";
 import { MAX_STATUS_TEXT } from "@/lib/statusUpdate";
 import { NAVY, TEXT_MUTED, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
@@ -10,13 +10,16 @@ import { NAVY, TEXT_MUTED, inputStyle, primaryButton, secondaryButton } from "@/
 // Add / Edit button (on the Phases tab only while the page's Edit mode is on).
 export function PhaseUpdate({
   phaseId,
+  kind = "phase",
   text,
   updatedOn,
   editable,
   compact = false,
   label,
 }: {
+  // the id of the phase, or of the sub-phase (item) when kind is "subStage"
   phaseId: string;
+  kind?: "phase" | "subStage";
   text: string | null;
   updatedOn: string | null; // already formatted, e.g. "07 Oct 2026"
   editable: boolean;
@@ -36,7 +39,7 @@ export function PhaseUpdate({
   const save = () => {
     setError(null);
     startTransition(async () => {
-      const result = await savePhaseUpdate(phaseId, draft);
+      const result = kind === "subStage" ? await saveSubStageUpdate(phaseId, draft) : await savePhaseUpdate(phaseId, draft);
       if (result.ok) setOpen(false);
       else setError(result.error);
     });

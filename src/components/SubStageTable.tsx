@@ -11,6 +11,7 @@ import { ColumnFilters } from "@/components/ColumnFilters";
 import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { StatusSelect } from "@/components/StatusSelect";
+import { PhaseUpdate } from "@/components/PhaseUpdate";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 // Dates are "YYYY-MM-DD" strings so they cross the server/client boundary cleanly.
@@ -30,6 +31,9 @@ export type SubStageRow = {
   completedAt: string | null;
   // dates marked "N/A" (don't apply to this item): "targetDate" | "startedAt" | "completedAt"
   naDates: string[];
+  // typed update and the day it was last changed (set automatically)
+  statusUpdate: string | null;
+  statusUpdateAt: string | null;
 };
 
 type Params = Record<string, string | string[] | undefined>;
@@ -322,7 +326,7 @@ export function SubStageTable({
       <div style={cardStyle}>
         <SortSummary basePath={basePath} params={params} current={sort} labels={SORT_LABELS} />
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1100 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1300 }}>
             <thead>
               <tr style={{ background: NAVY, color: "#fff" }}>
                 {editing && (
@@ -343,6 +347,7 @@ export function SubStageTable({
                 <SortTh label="Started" sortKey="started" {...sortProps} />
                 <SortTh label="Completed" sortKey="completed" {...sortProps} />
                 <SortTh label="Status" sortKey="status" {...sortProps} />
+                <th style={th}>Update</th>
               </tr>
             </thead>
             <tbody>
@@ -397,11 +402,25 @@ export function SubStageTable({
                       </span>
                     )}
                   </td>
+                  <td
+                    style={{ ...td, verticalAlign: "top", minWidth: 200 }}
+                    title={row.statusUpdate ? `${row.statusUpdateAt ? `Updated ${fmt(row.statusUpdateAt)}\n` : ""}${row.statusUpdate}` : undefined}
+                  >
+                    <PhaseUpdate
+                      compact
+                      kind="subStage"
+                      phaseId={row.id}
+                      text={row.statusUpdate}
+                      updatedOn={row.statusUpdateAt ? fmt(row.statusUpdateAt) : null}
+                      editable={editing}
+                      label={`Update for ${row.name}`}
+                    />
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={editing ? 9 : 8} style={{ ...td, color: TEXT_MUTED }}>
+                  <td colSpan={editing ? 10 : 9} style={{ ...td, color: TEXT_MUTED }}>
                     {totalCount > 0 ? "No items match these filters." : "This project has no items."}
                   </td>
                 </tr>

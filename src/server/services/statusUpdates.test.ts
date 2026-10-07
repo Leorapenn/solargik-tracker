@@ -4,7 +4,7 @@ import { seedSubStageTemplates } from "../../../prisma/seedData";
 import { todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
-import { setPhaseUpdate, setProjectSummary } from "./statusUpdates";
+import { setPhaseUpdate, setProjectSummary, setSubStageUpdate } from "./statusUpdates";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -56,6 +56,23 @@ describe("status updates", () => {
   it("rejects over-long text and unknown phases", async () => {
     await expect(setPhaseUpdate(phaseId, "x".repeat(5001))).rejects.toBeInstanceOf(UserError);
     await expect(setPhaseUpdate("nope", "hi")).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("keeps a dated update on a sub-phase, with the same rules as a phase", async () => {
+    const item = await prisma.subStage.findFirstOrThrow({ where: { phaseId } });
+    const row = () => prisma.subStage.findUniqueOrThrow({ where: { id: item.id } });
+
+    await setSubStageUpdate(item.id, "  Drawings sent to the customer  ");
+    expect(await row()).toMatchObject({ statusUpdate: "Drawings sent to the customer", statusUpdateAt: todayInAppTz() });
+
+    const earlier = new Date("2026-02-02T00:00:00.000Z");
+    await prisma.subStage.update({ where: { id: item.id }, data: { statusUpdateAt: earlier } });
+    await setSubStageUpdate(item.id, "Drawings sent to the customer");
+    expect((await row()).statusUpdateAt).toEqual(earlier);
+
+    await setSubStageUpdate(item.id, "");
+    expect(await row()).toMatchObject({ statusUpdate: null, statusUpdateAt: null });
+    await expect(setSubStageUpdate("nope", "hi")).rejects.toBeInstanceOf(UserError);
   });
 
   it("stores a typed project summary and goes back to automatic when it is emptied", async () => {

@@ -99,6 +99,8 @@ export default async function ProjectDetailPage({
       startedAt: s.startedAt ? toDateInputValue(s.startedAt) : null,
       completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null,
       naDates: s.naDates,
+      statusUpdate: s.statusUpdate,
+      statusUpdateAt: s.statusUpdateAt ? toDateInputValue(s.statusUpdateAt) : null,
       order: s.order,
     })),
   );

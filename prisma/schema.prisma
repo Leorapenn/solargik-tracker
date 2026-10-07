@@ -221,6 +221,9 @@ model SubStage {
   // Dates deliberately marked "N/A" ("targetDate" | "startedAt" | "completedAt"): not applicable to this item,
   // as opposed to simply not set yet. An N/A date stays empty and never raises a missing-date warning.
   naDates     String[]         @default([])
+  // Free-text update typed by hand, and the calendar day it was last changed (set automatically).
+  statusUpdate   String?
+  statusUpdateAt DateTime?        @db.Date
   events      StatusEvent[]
   // Payment milestones triggered by this item (e.g. a Delivery item): see Milestone.
   milestones  Milestone[]
