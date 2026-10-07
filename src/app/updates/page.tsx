@@ -6,6 +6,8 @@ import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import { PRESET_LABELS, RANGE_PRESETS, parseRange, presetOf, presetRange } from "@/lib/weeklyUpdates";
 import { getUpdatesInRange } from "@/server/services/weeklyUpdates";
 import { UpdatesRange } from "@/components/UpdatesRange";
+import { EmailUpdatesButton } from "@/components/EmailUpdatesButton";
+import { weeklyEmailConfigured } from "@/server/services/weeklyEmail";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageSubtitleStyle, pageTitleStyle, secondaryButton } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +66,7 @@ export default async function UpdatesPage({ searchParams }: { searchParams: Prom
         <a href={`/updates/export?from=${range.from}&to=${range.to}`} style={{ ...secondaryButton, textDecoration: "none", display: "inline-block" }}>
           Download Excel (CSV)
         </a>
+        {weeklyEmailConfigured() && <EmailUpdatesButton from={range.from} to={range.to} />}
       </div>
 
       {projects.length === 0 && (
