@@ -125,43 +125,73 @@ export default async function CustomerDetailPage({
         › {customer.name}
       </div>
 
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <h1 style={pageTitleStyle}>{customer.name}</h1>
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 600,
-              borderRadius: 20,
-              padding: "5px 12px",
-              color: strategic ? "#fff" : NAVY,
-              background: strategic ? NAVY : "#E4E6EC",
-            }}
-          >
-            {IMPORTANCE_LABELS[customer.importance]}
-          </span>
+      {/* Top: who the customer is on the left; the commercial summary and name variants in the space on the right. */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 20, alignItems: "start" }}>
+        <div style={{ gridColumn: "span 2", display: "flex", flexDirection: "column", gap: 20 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <h1 style={pageTitleStyle}>{customer.name}</h1>
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 20,
+                  padding: "5px 12px",
+                  color: strategic ? "#fff" : NAVY,
+                  background: strategic ? NAVY : "#E4E6EC",
+                }}
+              >
+                {IMPORTANCE_LABELS[customer.importance]}
+              </span>
+            </div>
+            <div style={pageSubtitleStyle}>
+              {all.length} project{all.length === 1 ? "" : "s"} · {people.length} contact{people.length === 1 ? "" : "s"}
+            </div>
+          </div>
+
+          <div>
+            <CustomerEditor
+              customer={{
+                id: customer.id,
+                name: customer.name,
+                importance: customer.importance,
+                lockedFields: customer.lockedFields,
+              }}
+            />
+          </div>
+
+          <FlagsEditor
+            kind="customer"
+            id={customer.id}
+            flags={customer.flags}
+            colors={parseFlagColors(customer.flagColors)}
+            suggestions={flagSuggestions}
+          />
         </div>
-        <div style={pageSubtitleStyle}>
-          {all.length} project{all.length === 1 ? "" : "s"} · {people.length} contact{people.length === 1 ? "" : "s"}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <SideCard title="Commercial">
+            <Row label="Contract value" value={formatTotals(contractTotals)} />
+            <Row label="Capacity" value={totalCapacity > 0 ? `${formatKwp(totalCapacity)} kWp` : "—"} />
+            <Row label="Pre-contract projects" value={String(withoutContract)} hint="No contract value in the Control Table yet" />
+          </SideCard>
+
+          <SideCard title="Name variants">
+            {customer.aliases.length === 0 ? (
+              <div style={{ color: TEXT_MUTED, fontSize: 14 }}>No alternate spellings recorded.</div>
+            ) : (
+              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
+                {customer.aliases.map((alias) => (
+                  <li key={alias.id} style={{ fontSize: 14, display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: ORANGE }} />
+                    {alias.alias}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SideCard>
         </div>
       </div>
-
-      <CustomerEditor
-        customer={{
-          id: customer.id,
-          name: customer.name,
-          importance: customer.importance,
-          lockedFields: customer.lockedFields,
-        }}
-      />
-
-      <FlagsEditor
-        kind="customer"
-        id={customer.id}
-        flags={customer.flags}
-        colors={parseFlagColors(customer.flagColors)}
-        suggestions={flagSuggestions}
-      />
 
       <LifecycleFilterBar basePath={basePath} params={query} filter={filter} counts={counts} total={all.length} />
 
@@ -253,34 +283,7 @@ export default async function CustomerDetailPage({
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <ContactsCard customerId={customer.id} people={people} />
-
-          <SideCard title="Commercial">
-            <Row label="Contract value" value={formatTotals(contractTotals)} />
-            <Row label="Capacity" value={totalCapacity > 0 ? `${formatKwp(totalCapacity)} kWp` : "—"} />
-            <Row
-              label="Pre-contract projects"
-              value={String(withoutContract)}
-              hint="No contract value in the Control Table yet"
-            />
-          </SideCard>
-
-          <SideCard title="Name variants">
-            {customer.aliases.length === 0 ? (
-              <div style={{ color: TEXT_MUTED, fontSize: 14 }}>No alternate spellings recorded.</div>
-            ) : (
-              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-                {customer.aliases.map((alias) => (
-                  <li key={alias.id} style={{ fontSize: 14, display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: ORANGE }} />
-                    {alias.alias}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SideCard>
-        </div>
+        <ContactsCard customerId={customer.id} people={people} />
       </div>
     </main>
   );

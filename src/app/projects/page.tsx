@@ -205,7 +205,19 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                         suggestions={flagSuggestions}
                       />
                     </td>
-                    <td style={{ ...bodyCell, textAlign: "right" }}>
+                    <td style={{ ...bodyCell, textAlign: "right", whiteSpace: "nowrap" }}>
+                      {project.sharepointLink && (
+                        <a
+                          href={project.sharepointLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Open ${project.name} in SharePoint`}
+                          title="Open the project's SharePoint folder"
+                          style={{ color: NAVY, fontSize: 12.5, fontWeight: 700, marginRight: 12 }}
+                        >
+                          Files
+                        </a>
+                      )}
                       <Link href={`/projects/${project.id}`} aria-label={`Open ${project.name}`} style={{ color: TEXT_MUTED }}>
                         ›
                       </Link>

@@ -16,6 +16,7 @@ import { capacityKwp, formatKwp } from "@/lib/capacity";
 import { parseFlagColors } from "@/lib/flags";
 import { groupContacts } from "@/lib/contacts";
 import { CustomerManager } from "@/components/CustomerManager";
+import { SharePointLink } from "@/components/SharePointLink";
 import { PaymentsCard } from "@/components/PaymentsCard";
 import { derivePhaseStatus } from "@/lib/phaseStatus";
 import type { Department } from "@prisma/client";
@@ -219,6 +220,10 @@ export default async function ProjectDetailPage({
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginTop: -4 }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>Flags</span>
         <FlagsEditor compact kind="project" id={project.id} name={project.name} flags={project.flags} colors={parseFlagColors(project.flagColors)} suggestions={flagSuggestions} />
+      </div>
+
+      <div style={{ marginTop: -4 }}>
+        <SharePointLink projectId={project.id} link={project.sharepointLink} />
       </div>
 
       <div style={{ marginTop: -4 }}>

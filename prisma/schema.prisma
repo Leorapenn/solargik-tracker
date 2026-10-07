@@ -121,6 +121,8 @@ model Project {
   lockedFields    String[]         @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
   flags           String[]         @default([])
+  // Link to the project's folder in SharePoint (the EXECUTION library); a link only, nothing is copied.
+  sharepointLink  String?
   // Severity of each project flag: {label: GREEN | YELLOW | RED}, like Customer.flagColors. Never imported.
   flagColors      Json             @default("{}")
   // The project manager on the customer's side (typed or copied from one of the customer's contacts).
