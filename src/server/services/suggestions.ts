@@ -4,7 +4,7 @@ import { UserError } from "@/lib/errors";
 import { toDateInputValue } from "@/lib/dates";
 import { cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
-import { KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchProject, type Payload, type SuggestionKind } from "@/lib/suggestions";
+import { KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchProject, suggestionFingerprint, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 
 // ---- intake: what an outside reader sends ----
@@ -25,7 +25,9 @@ export async function createSuggestions(list: unknown[]): Promise<IntakeResult> 
       continue;
     }
     const c = cleaned.value;
-    if (c.externalId && (await prisma.suggestion.findUnique({ where: { externalId: c.externalId }, select: { id: true } }))) {
+    // the sender's own id, or (when it sent none) a fingerprint of the proposal and its email
+    const externalId = c.externalId ?? suggestionFingerprint(c);
+    if (await prisma.suggestion.findUnique({ where: { externalId }, select: { id: true } })) {
       result.duplicates += 1;
       continue;
     }
@@ -42,7 +44,7 @@ export async function createSuggestions(list: unknown[]): Promise<IntakeResult> 
           sourceSubject: c.sourceSubject,
           sourceReceivedAt: c.sourceReceivedAt,
           sourceLink: c.sourceLink,
-          externalId: c.externalId,
+          externalId,
         },
       });
       result.created += 1;

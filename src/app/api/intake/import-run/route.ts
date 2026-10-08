@@ -1,4 +1,4 @@
-import { isAuthorizedBearer } from "@/lib/cron";
+import { isIntakeAuthorized } from "@/lib/intakeAuth";
 import { UserError } from "@/lib/errors";
 import { getLastImport, recordImportRun } from "@/server/services/importRuns";
 
@@ -10,7 +10,7 @@ const MAX_BODY_BYTES = 2_000;
 // login session, so every call must carry INTAKE_TOKEN as a Bearer token; with no token set, everything is refused.
 // They only store and return run statistics: no project data is read or changed here.
 function unauthorized(request: Request) {
-  return !isAuthorizedBearer(request.headers.get("authorization"), process.env.INTAKE_TOKEN);
+  return !isIntakeAuthorized(request);
 }
 
 // get_last_import: when the last finished run was, with its counts (null before the first one).

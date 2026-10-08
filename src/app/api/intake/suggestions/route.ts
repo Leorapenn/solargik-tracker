@@ -1,4 +1,4 @@
-import { isAuthorizedBearer } from "@/lib/cron";
+import { isIntakeAuthorized } from "@/lib/intakeAuth";
 import { UserError } from "@/lib/errors";
 import { KIND_LABELS, MAX_PER_REQUEST } from "@/lib/suggestions";
 import { createSuggestions } from "@/server/services/suggestions";
@@ -12,7 +12,7 @@ const MAX_BODY_BYTES = 200_000;
 // without a login session, so every call must carry INTAKE_TOKEN (16+ characters) as a Bearer token; with no token
 // set, everything is refused.
 function unauthorized(request: Request) {
-  return !isAuthorizedBearer(request.headers.get("authorization"), process.env.INTAKE_TOKEN);
+  return !isIntakeAuthorized(request);
 }
 
 export async function POST(request: Request) {

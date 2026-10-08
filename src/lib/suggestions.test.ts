@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentInstructions, cleanIncoming, describePayload, matchProject } from "./suggestions";
+import { agentInstructions, cleanIncoming, describePayload, matchProject, suggestionFingerprint } from "./suggestions";
 
 const base = { summary: "Design update", project: "259", source: { from: "dan@revalue.com", subject: "RF1 update", receivedAt: "2026-10-06T08:00:00Z", link: "https://outlook.office.com/mail/id/1" } };
 
@@ -70,6 +70,34 @@ describe("matchProject", () => {
     expect(matchProject("Castiglion", projects)).toBeNull();
     expect(matchProject("999", projects)).toBeNull();
     expect(matchProject(null, projects)).toBeNull();
+  });
+});
+
+describe("suggestionFingerprint", () => {
+  const clean = (over: Record<string, unknown> = {}) => {
+    const r = cleanIncoming({ ...base, kind: "PHASE_UPDATE", phase: "DESIGN", text: "Waiting on geotech", ...over });
+    if (!r.ok) throw new Error(r.error);
+    return r.value;
+  };
+
+  it("is the same for the same proposal about the same email, whatever the summary says", () => {
+    expect(suggestionFingerprint(clean())).toBe(suggestionFingerprint(clean({ summary: "Design is waiting on geotech" })));
+    expect(suggestionFingerprint(clean())).toBe(suggestionFingerprint(clean({ project: " 259 " })));
+    expect(suggestionFingerprint(clean())).toMatch(/^auto:[0-9a-f]{64}$/);
+  });
+
+  it("differs when the content, the project or the email differs", () => {
+    const one = suggestionFingerprint(clean());
+    expect(suggestionFingerprint(clean({ text: "Geotech received" }))).not.toBe(one);
+    expect(suggestionFingerprint(clean({ phase: "SUPPLY" }))).not.toBe(one);
+    expect(suggestionFingerprint(clean({ project: "260" }))).not.toBe(one);
+    expect(suggestionFingerprint(clean({ source: { ...base.source, link: "https://outlook.office.com/mail/id/2" } }))).not.toBe(one);
+  });
+
+  it("falls back to sender, subject and time when there is no email link", () => {
+    const noLink = { from: "dan@revalue.com", subject: "RF1", receivedAt: "2026-10-06T08:00:00Z" };
+    expect(suggestionFingerprint(clean({ source: noLink }))).toBe(suggestionFingerprint(clean({ source: { ...noLink } })));
+    expect(suggestionFingerprint(clean({ source: noLink }))).not.toBe(suggestionFingerprint(clean({ source: { ...noLink, subject: "RF2" } })));
   });
 });
 
