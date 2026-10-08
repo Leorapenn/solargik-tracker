@@ -4,6 +4,8 @@ import { requirePageAuth } from "@/lib/auth";
 import { agentInstructions } from "@/lib/suggestions";
 import { baseUrl } from "@/server/services/weeklyEmail";
 import { listSuggestions, pendingCount } from "@/server/services/suggestions";
+import { getLastImport } from "@/server/services/importRuns";
+import { formatRunTime } from "@/lib/importRun";
 import { SuggestionCard } from "@/components/SuggestionCard";
 import { CopyBox } from "@/components/CopyBox";
 import { NAVY, TEXT_MUTED, cardStyle, pageStyle, pageSubtitleStyle, pageTitleStyle } from "@/lib/theme";
@@ -23,11 +25,14 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const raw = Array.isArray(params.status) ? params.status[0] : params.status;
   const status = TABS.find((t) => t.key === raw?.toUpperCase())?.key ?? "PENDING";
 
-  const [items, projects, waiting] = await Promise.all([
+  const [items, projects, waiting, lastRun] = await Promise.all([
     listSuggestions(status),
     prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     pendingCount(),
+    getLastImport(),
   ]);
+  const unmatched = items.filter((s) => !s.projectId);
+  const matched = items.filter((s) => s.projectId);
   const connected = Boolean(process.env.INTAKE_TOKEN && process.env.INTAKE_TOKEN.length >= 16);
   const endpoint = `${baseUrl().replace(/\/$/, "")}/api/intake/suggestions`;
 
@@ -48,6 +53,28 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         <div style={pageSubtitleStyle}>Changes proposed from your emails by the email-reading agent. Nothing is applied until you approve it.</div>
       </div>
 
+      <div style={{ ...cardStyle, padding: "12px 20px", display: "flex", gap: "6px 28px", flexWrap: "wrap", alignItems: "baseline" }}>
+        {lastRun ? (
+          <>
+            <div>
+              <span style={{ color: TEXT_MUTED }}>Last email check: </span>
+              <strong style={{ color: NAVY }}>{formatRunTime(new Date(lastRun.ranAt))}</strong>
+            </div>
+            <div>
+              <strong>{lastRun.emailsChecked}</strong> <span style={{ color: TEXT_MUTED }}>emails checked</span>
+            </div>
+            <div>
+              <strong>{lastRun.proposalsCreated}</strong> <span style={{ color: TEXT_MUTED }}>proposals created</span>
+            </div>
+            <div>
+              <strong>{lastRun.unmatched}</strong> <span style={{ color: TEXT_MUTED }}>unmatched (no project assigned)</span>
+            </div>
+          </>
+        ) : (
+          <div style={{ color: TEXT_MUTED }}>No email check has been reported yet. The agent reports each finished run here.</div>
+        )}
+      </div>
+
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {TABS.map((t) => (
           <Link key={t.key} href={`/inbox?status=${t.key}`} style={chip(status === t.key)} aria-current={status === t.key ? "true" : undefined}>
@@ -63,9 +90,18 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {items.map((s) => (
+      {status === "PENDING" && unmatched.length > 0 && (
+        <h2 id="unmatched" style={{ margin: "4px 0 0", fontSize: 16, color: NAVY }}>
+          Unmatched ({unmatched.length}) <span style={{ fontWeight: 400, color: TEXT_MUTED, fontSize: 13.5 }}>about a customer, but no project yet: pick one on each card</span>
+        </h2>
+      )}
+      {(status === "PENDING" ? unmatched : items).map((s) => (
         <SuggestionCard key={s.id} s={s} projects={projects} />
       ))}
+      {status === "PENDING" && unmatched.length > 0 && matched.length > 0 && (
+        <h2 style={{ margin: "12px 0 0", fontSize: 16, color: NAVY }}>Matched to a project ({matched.length})</h2>
+      )}
+      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projects} />)}
 
       <details style={{ ...cardStyle, padding: "14px 20px" }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700 }}>

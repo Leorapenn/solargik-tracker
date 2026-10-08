@@ -43,6 +43,7 @@ export async function GET(request: Request) {
   return Response.json({
     how: "POST JSON to this address with the header 'Authorization: Bearer <token>'. A person reviews every suggestion before anything changes.",
     body: { suggestions: "array of up to " + MAX_PER_REQUEST },
+    bookkeeping: "/api/intake/import-run: GET = get_last_import (when the last run finished), POST {emailsChecked} = record_import_run (send your suggestions first; the tracker counts proposals and unmatched itself).",
     commonFields: {
       kind: Object.keys(KIND_LABELS),
       project: "the project code or name as written in the email, e.g. '259' or 'Rignano Flaminio 1'",

@@ -104,54 +104,54 @@ enum ProjectLifecycle {
 }
 
 model Project {
-  id              String           @id @default(cuid())
-  name            String
-  mondayItemId    String           @unique
-  customerId      String
-  customer        Customer         @relation(fields: [customerId], references: [id])
-  contractValue   Decimal?
-  capacityMw      Decimal?
+  id                      String           @id @default(cuid())
+  name                    String
+  mondayItemId            String           @unique
+  customerId              String
+  customer                Customer         @relation(fields: [customerId], references: [id])
+  contractValue           Decimal?
+  capacityMw              Decimal?
   // Exact size in kWp as written in the contract (e.g. 996.84). When set it is what the site shows; when
   // empty the site shows capacityMw (imported from monday.com, rounded to 1 kWp) x 1000. Never imported.
-  capacityKwp     Decimal?         @db.Decimal(12, 2)
-  country         String?
+  capacityKwp             Decimal?         @db.Decimal(12, 2)
+  country                 String?
   // Derived from the Control Table STAGE/Status columns on import (see src/lib/lifecycle.ts);
   // the raw monday labels are kept so the mapping can be re-checked.
-  lifecycle       ProjectLifecycle @default(ACTIVE)
-  mondayStage     String?
-  mondayStatus    String?
+  lifecycle               ProjectLifecycle @default(ACTIVE)
+  mondayStage             String?
+  mondayStatus            String?
   // Fields edited by hand on the site; the importer leaves these alone until they are reset.
-  lockedFields    String[]         @default([])
+  lockedFields            String[]         @default([])
   // Labels added by hand on the site (e.g. "Payment risk"); never touched by the importer.
-  flags           String[]         @default([])
+  flags                   String[]         @default([])
   // Warranty periods in years when a project's contract differs from the Framework Agreement's 10 (structural
   // units) and 5 (drive unit). Empty = the default; see src/lib/warranty.ts.
   warrantyStructuralYears Int?
   warrantyDriveYears      Int?
   // Link to the project's folder in SharePoint (the EXECUTION library); a link only, nothing is copied.
-  sharepointLink  String?
+  sharepointLink          String?
   // Severity of each project flag: {label: GREEN | YELLOW | RED}, like Customer.flagColors. Never imported.
-  flagColors      Json             @default("{}")
+  flagColors              Json             @default("{}")
   // The project manager on the customer's side (typed or copied from one of the customer's contacts).
-  customerManagerName  String?
-  customerManagerEmail String?
-  customerManagerPhone String?
+  customerManagerName     String?
+  customerManagerEmail    String?
+  customerManagerPhone    String?
   // Typed-over project status summary. When empty the summary is generated from the phases' statuses
   // (src/lib/statusUpdate.ts) every time it is shown.
-  statusSummaryOverride String?
-  phases          Phase[]
-  contacts        Contact[]
-  profile         ProjectProfile?
-  milestones      Milestone[]
-  changeOrders    ChangeOrder[]
-  suggestions     Suggestion[]
+  statusSummaryOverride   String?
+  phases                  Phase[]
+  contacts                Contact[]
+  profile                 ProjectProfile?
+  milestones              Milestone[]
+  changeOrders            ChangeOrder[]
+  suggestions             Suggestion[]
   // Payments (milestones, change orders) are in this currency (USD, EUR, ILS...). paymentBase is the
   // contract amount in that currency that milestone percentages apply to; when empty, contractValue
   // (imported from monday.com) is used.
-  paymentCurrency String           @default("USD")
-  paymentBase     Decimal?         @db.Decimal(14, 2)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  paymentCurrency         String           @default("USD")
+  paymentBase             Decimal?         @db.Decimal(14, 2)
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
 }
 
 // The "project profile": extra details people fill in by hand (or from the contract), one row per project,
@@ -196,19 +196,19 @@ model ProjectProfile {
 }
 
 model Phase {
-  id        String      @id @default(cuid())
-  projectId String
-  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  name      PhaseName
-  status    StageStatus @default(NOT_STARTED)
-  order     Int
-  subStages SubStage[]
+  id             String      @id @default(cuid())
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           PhaseName
+  status         StageStatus @default(NOT_STARTED)
+  order          Int
+  subStages      SubStage[]
   // Free-text status update typed by hand, and the calendar day it was last changed (set automatically).
   statusUpdate   String?
-  statusUpdateAt DateTime? @db.Date
+  statusUpdateAt DateTime?   @db.Date
   // The person responsible for the phase as a whole (separate from the owners of its items).
   ownerId        String?
-  owner          Person?   @relation("PhaseOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner          Person?     @relation("PhaseOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
   @@unique([projectId, name])
 }
@@ -228,30 +228,30 @@ model SubStageTemplate {
 }
 
 model SubStage {
-  id          String           @id @default(cuid())
-  phaseId     String
-  phase       Phase            @relation(fields: [phaseId], references: [id], onDelete: Cascade)
-  templateId  String
-  template    SubStageTemplate @relation(fields: [templateId], references: [id])
-  name        String
-  department  Department
-  status      StageStatus      @default(NOT_STARTED)
-  order       Int
-  ownerId     String?
-  owner       Person?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  id             String           @id @default(cuid())
+  phaseId        String
+  phase          Phase            @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+  templateId     String
+  template       SubStageTemplate @relation(fields: [templateId], references: [id])
+  name           String
+  department     Department
+  status         StageStatus      @default(NOT_STARTED)
+  order          Int
+  ownerId        String?
+  owner          Person?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
   // Plain dates (no time). Start/completed are recorded automatically when the status changes.
-  targetDate  DateTime?        @db.Date
-  startedAt   DateTime?        @db.Date
-  completedAt DateTime?        @db.Date
+  targetDate     DateTime?        @db.Date
+  startedAt      DateTime?        @db.Date
+  completedAt    DateTime?        @db.Date
   // Dates deliberately marked "N/A" ("targetDate" | "startedAt" | "completedAt"): not applicable to this item,
   // as opposed to simply not set yet. An N/A date stays empty and never raises a missing-date warning.
-  naDates     String[]         @default([])
+  naDates        String[]         @default([])
   // Free-text update typed by hand, and the calendar day it was last changed (set automatically).
   statusUpdate   String?
   statusUpdateAt DateTime?        @db.Date
-  events      StatusEvent[]
+  events         StatusEvent[]
   // Payment milestones triggered by this item (e.g. a Delivery item): see Milestone.
-  milestones  Milestone[]
+  milestones     Milestone[]
 }
 
 // A payment milestone of a project's contract (NTP/NTD, Milestone 1 (AP) ... Milestone 5): a share of the
@@ -285,23 +285,23 @@ model Milestone {
 
 // An extra piece of work agreed after the contract, invoiced separately.
 model ChangeOrder {
-  id            String    @id @default(cuid())
-  projectId     String
-  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  reason        String
-  status        String    @default("SENT") // SENT | OVERDUE | COMPLETE (COMPLETE automatically once the invoice is PAID)
-  amount        Decimal?  @db.Decimal(14, 2)
-  dateSent      DateTime? @db.Date
-  invoicedDate  DateTime? @db.Date
-  invoiceStatus String? // SENT | OVERDUE | PAID
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reason           String
+  status           String    @default("SENT") // SENT | OVERDUE | COMPLETE (COMPLETE automatically once the invoice is PAID)
+  amount           Decimal?  @db.Decimal(14, 2)
+  dateSent         DateTime? @db.Date
+  invoicedDate     DateTime? @db.Date
+  invoiceStatus    String? // SENT | OVERDUE | PAID
   // Payment terms in days after the invoice date (Net+10 = 10). The due date is calculated from it, never stored.
   paymentTermsDays Int?
-  fileLink      String?
+  fileLink         String?
   // Links to the invoice and to the payslip / proof of payment.
-  invoiceLink   String?
-  payslipLink   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  invoiceLink      String?
+  payslipLink      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([projectId, createdAt])
 }
@@ -310,11 +310,11 @@ model ChangeOrder {
 // Nothing is applied until it is approved on the Inbox page. `payload` holds the kind-specific fields (validated
 // in src/lib/suggestions.ts); `projectId` is the matched project (null = the reviewer picks one).
 model Suggestion {
-  id               String    @id @default(cuid())
+  id               String     @id @default(cuid())
   kind             String // PHASE_UPDATE | ITEM_UPDATE | MILESTONE_UPDATE | CONTACT | NOTE
   payload          Json
   projectId        String?
-  project          Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  project          Project?   @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectRef       String? // what the sender called the project, as written
   summary          String // one line for the reviewer
   evidence         String? // the part of the email that supports it
@@ -322,14 +322,31 @@ model Suggestion {
   sourceSubject    String?
   sourceReceivedAt DateTime?
   sourceLink       String? // link to the email (e.g. Outlook on the web)
-  externalId       String?   @unique // the sender's own id for it, so a retry doesn't create a duplicate
-  status           String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  externalId       String?    @unique // the sender's own id for it, so a retry doesn't create a duplicate
+  status           String     @default("PENDING") // PENDING | APPROVED | REJECTED
   resultNote       String?
   reviewedAt       DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  importRunId      String? // the agent run it arrived in (set when that run is recorded)
+  importRun        ImportRun? @relation(fields: [importRunId], references: [id], onDelete: SetNull)
 
   @@index([status, createdAt])
+  @@index([importRunId])
+}
+
+// One finished run of the email-reading agent, reported by the agent itself (record_import_run). The newest
+// `ranAt` is the "last import": the agent reads it back (get_last_import) to know where to continue. Only
+// `emailsChecked` is the agent's own number: proposals created and unmatched are counted here from the
+// suggestions that arrived during the run (see `Suggestion.importRunId`), so they always match the Inbox.
+model ImportRun {
+  id            String       @id @default(cuid())
+  ranAt         DateTime
+  emailsChecked Int
+  createdAt     DateTime     @default(now())
+  suggestions   Suggestion[]
+
+  @@index([ranAt])
 }
 
 // Every status change, with its timestamp, so dates can always be reconstructed.
@@ -346,16 +363,16 @@ model StatusEvent {
 }
 
 model Person {
-  id                 String            @id @default(cuid())
-  name               String            @unique
+  id                 String              @id @default(cuid())
+  name               String              @unique
   email              String?
-  active             Boolean           @default(true)
+  active             Boolean             @default(true)
   subStages          SubStage[]
   defaultFor         DepartmentOwner[]
-  ownedPhases        Phase[]           @relation("PhaseOwner")
+  ownedPhases        Phase[]             @relation("PhaseOwner")
   defaultForPhases   PhaseDefaultOwner[]
   engineeredProfiles ProjectProfile[]
-  createdAt          DateTime          @default(now())
+  createdAt          DateTime            @default(now())
 }
 
 // The person who owns new items of a department by default (used when projects are created).
