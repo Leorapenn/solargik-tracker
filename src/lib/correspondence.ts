@@ -16,6 +16,8 @@ export type CorrespondenceItem = {
   subject: string | null;
   link: string | null;
   date: string; // YYYY-MM-DD: the day the email was received, else the day it was approved
+  done: boolean; // action items only: ticked as done
+  doneOn: string | null; // YYYY-MM-DD
 };
 
 export type CorrespondenceRow = {
@@ -29,6 +31,7 @@ export type CorrespondenceRow = {
   sourceReceivedAt: Date | null;
   reviewedAt: Date | null;
   createdAt: Date;
+  doneAt?: Date | null;
 };
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
@@ -50,6 +53,8 @@ export function shapeCorrespondence(row: CorrespondenceRow): CorrespondenceItem 
     subject: row.sourceSubject,
     link: row.sourceLink,
     date: day(row.sourceReceivedAt ?? row.reviewedAt ?? row.createdAt),
+    done: row.kind === "ACTION_ITEM" && Boolean(row.doneAt),
+    doneOn: row.kind === "ACTION_ITEM" && row.doneAt ? day(row.doneAt) : null,
   };
 }
 

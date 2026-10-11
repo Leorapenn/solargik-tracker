@@ -29,6 +29,36 @@ export const CHANGE_ORDER_INVOICE_STATUS: Choice[] = [
   choice("PAID", "Paid", "#D8F5E3", "#047857"),
 ];
 
+// Hover text for the colored labels on a change order, so someone who didn't set them knows what each one is.
+// A change order has two separate statuses: the change order's own, and its invoice's.
+const CHANGE_ORDER_STATUS_HINTS: Record<string, string> = {
+  SENT: "The change order has been sent to the customer.",
+  OVERDUE: "The change order's invoice is past its due date and not paid yet.",
+  COMPLETE: "Finished: the invoice has been paid (this is set automatically when the invoice is Paid).",
+};
+const CHANGE_ORDER_INVOICE_HINTS: Record<string, string> = {
+  SENT: "The invoice has been sent; payment is not received yet.",
+  OVERDUE: "The invoice is past its due date (invoice date + payment terms) and not paid yet.",
+  PAID: "Payment confirmed: the customer has paid this invoice.",
+};
+
+export function changeOrderStatusTitle(status: string | null): string | undefined {
+  const label = CHANGE_ORDER_STATUS.find((c) => c.value === status)?.label;
+  return label ? `Change order status: ${label}. ${CHANGE_ORDER_STATUS_HINTS[status as string] ?? ""}`.trim() : undefined;
+}
+
+export function changeOrderInvoiceStatusTitle(status: string | null): string | undefined {
+  const label = CHANGE_ORDER_INVOICE_STATUS.find((c) => c.value === status)?.label;
+  return label ? `Invoice status: ${label}. ${CHANGE_ORDER_INVOICE_HINTS[status as string] ?? ""}`.trim() : undefined;
+}
+
+// What the three file links on a change order are, for the hover text and screen readers.
+export const CHANGE_ORDER_LINK_TITLES = {
+  file: "Change order file: the change order document",
+  invoice: "Invoice: the invoice file for this change order",
+  payslip: "Payslip: proof of payment (payment confirmation)",
+} as const;
+
 // Suggested names when adding milestones; a contract can have any of them, in any number.
 export const MILESTONE_LABELS = ["NTP / NTD", "Milestone 1 (AP)", "Milestone 2", "Milestone 3", "Milestone 4", "Milestone 5"];
 export const OPTIONAL_LABELS = ["NTP / NTD"];

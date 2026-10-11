@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, effectiveStatus, formatTerms, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
+import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, formatTerms, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
 import type { PaymentData } from "@/server/services/payments";
 import { ChoicePill } from "@/components/ColorSelect";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib/theme";
@@ -137,25 +137,31 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
                 style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 14 }}
                 title={`Sent: ${fmt(c.dateSent)}\nInvoiced: ${fmt(c.invoicedDate)}\nTerms: ${formatTerms(c.paymentTermsDays) ?? "—"}\nDue: ${fmt(shown.dueDate)}`}
               >
-                <span style={{ flex: "1 1 260px", minWidth: 0 }}>{c.reason}</span>
-                <strong style={{ color: NAVY }}>{money(c.amount, data.currency)}</strong>
+                <span style={{ flex: "1 1 260px", minWidth: 0 }} title="Reason for the change order">
+                  {c.reason}
+                </span>
+                <strong style={{ color: NAVY }} title="Change order amount">
+                  {money(c.amount, data.currency)}
+                </strong>
                 {shown.dueDate && c.invoiceStatus !== "PAID" && (
-                  <span style={{ fontSize: 13, color: shown.overdue ? "#8C1D18" : TEXT_MUTED, fontWeight: shown.overdue ? 600 : 400 }}>Due {fmt(shown.dueDate)}</span>
+                  <span title="Due date: the invoice date plus the payment terms" style={{ fontSize: 13, color: shown.overdue ? "#8C1D18" : TEXT_MUTED, fontWeight: shown.overdue ? 600 : 400 }}>
+                    Due {fmt(shown.dueDate)}
+                  </span>
                 )}
-                <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === shown.status) ?? null} />
-                <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === shown.invoiceStatus) ?? null} />
+                <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === shown.status) ?? null} title={changeOrderStatusTitle(shown.status)} />
+                <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === shown.invoiceStatus) ?? null} title={changeOrderInvoiceStatusTitle(shown.invoiceStatus)} />
                 {c.fileLink && (
-                  <a href={c.fileLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                  <a href={c.fileLink} target="_blank" rel="noopener noreferrer" title={CHANGE_ORDER_LINK_TITLES.file} style={{ color: NAVY, fontWeight: 700 }}>
                     File
                   </a>
                 )}
                 {c.invoiceLink && (
-                  <a href={c.invoiceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                  <a href={c.invoiceLink} target="_blank" rel="noopener noreferrer" title={CHANGE_ORDER_LINK_TITLES.invoice} style={{ color: NAVY, fontWeight: 700 }}>
                     Invoice
                   </a>
                 )}
                 {c.payslipLink && (
-                  <a href={c.payslipLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                  <a href={c.payslipLink} target="_blank" rel="noopener noreferrer" title={CHANGE_ORDER_LINK_TITLES.payslip} style={{ color: NAVY, fontWeight: 700 }}>
                     Payslip
                   </a>
                 )}

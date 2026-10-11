@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  CHANGE_ORDER_LINK_TITLES,
+  CHANGE_ORDER_INVOICE_STATUS,
+  CHANGE_ORDER_STATUS,
   changeOrderDisplay,
   changeOrderDueDate,
+  changeOrderInvoiceStatusTitle,
+  changeOrderStatusTitle,
   changeOrderStatusFor,
   cleanChangeOrder,
   formatTerms,
@@ -160,6 +165,28 @@ describe("cleanMilestone", () => {
     expect(cleanMilestone({ ...base, dueDate: "2026-02-31" }).ok).toBe(false);
     expect(cleanMilestone({ ...base, status: "OVERDUE" }).ok).toBe(false);
     expect(cleanMilestone({ ...base, amountOverride: "$1,250.50" }).ok).toBe(true);
+  });
+});
+
+describe("hover text on a change order's labels", () => {
+  it("names which status it is, so the two pills can't be confused", () => {
+    expect(changeOrderStatusTitle("COMPLETE")).toMatch(/^Change order status: Complete\./);
+    expect(changeOrderInvoiceStatusTitle("PAID")).toMatch(/^Invoice status: Paid\./);
+    expect(changeOrderInvoiceStatusTitle("PAID")).toContain("Payment confirmed");
+    expect(changeOrderStatusTitle("OVERDUE")).toContain("past its due date");
+  });
+  it("has an explanation for every status that exists", () => {
+    for (const s of CHANGE_ORDER_STATUS) expect(changeOrderStatusTitle(s.value)).toMatch(new RegExp(`^Change order status: ${s.label}\\. .{10,}`));
+    for (const s of CHANGE_ORDER_INVOICE_STATUS) expect(changeOrderInvoiceStatusTitle(s.value)).toMatch(new RegExp(`^Invoice status: ${s.label}\\. .{10,}`));
+  });
+  it("gives nothing for an empty or unknown status", () => {
+    expect(changeOrderStatusTitle(null)).toBeUndefined();
+    expect(changeOrderInvoiceStatusTitle("NOPE")).toBeUndefined();
+  });
+  it("says what the three file links are", () => {
+    expect(CHANGE_ORDER_LINK_TITLES.payslip).toContain("payment confirmation");
+    expect(CHANGE_ORDER_LINK_TITLES.invoice).toContain("Invoice");
+    expect(CHANGE_ORDER_LINK_TITLES.file).toContain("change order");
   });
 });
 

@@ -41,6 +41,13 @@ describe("shapeCorrespondence", () => {
     expect(shapeCorrespondence(row({ payload: "nope" }))).toMatchObject({ text: null });
   });
 
+  it("shows an action item as done once ticked, with the day; a note is never done", () => {
+    const action = row({ kind: "ACTION_ITEM", payload: { text: "x" }, doneAt: new Date("2026-10-12T09:00:00Z") });
+    expect(shapeCorrespondence(action)).toMatchObject({ done: true, doneOn: "2026-10-12" });
+    expect(shapeCorrespondence(row({ kind: "ACTION_ITEM", payload: { text: "x" } }))).toMatchObject({ done: false, doneOn: null });
+    expect(shapeCorrespondence(row({ doneAt: new Date("2026-10-12T09:00:00Z") }))).toMatchObject({ done: false, doneOn: null });
+  });
+
   it("an action item's who and by never show on a note", () => {
     expect(shapeCorrespondence(row({ payload: { text: "x", who: "Dan", by: "Friday" } }))).toMatchObject({ who: null, by: null });
   });

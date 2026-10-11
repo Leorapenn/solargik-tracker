@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
@@ -13,6 +13,8 @@ import {
   OPTIONAL_LABELS,
   SETTABLE_MILESTONE_STATUSES,
   changeOrderDisplay,
+  changeOrderInvoiceStatusTitle,
+  changeOrderStatusTitle,
   changeOrderDueDate,
   changeOrderStatusFor,
   effectiveStatus,
@@ -29,8 +31,8 @@ import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
-const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "—");
-const DASH = <span style={{ color: TEXT_MUTED }}>—</span>;
+const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "â€”");
+const DASH = <span style={{ color: TEXT_MUTED }}>â€”</span>;
 // "Open" for a stored file link, a dash when there is none.
 const fileLinkCell = (url: string | null) =>
   url ? (
@@ -74,7 +76,7 @@ let counter = 0;
 const keyed = <T,>(data: T): Keyed<T> => ({ key: `k${++counter}`, data });
 
 const num = (s: string) => {
-  const t = s.trim().replace(/[$€₪£,\s]/g, "");
+  const t = s.trim().replace(/[$â‚¬â‚ªÂ£,\s]/g, "");
   const n = Number(t);
   return t === "" || !Number.isFinite(n) ? null : n;
 };
@@ -188,7 +190,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
     payslipLink: "",
   });
   const unusedLabels = MILESTONE_LABELS.filter((l) => !milestones.some((m) => m.data.label === l));
-  // the dropdown offers the standard names not used yet, starting with the next one; "Other…" is a plain "Milestone N"
+  // the dropdown offers the standard names not used yet, starting with the next one; "Otherâ€¦" is a plain "Milestone N"
   const chosenLabel = addPick !== null && (addPick === "" || unusedLabels.includes(addPick)) ? addPick : (unusedLabels[0] ?? "");
 
   // ---- read-only view ----
@@ -211,11 +213,11 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ color: TEXT_MUTED, fontSize: 14 }}>
           Contract value <strong style={{ color: NAVY }}>{money(saved.contractValue, saved.currency)}</strong>
-          {" · "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced, saved.currency)}</strong>
-          {" · "}Paid <strong style={{ color: NAVY }}>{money(totals.paid, saved.currency)}</strong>
+          {" Â· "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced, saved.currency)}</strong>
+          {" Â· "}Paid <strong style={{ color: NAVY }}>{money(totals.paid, saved.currency)}</strong>
           {totals.percentTotal !== null && (
             <>
-              {" · "}Milestones cover{" "}
+              {" Â· "}Milestones cover{" "}
               <strong style={{ color: totals.percentTotal === 100 ? NAVY : "#9A4B00" }}>{totals.percentTotal}%</strong> of the contract
             </>
           )}
@@ -224,7 +226,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
         {editing ? (
           <>
             <button type="button" style={primaryButton} disabled={pending} onClick={save}>
-              {pending ? "Saving…" : "Save"}
+              {pending ? "Savingâ€¦" : "Save"}
             </button>
             <button type="button" style={secondaryButton} disabled={pending} onClick={cancel}>
               Cancel
@@ -281,7 +283,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     {l}
                   </option>
                 ))}
-                <option value="">Other…</option>
+                <option value="">Otherâ€¦</option>
               </select>
               <button type="button" style={secondaryButton} disabled={milestones.length >= 12} onClick={() => {
                   setMilestones((list) => [...list, keyed(emptyMilestone(chosenLabel || `Milestone ${list.length + 1}`))]);
@@ -321,7 +323,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                         <option value=""></option>
                         {saved.items.map((i) => (
                           <option key={i.id} value={i.id}>
-                            {i.phaseLabel} · {i.name}
+                            {i.phaseLabel} Â· {i.name}
                           </option>
                         ))}
                       </select>,
@@ -382,7 +384,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     <td style={td}>{m.percent === null ? DASH : `${m.percent}%`}</td>
                     <td style={td}>{m.amount === null ? DASH : money(m.amount, saved.currency)}</td>
                     <td style={{ ...td, color: m.linkedName ? undefined : TEXT_MUTED }} title={m.linkedStatus ? `Item status: ${m.linkedStatus}` : undefined}>
-                      {m.linkedName ?? "—"}
+                      {m.linkedName ?? "â€”"}
                     </td>
                     <td style={td}>{m.dueDate ? fmt(m.dueDate) : DASH}</td>
                     <td style={td}>
@@ -431,7 +433,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                   </button>
                 </div>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
-                  {label("Status", <ColorSelect ariaLabel={`Status of change order ${index + 1}`} value={o.status} options={CHANGE_ORDER_STATUS} onChange={(v) => setOrder(key, { status: v || "SENT" })} />)}
+                  {label("Change order status", <ColorSelect ariaLabel={`Status of change order ${index + 1}`} value={o.status} options={CHANGE_ORDER_STATUS} onChange={(v) => setOrder(key, { status: v || "SENT" })} />)}
                   {label("Date sent", <DateField ariaLabel={`Date sent of change order ${index + 1}`} value={o.dateSent || null} onCommit={(c) => setOrder(key, { dateSent: c.date ?? "" })} />)}
                   {label("Invoiced date", <DateField ariaLabel={`Invoiced date of change order ${index + 1}`} value={o.invoicedDate || null} onCommit={(c) => setOrder(key, { invoicedDate: c.date ?? "" })} />)}
                   {label("Payment terms (days)", <input aria-label={`Payment terms in days of change order ${index + 1}`} inputMode="numeric" placeholder="e.g. 10" value={o.paymentTermsDays} onChange={(e) => setOrder(key, { paymentTermsDays: e.target.value })} style={{ ...inputStyle, width: 110 }} />)}
@@ -457,7 +459,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
             <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
               <thead>
                 <tr style={{ background: NAVY, color: "#fff" }}>
-                  {["Reason", "Amount", "Status", "Date sent", "Invoiced", "Terms", "Due date", "Invoice status", "File", "Invoice", "Payslip"].map((h) => (
+                  {["Reason", "Amount", "Change order status", "Date sent", "Invoiced", "Terms", "Due date", "Invoice status", "Change order file", "Invoice file", "Payslip (proof of payment)"].map((h) => (
                     <th key={h} style={th}>
                       {h}
                     </th>
@@ -472,14 +474,14 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     <td style={{ ...td, maxWidth: 360, whiteSpace: "pre-wrap" }}>{c.reason}</td>
                     <td style={td}>{c.amount === null ? DASH : money(c.amount, saved.currency)}</td>
                     <td style={td}>
-                      <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === shown.status) ?? null} />
+                      <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === shown.status) ?? null} title={changeOrderStatusTitle(shown.status)} />
                     </td>
                     <td style={td}>{c.dateSent ? fmt(c.dateSent) : DASH}</td>
                     <td style={td}>{c.invoicedDate ? fmt(c.invoicedDate) : DASH}</td>
                     <td style={td}>{formatTerms(c.paymentTermsDays) ?? DASH}</td>
                     <td style={{ ...td, color: shown.overdue ? "#8C1D18" : undefined, fontWeight: shown.overdue ? 600 : 400 }}>{shown.dueDate ? fmt(shown.dueDate) : DASH}</td>
                     <td style={td}>
-                      <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === shown.invoiceStatus) ?? null} />
+                      <ChoicePill choice={CHANGE_ORDER_INVOICE_STATUS.find((s) => s.value === shown.invoiceStatus) ?? null} title={changeOrderInvoiceStatusTitle(shown.invoiceStatus)} />
                     </td>
                     <td style={td}>
                       {c.fileLink ? (

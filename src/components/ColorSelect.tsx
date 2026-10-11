@@ -157,10 +157,11 @@ export function ColorSelect({
 }
 
 // The read-only look of a dropdown value: the colored pill, or a dash when blank.
-export function ChoicePill({ choice }: { choice: Choice | null }) {
+// `title` is the hover text, e.g. "Invoice status: Paid" so a reader knows what the pill is about.
+export function ChoicePill({ choice, title }: { choice: Choice | null; title?: string }) {
   if (!choice) return <span style={{ color: TEXT_MUTED }}>—</span>;
   return (
-    <span style={{ display: "inline-block", background: choice.bg, color: choice.text, borderRadius: 999, padding: "4px 12px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}>
+    <span title={title} style={{ display: "inline-block", background: choice.bg, color: choice.text, borderRadius: 999, padding: "4px 12px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap", cursor: title ? "help" : undefined }}>
       {choice.label}
     </span>
   );

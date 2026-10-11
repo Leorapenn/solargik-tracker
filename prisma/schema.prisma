@@ -327,6 +327,8 @@ model Suggestion {
   // reviewer. For notes and action items with no project it is what files them on the customer's page.
   customerId       String?
   customer         Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  // When an approved action item was ticked as done (null = still open). Only meaningful for ACTION_ITEM.
+  doneAt           DateTime?
   sourceMessageId  String? // the sender's own id for the email (e.g. the Outlook message id)
   confidence       String? // HIGH | MEDIUM | LOW: how sure the sender says it is
   externalId       String?    @unique // the sender's own id for it, so a retry doesn't create a duplicate
