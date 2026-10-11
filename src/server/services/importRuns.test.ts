@@ -7,9 +7,10 @@ import { getImportRun, getLastImport, recordImportRun } from "./importRuns";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-// Runs are recorded in 2021 and the suggestions are back-dated into those windows, so these tests can't claim (or
-// be confused by) suggestions that real data or other test files create today.
+// The suggestions below are back-dated to 2021 and each run is recorded with a `claimUntil` in that window, so these
+// tests can't claim (or be confused by) suggestions that real data or other test files create today.
 const at = (iso: string) => new Date(iso);
+const NOTHING = at("2000-01-01T00:00:00Z"); // claims no suggestion at all
 
 describe("import runs", () => {
   let customerId: string;
@@ -17,8 +18,8 @@ describe("import runs", () => {
   const runIds: string[] = [];
   const suggestionIds: string[] = [];
 
-  const record = async (raw: unknown) => {
-    const r = await recordImportRun(raw);
+  const record = async (raw: unknown, claimUntil?: Date) => {
+    const r = await recordImportRun(raw, claimUntil);
     runIds.push(r.id);
     return r;
   };
@@ -49,32 +50,40 @@ describe("import runs", () => {
     await suggest(at("2021-03-01T06:10:00Z"), false);
     await suggest(at("2021-03-01T06:20:00Z"), false);
     // the agent looked at 40 emails; most were irrelevant and produced no suggestion, so they count nowhere else
-    const run = await record({ emailsChecked: 40, ranAt: "2021-03-01T07:00:00Z" });
+    const run = await record({ emailsChecked: 40, ranAt: "2021-03-01T06:00:00Z" }, at("2021-03-01T07:00:00Z"));
     expect(run).toMatchObject({ emailsChecked: 40, proposalsCreated: 3, unmatched: 2 });
+  });
+
+  it("credits proposals by when the run is recorded, whatever ranAt says: ranAt is when it STARTED", async () => {
+    // the run started at 06:00, but its proposals were created at 06:30, after the start
+    await suggest(at("2021-03-06T06:30:00Z"), false);
+    const run = await record({ emailsChecked: 8, ranAt: "2021-03-06T06:00:00Z" }, at("2021-03-06T07:00:00Z"));
+    expect(run).toMatchObject({ proposalsCreated: 1, unmatched: 1 });
+    expect(run.ranAt).toBe("2021-03-06T06:00:00.000Z");
   });
 
   it("ignores any counts the agent sends", async () => {
     await suggest(at("2021-03-02T06:00:00Z"), false);
-    const run = await record({ emailsChecked: 5, proposalsCreated: 99, unmatched: 0, ranAt: "2021-03-02T07:00:00Z" });
+    const run = await record({ emailsChecked: 5, proposalsCreated: 99, unmatched: 0, ranAt: "2021-03-02T06:00:00Z" }, at("2021-03-02T07:00:00Z"));
     expect(run).toMatchObject({ proposalsCreated: 1, unmatched: 1 });
   });
 
-  it("each run claims only what arrived after the previous one, and a later run never takes it back", async () => {
+  it("each proposal belongs to one run: an earlier run keeps its own and a later run never takes them", async () => {
     await suggest(at("2021-03-03T06:00:00Z"), true);
-    const run = await record({ emailsChecked: 3, ranAt: "2021-03-03T07:00:00Z" });
+    const run = await record({ emailsChecked: 3, ranAt: "2021-03-03T06:00:00Z" }, at("2021-03-03T07:00:00Z"));
     expect(run).toMatchObject({ proposalsCreated: 1, unmatched: 0 });
-    const first = await prisma.importRun.findFirstOrThrow({ where: { ranAt: at("2021-03-01T07:00:00Z"), id: { in: runIds } } });
+    const first = await prisma.importRun.findFirstOrThrow({ where: { ranAt: at("2021-03-01T06:00:00Z"), id: { in: runIds } } });
     expect(await prisma.suggestion.count({ where: { importRunId: first.id } })).toBe(3);
   });
 
   it("a run with no new suggestions reports zeros", async () => {
-    expect(await record({ emailsChecked: 12, ranAt: "2021-03-04T07:00:00Z" })).toMatchObject({ proposalsCreated: 0, unmatched: 0 });
+    expect(await record({ emailsChecked: 12, ranAt: "2021-03-04T07:00:00Z" }, at("2021-03-04T07:00:00Z"))).toMatchObject({ proposalsCreated: 0, unmatched: 0 });
   });
 
   it("unmatched always equals the proposals of that run that still have no project", async () => {
     const orphan = await suggest(at("2021-03-05T06:00:00Z"), false);
     await suggest(at("2021-03-05T06:05:00Z"), false);
-    const run = await record({ emailsChecked: 9, ranAt: "2021-03-05T07:00:00Z" });
+    const run = await record({ emailsChecked: 9, ranAt: "2021-03-05T06:00:00Z" }, at("2021-03-05T07:00:00Z"));
     expect(run).toMatchObject({ proposalsCreated: 2, unmatched: 2 });
 
     // a person picks a project in the review queue: the count follows
@@ -82,9 +91,9 @@ describe("import runs", () => {
     expect(await getImportRun(run.id)).toMatchObject({ proposalsCreated: 2, unmatched: 1, emailsChecked: 9 });
   });
 
-  it("get_last_import returns the newest run, and an older report arriving late does not move it back", async () => {
-    const newest = await record({ emailsChecked: 1 });
-    await record({ emailsChecked: 9, ranAt: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString() });
+  it("get_last_import returns the newest start time, and an older report arriving late does not move it back", async () => {
+    const newest = await record({ emailsChecked: 1 }, NOTHING);
+    await record({ emailsChecked: 9, ranAt: new Date(Date.now() - 3 * 24 * 3600 * 1000).toISOString() }, NOTHING);
     const last = await getLastImport();
     expect(last?.id).toBe(newest.id);
     expect(last?.emailsChecked).toBe(1);
@@ -92,8 +101,8 @@ describe("import runs", () => {
 
   it("refuses bad reports and stores nothing for them", async () => {
     const before = await prisma.importRun.count();
-    await expect(recordImportRun({ emailsChecked: -1 })).rejects.toBeInstanceOf(UserError);
-    await expect(recordImportRun({ emailsChecked: 1, ranAt: "2999-01-01T00:00:00Z" })).rejects.toBeInstanceOf(UserError);
+    await expect(recordImportRun({ emailsChecked: -1 }, NOTHING)).rejects.toBeInstanceOf(UserError);
+    await expect(recordImportRun({ emailsChecked: 1, ranAt: "2999-01-01T00:00:00Z" }, NOTHING)).rejects.toBeInstanceOf(UserError);
     expect(await prisma.importRun.count()).toBe(before);
   });
 });

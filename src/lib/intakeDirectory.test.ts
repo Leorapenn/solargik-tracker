@@ -68,9 +68,13 @@ describe("shapeProject", () => {
     sharepointLink: "https://solargik.sharepoint.com/sites/Projects/Shared%20Documents/EXECUTION/259%20(Revalue,%20Rignano%20Flaminio%201,%20Italy)",
     customer: { id: "c1", name: "Revalue" },
     phases: [
-      { name: "DESIGN", status: "DONE", order: 2 },
-      { name: "INITIATION", status: "DONE", order: 1 },
-      { name: "SUPPLY", status: "IN_PROGRESS", order: 3 },
+      { name: "DESIGN", status: "DONE", order: 2, statusUpdate: null, statusUpdateAt: null },
+      { name: "INITIATION", status: "DONE", order: 1, statusUpdate: "  Kickoff held  ", statusUpdateAt: new Date("2026-10-06T00:00:00Z") },
+      { name: "SUPPLY", status: "IN_PROGRESS", order: 3, statusUpdate: "   ", statusUpdateAt: null },
+    ],
+    suggestions: [
+      { kind: "NOTE", summary: "Customer asked about delivery timing" },
+      { kind: "STATUS_CHANGE", summary: "Layout approval is done" },
     ],
   };
 
@@ -79,20 +83,35 @@ describe("shapeProject", () => {
     expect(v).toMatchObject({ number: "259", name: "259-Rignano Flaminio 1", customer: { id: "c1", name: "Revalue" }, lifecycle: "ACTIVE", stage: "3 Construction", status: "Working on it" });
     expect(v.aliases).toEqual(["259", "Rignano Flaminio 1", "259 (Revalue, Rignano Flaminio 1, Italy)"]);
     expect(v.phases).toEqual([
-      { phase: "INITIATION", status: "DONE" },
-      { phase: "DESIGN", status: "DONE" },
-      { phase: "SUPPLY", status: "IN_PROGRESS" },
+      { phase: "INITIATION", status: "DONE", update: { text: "Kickoff held", date: "2026-10-06" } },
+      { phase: "DESIGN", status: "DONE", update: null },
+      { phase: "SUPPLY", status: "IN_PROGRESS", update: null }, // a blank update is no update
     ]);
+  });
+
+  it("lists the proposals waiting for review, newest first, up to a limit", () => {
+    expect(shapeProject(source).pendingProposals).toEqual([
+      { kind: "NOTE", summary: "Customer asked about delivery timing" },
+      { kind: "STATUS_CHANGE", summary: "Layout approval is done" },
+    ]);
+    const many = Array.from({ length: 40 }, (_, i) => ({ kind: "NOTE", summary: `n${i}` }));
+    expect(shapeProject({ ...source, suggestions: many }).pendingProposals).toHaveLength(15);
+  });
+
+  it("shortens a very long phase update", () => {
+    const long = { ...source, phases: [{ name: "DESIGN", status: "DONE", order: 1, statusUpdate: "x".repeat(2000), statusUpdateAt: new Date("2026-10-06T00:00:00Z") }] };
+    expect(shapeProject(long).phases[0].update?.text).toHaveLength(600);
   });
 
   it("contains exactly the agreed fields and never the SharePoint link", () => {
     const v = shapeProject(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "customer", "id", "lifecycle", "name", "number", "phases", "stage", "status"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "customer", "id", "lifecycle", "name", "number", "pendingProposals", "phases", "stage", "status"]);
+    for (const ph of v.phases) expect(Object.keys(ph).sort()).toEqual(["phase", "status", "update"]);
     expect(JSON.stringify(v)).not.toMatch(/https?:|sharepoint\.com/i);
   });
 
   it("copes with a project that has no number, link or stage", () => {
-    const v = shapeProject({ ...source, name: "Barge 2", sharepointLink: null, mondayStage: null, mondayStatus: null });
-    expect(v).toMatchObject({ number: null, aliases: [], stage: null, status: null });
+    const v = shapeProject({ ...source, name: "Barge 2", sharepointLink: null, mondayStage: null, mondayStatus: null, suggestions: [] });
+    expect(v).toMatchObject({ number: null, aliases: [], stage: null, status: null, pendingProposals: [] });
   });
 });

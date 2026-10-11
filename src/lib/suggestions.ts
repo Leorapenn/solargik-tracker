@@ -8,22 +8,39 @@ import { cleanStatusText } from "@/lib/statusUpdate";
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "MILESTONE_UPDATE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
   PHASE_UPDATE: "Phase update",
   ITEM_UPDATE: "Sub-phase update",
+  STATUS_CHANGE: "Status change",
   MILESTONE_UPDATE: "Payment milestone",
+  ACTION_ITEM: "Action item (nothing to apply)",
+  CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
   NOTE: "Note (nothing to apply)",
 };
+
+// Kinds that change nothing when approved: approving only marks them as reviewed.
+export const REVIEW_ONLY_KINDS: readonly SuggestionKind[] = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+
+// The only item statuses 360 has. A status change must be one of these.
+export const ITEM_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"] as const;
+export type ItemStatus = (typeof ITEM_STATUSES)[number];
+export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = { NOT_STARTED: "Not started", IN_PROGRESS: "In progress", BLOCKED: "Blocked", DONE: "Done" };
+
+export const CONFIDENCES = ["HIGH", "MEDIUM", "LOW"] as const;
+export type Confidence = (typeof CONFIDENCES)[number];
 
 export const MAX_PER_REQUEST = 20;
 
 export type Payload =
   | { kind: "PHASE_UPDATE"; phase: PhaseName; text: string }
   | { kind: "ITEM_UPDATE"; phase: PhaseName | null; item: string; text: string }
+  | { kind: "STATUS_CHANGE"; phase: PhaseName | null; item: string; status: ItemStatus }
+  | { kind: "ACTION_ITEM"; text: string; who: string | null; by: string | null }
+  | { kind: "CORRESPONDENCE_NOTE"; text: string }
   | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; invoiceLink: string | null; payslipLink: string | null }
   | { kind: "CONTACT"; name: string; email: string | null; phone: string | null; role: string | null }
   | { kind: "NOTE"; text: string };
@@ -37,6 +54,8 @@ export type CleanSuggestion = {
   sourceSubject: string | null;
   sourceReceivedAt: Date | null;
   sourceLink: string | null;
+  sourceMessageId: string | null;
+  confidence: Confidence | null;
   externalId: string | null;
 };
 
@@ -70,6 +89,12 @@ function phaseOf(v: unknown): PhaseName | null {
   return hit ?? null;
 }
 
+// "in progress", "In-Progress" and "IN_PROGRESS" all mean IN_PROGRESS; anything that isn't one of the four statuses is refused.
+function itemStatusOf(v: unknown): ItemStatus | null {
+  const t = typeof v === "string" ? v.trim().toUpperCase().replace(/[\s-]+/g, "_") : "";
+  return (ITEM_STATUSES as readonly string[]).includes(t) ? (t as ItemStatus) : null;
+}
+
 // Validates one suggestion as it arrives from outside.
 export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
   if (!isObject(raw)) return { ok: false, error: "A suggestion must be an object." };
@@ -87,6 +112,13 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const d = new Date(source.receivedAt);
     if (Number.isNaN(d.getTime())) return { ok: false, error: "source.receivedAt isn't a valid date." };
     receivedAt = d;
+  }
+
+  let confidence: Confidence | null = null;
+  if (raw.confidence !== undefined && raw.confidence !== null && raw.confidence !== "") {
+    const c = typeof raw.confidence === "string" ? raw.confidence.trim().toUpperCase() : "";
+    if (!(CONFIDENCES as readonly string[]).includes(c)) return { ok: false, error: `"confidence" must be high, medium or low.` };
+    confidence = c as Confidence;
   }
 
   const text = (key: string, required: boolean): Result<string | null> => {
@@ -111,6 +143,22 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const t = text("text", true);
     if (!t.ok) return t;
     payload = { kind, phase, item, text: t.value! };
+  } else if (kind === "STATUS_CHANGE") {
+    const item = oneLine(raw.item, 200);
+    if (!item) return { ok: false, error: `"item" (the sub-phase name) is required for STATUS_CHANGE.` };
+    const phase = raw.phase === undefined || raw.phase === null || raw.phase === "" ? null : phaseOf(raw.phase);
+    if (raw.phase && !phase) return { ok: false, error: `"phase" must be one of: ${PHASE_ORDER.join(", ")}.` };
+    const status = itemStatusOf(raw.status);
+    if (!status) return { ok: false, error: `"status" must be one of: ${ITEM_STATUSES.join(", ")}.` };
+    payload = { kind, phase, item, status };
+  } else if (kind === "ACTION_ITEM") {
+    const t = text("text", true);
+    if (!t.ok) return t;
+    payload = { kind, text: t.value!, who: oneLine(raw.who, 120), by: oneLine(raw.by, 100) };
+  } else if (kind === "CORRESPONDENCE_NOTE") {
+    const t = text("text", true);
+    if (!t.ok) return t;
+    payload = { kind, text: t.value! };
   } else if (kind === "MILESTONE_UPDATE") {
     const milestone = oneLine(raw.milestone, 60);
     if (!milestone) return { ok: false, error: `"milestone" (its name, e.g. "Milestone 2") is required.` };
@@ -156,6 +204,8 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
       sourceSubject: oneLine(source.subject, 300),
       sourceReceivedAt: receivedAt,
       sourceLink: sourceLink.value,
+      sourceMessageId: oneLine(source.messageId, 500),
+      confidence,
       externalId: oneLine(raw.id, 200),
     },
   };
@@ -165,8 +215,9 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
 // project from the same email always gives the same key, so a task that reads an email again can't queue it twice.
 // The summary's wording is left out on purpose. A proposal the reviewer already rejected stays on file, so it is
 // not proposed again either.
-export function suggestionFingerprint(c: Pick<CleanSuggestion, "payload" | "projectRef" | "sourceLink" | "sourceFrom" | "sourceSubject" | "sourceReceivedAt">): string {
-  const email = c.sourceLink ?? [c.sourceFrom ?? "", c.sourceSubject ?? "", c.sourceReceivedAt?.toISOString() ?? ""].join("|");
+export function suggestionFingerprint(c: Pick<CleanSuggestion, "payload" | "projectRef" | "sourceMessageId" | "sourceLink" | "sourceFrom" | "sourceSubject" | "sourceReceivedAt">): string {
+  // the email is identified by its message id when there is one, else by its link, else by sender + subject + time
+  const email = c.sourceMessageId ? `msg:${c.sourceMessageId}` : c.sourceLink ?? [c.sourceFrom ?? "", c.sourceSubject ?? "", c.sourceReceivedAt?.toISOString() ?? ""].join("|");
   const basis = JSON.stringify([c.payload, (c.projectRef ?? "").trim().toLowerCase(), email.trim().toLowerCase()]);
   return `auto:${createHash("sha256").update(basis).digest("hex")}`;
 }
@@ -197,17 +248,18 @@ export function agentInstructions(endpoint: string): string {
     "",
     `For every email that contains something worth recording, send a suggestion with POST ${endpoint}`,
     "Header: Authorization: Bearer <the intake token you were given>. Body: JSON {\"suggestions\": [ ... ]} (up to 20 at a time).",
-    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, MILESTONE_UPDATE, CONTACT, NOTE).",
+    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, ACTION_ITEM, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
     "",
-    `Two read-only lists for matching an email to a customer and project (GET, same header): ${base}/customers (name, name variants, business email domains, contacts) and ${base}/projects (number, name, other names, customer, lifecycle, stage, status, phase statuses). Read both at the start of a run. They are the only data you can read from the tracker.`,
+    `Two read-only lists for matching an email to a customer and project (GET, same header): ${base}/customers (name, name variants, business email domains, contacts) and ${base}/projects (number, name, other names, customer, lifecycle, stage, status, each phase's status and current update, and the proposals still waiting for review). Read both at the start of a run. They are the only data you can read from the tracker. Don't propose something that is already a phase update or already waiting for review.`,
     "",
     "Two bookkeeping tools (same header), at " + runEndpoint,
-    "- get_last_import: GET it BEFORE you start. It returns lastImportAt (null the first time); only read emails received after that time.",
-    "- record_import_run: when the run has finished, POST {\"emailsChecked\": n} (every email you looked at, relevant or not; add \"ranAt\" as an ISO time only if the run didn't finish just now). Don't send counts of proposals or unmatched emails: the tracker counts those itself. Don't call it if the run failed part-way, so the next run starts from the same point.",
+    "- get_last_import: GET it BEFORE you start. It returns lastImportAt (null the first time): when the previous run STARTED. Only read emails received after that time.",
+    "- record_import_run: when the run has finished, POST {\"emailsChecked\": n, \"ranAt\": \"<the time THIS run started, ISO>\"} (n = every email you looked at, relevant or not). ranAt must be the start, so an email that arrives while you work is picked up next time. Don't send counts of proposals or unmatched emails: the tracker counts those itself. Don't call it if the run failed part-way, so the next run starts from the same point.",
     "- Send your suggestions BEFORE you record the run, so they are counted in it.",
     "",
     "Rules:",
-    "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'.",
+    "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'. Put the email's own id in source.messageId, and say how sure you are in 'confidence' (high, medium or low).",
+    "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM (who, by when) is for a clear request or commitment; CORRESPONDENCE_NOTE for other meaningful communication. Say in the text whether it was the customer or Solargik staff.",
     "- Give each suggestion a unique 'id' (the email's id plus a number) so a retry doesn't create duplicates. Without an id the tracker still skips an identical proposal from the same email, but an id is more reliable.",
     "- If an email is clearly about one of our customers but you can't tell which project, still send a suggestion (a NOTE if nothing else fits) and leave the project out: it will show under Unmatched for a person to assign. If an email is irrelevant (newsletters, unrelated senders), send nothing.",
     "- Use NOTE when something matters but doesn't fit a kind. Never guess a project, a date or an amount: if the email doesn't say, leave it out or use NOTE.",
@@ -222,6 +274,12 @@ export function describePayload(p: Payload): string {
       return `Set the ${phaseShortName(p.phase)} phase update to: ${p.text}`;
     case "ITEM_UPDATE":
       return `Set the update of "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to: ${p.text}`;
+    case "STATUS_CHANGE":
+      return `Set "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to ${ITEM_STATUS_LABELS[p.status]}`;
+    case "ACTION_ITEM":
+      return `Action item${p.who ? ` for ${p.who}` : ""}${p.by ? `, by ${p.by}` : ""}: ${p.text}`;
+    case "CORRESPONDENCE_NOTE":
+      return p.text;
     case "MILESTONE_UPDATE": {
       const parts = [
         p.status === "INVOICE_SENT" ? "mark the invoice as sent" : p.status === "PAYMENT_RECEIVED" ? "mark the payment as received" : null,

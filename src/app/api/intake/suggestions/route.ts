@@ -2,6 +2,7 @@ import { isIntakeAuthorized } from "@/lib/intakeAuth";
 import { UserError } from "@/lib/errors";
 import { KIND_LABELS, MAX_PER_REQUEST } from "@/lib/suggestions";
 import { createSuggestions } from "@/server/services/suggestions";
+import { listItemNames } from "@/server/services/intakeDirectory";
 
 export const dynamic = "force-dynamic";
 
@@ -41,20 +42,26 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   if (unauthorized(request)) return new Response("Unauthorized", { status: 401 });
   return Response.json({
+    // the exact item names a STATUS_CHANGE or ITEM_UPDATE can name, by phase
+    itemNames: await listItemNames(),
     how: "POST JSON to this address with the header 'Authorization: Bearer <token>'. A person reviews every suggestion before anything changes.",
     body: { suggestions: "array of up to " + MAX_PER_REQUEST },
-    bookkeeping: "/api/intake/import-run: GET = get_last_import (when the last run finished), POST {emailsChecked} = record_import_run (send your suggestions first; the tracker counts proposals and unmatched itself).",
+    bookkeeping: "/api/intake/import-run: GET = get_last_import (when the last run finished), POST {emailsChecked, ranAt = when this run STARTED} = record_import_run (send your suggestions first; the tracker counts proposals and unmatched itself).",
     commonFields: {
       kind: Object.keys(KIND_LABELS),
       project: "the project code or name as written in the email, e.g. '259' or 'Rignano Flaminio 1'",
       summary: "one line saying what you propose (required, max 200 characters)",
       evidence: "the sentence(s) from the email that support it (max 1500 characters)",
-      source: { from: "sender", subject: "email subject", receivedAt: "ISO date-time", link: "https link to the email" },
+      source: { from: "sender", subject: "email subject", receivedAt: "ISO date-time", messageId: "the email's own id (e.g. the Outlook message id)", link: "https link to the email (optional)" },
+      confidence: "high | medium | low: how sure you are (optional)",
       id: "your own unique id for this suggestion (e.g. the email's id plus a number) so a retry is not duplicated",
     },
     kinds: {
       PHASE_UPDATE: { phase: "INITIATION | DESIGN | SUPPLY | CONSTRUCTION | COMMISSIONING | OM", text: "the update text" },
       ITEM_UPDATE: { item: "the sub-phase name, e.g. 'Layout Approval'", phase: "optional, as above", text: "the update text" },
+      STATUS_CHANGE: { item: "the sub-phase name", phase: "optional, as above", status: "NOT_STARTED | IN_PROGRESS | BLOCKED | DONE (no other values exist)" },
+      ACTION_ITEM: { text: "the request or commitment, saying whether it is the customer's or Solargik's", who: "optional", by: "optional, when it is due as written, e.g. '2026-10-20' or 'end of next week'" },
+      CORRESPONDENCE_NOTE: { text: "other meaningful project communication, one plain line or two" },
       MILESTONE_UPDATE: { milestone: "e.g. 'Milestone 2'", status: "INVOICE_SENT | PAYMENT_RECEIVED (optional)", invoiceSentDate: "YYYY-MM-DD (optional)", paidDate: "YYYY-MM-DD (optional)", invoiceLink: "https link (optional)", payslipLink: "https link (optional)" },
       CONTACT: { name: "required", email: "optional", phone: "optional", role: "optional" },
       NOTE: { text: "anything worth a person's attention that doesn't fit the kinds above" },

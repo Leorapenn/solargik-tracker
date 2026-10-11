@@ -6,7 +6,14 @@ import type { SuggestionView } from "@/server/services/suggestions";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
-const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE"];
+const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+// these only record that someone looked at them, so approving needs no project (but one can still be picked)
+const REVIEW_ONLY = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string }> = {
+  HIGH: { bg: "#D8F5E3", text: "#047857", label: "High confidence" },
+  MEDIUM: { bg: "#FFF1D0", text: "#8A5A00", label: "Medium confidence" },
+  LOW: { bg: "#FBE0DE", text: "#8C1D18", label: "Low confidence" },
+};
 
 // One proposed change from the email reader. Approve applies it (after you pick the project and reword the text if
 // needed); Reject discards it. Nothing changes until Approve.
@@ -18,7 +25,8 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
   const [text, setText] = useState(textPayload);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, startTransition] = useTransition();
-  const needsProject = s.kind !== "NOTE";
+  const needsProject = !REVIEW_ONLY.includes(s.kind);
+  const confidence = s.confidence ? CONFIDENCE_STYLE[s.confidence] : null;
 
   const received = s.sourceReceivedAt ? formatDate(parseDateInput(s.sourceReceivedAt.slice(0, 10))) : null;
 
@@ -27,6 +35,7 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "2px 10px", background: "#DCE8FB", color: "#1D4F9F" }}>{s.kindText}</span>
         <strong style={{ color: NAVY, fontSize: 15 }}>{s.summary}</strong>
+        {confidence && <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 999, padding: "2px 10px", background: confidence.bg, color: confidence.text }}>{confidence.label}</span>}
       </div>
 
       <div style={{ fontSize: 13, color: TEXT_MUTED }}>
@@ -38,6 +47,11 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
               Open email
             </a>
           </>
+        )}
+        {s.sourceMessageId && (
+          <div title={s.sourceMessageId} style={{ fontSize: 12, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 520 }}>
+            Outlook message ID: {s.sourceMessageId}
+          </div>
         )}
       </div>
 
@@ -62,16 +76,14 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
 
       {pending ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          {needsProject && (
-            <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId ? undefined : "#F0C069" }}>
-              <option value="">{s.projectRef ? `Pick the project (email says “${s.projectRef}”)` : "Pick the project"}</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
+          <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
+            <option value="">{s.projectRef ? `Pick the project (email says “${s.projectRef}”)` : needsProject ? "Pick the project" : "No project (optional)"}</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
           {TEXT_KINDS.includes(s.kind) && (
             <button type="button" style={secondaryButton} onClick={() => setEditing(!editing)}>
               {editing ? "Done editing" : "Edit text"}
@@ -84,7 +96,7 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
-                const result = await approve(s.id, { projectId: needsProject ? projectId : null, ...(editing || text !== textPayload ? { text } : {}) });
+                const result = await approve(s.id, { projectId: projectId || null, ...(editing || text !== textPayload ? { text } : {}) });
                 setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
               })
             }

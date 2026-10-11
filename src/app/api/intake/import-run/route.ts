@@ -20,8 +20,8 @@ export async function GET(request: Request) {
   return Response.json({ lastImport: last, lastImportAt: last?.ranAt ?? null });
 }
 
-// record_import_run: body {"emailsChecked": 42, "ranAt": "<optional ISO finish time, default now>"}. Proposals created and
-// unmatched are counted by the tracker from the suggestions that arrived during the run, never taken from the agent.
+// record_import_run: body {"emailsChecked": 42, "ranAt": "<ISO time the run STARTED, default now>"}. Proposals created
+// and unmatched are counted by the tracker from the suggestions that arrived during the run, never taken from the agent.
 export async function POST(request: Request) {
   if (unauthorized(request)) return new Response("Unauthorized", { status: 401 });
 

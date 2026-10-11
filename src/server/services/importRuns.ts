@@ -33,19 +33,20 @@ export async function getLastImport(): Promise<ImportRunView | null> {
   return row ? view(row) : null;
 }
 
-// record_import_run: saves the run and claims the suggestions that arrived during it: those created after the
-// previous run finished (ranAt) up to this run's ranAt, and not already claimed. The first run claims everything
-// so far. Emails the agent skipped as irrelevant produce no suggestion, so they are never counted as unmatched.
-export async function recordImportRun(raw: unknown): Promise<ImportRunView> {
+// record_import_run: saves the run and claims every suggestion that has arrived and no earlier run has claimed.
+// The agent sends its suggestions first and records the run last, so those are the ones this run produced (the
+// first run claims everything so far). `ranAt` is when the run STARTED, so the next run's search window has no gap;
+// it plays no part in claiming. Emails the agent skipped as irrelevant produce no suggestion, so they are never
+// counted as unmatched. `claimUntil` (tests only) leaves out suggestions created after that moment.
+export async function recordImportRun(raw: unknown, claimUntil?: Date): Promise<ImportRunView> {
   const cleaned = cleanImportRun(raw);
   if (!cleaned.ok) throw new UserError(cleaned.error);
   const { ranAt, emailsChecked } = cleaned.value;
 
   const run = await prisma.$transaction(async (tx) => {
-    const previous = await tx.importRun.findFirst({ where: { ranAt: { lt: ranAt } }, orderBy: { ranAt: "desc" }, select: { ranAt: true } });
     const created = await tx.importRun.create({ data: { ranAt, emailsChecked } });
     await tx.suggestion.updateMany({
-      where: { importRunId: null, createdAt: { ...(previous ? { gt: previous.ranAt } : {}), lte: ranAt } },
+      where: { importRunId: null, ...(claimUntil ? { createdAt: { lte: claimUntil } } : {}) },
       data: { importRunId: created.id },
     });
     return created;

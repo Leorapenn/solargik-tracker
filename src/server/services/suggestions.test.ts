@@ -90,4 +90,52 @@ describe("suggestions", () => {
     const dup = await send({ kind: "CONTACT", name: "Dana Again", email: "DANA@example.com", id: `${RUN}-e`, project: projectName });
     await expect(approveSuggestion(dup.row!.id)).rejects.toThrow(/already exists/);
   });
+
+  it("applies a status change like a manual one (dates, history, phase) only on approval, and stores confidence and message id", async () => {
+    const item = await prisma.subStage.findFirstOrThrow({ where: { phase: { projectId, name: "DESIGN" } }, orderBy: { order: "asc" } });
+    const { row } = await send({
+      kind: "STATUS_CHANGE", item: item.name, phase: "DESIGN", status: "in progress", id: `${RUN}-s1`, project: projectName,
+      confidence: "high", source: { from: "x@y.com", subject: "subj", messageId: "MSG-S1" },
+    });
+    expect(row).toMatchObject({ status: "PENDING", confidence: "HIGH", sourceMessageId: "MSG-S1", projectId });
+    expect((await prisma.subStage.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("NOT_STARTED"); // nothing yet
+
+    expect(await approveSuggestion(row!.id)).toBe(`"${item.name}" set to In progress.`);
+    const after = await prisma.subStage.findUniqueOrThrow({ where: { id: item.id } });
+    expect(after).toMatchObject({ status: "IN_PROGRESS" });
+    expect(after.startedAt).not.toBeNull();
+    expect(await prisma.statusEvent.findFirst({ where: { subStageId: item.id, source: "inbox", toStatus: "IN_PROGRESS" } })).not.toBeNull();
+    expect((await prisma.phase.findUniqueOrThrow({ where: { projectId_name: { projectId, name: "DESIGN" } } })).status).toBe("IN_PROGRESS");
+
+    // the same status again changes nothing and says so
+    const again = await send({ kind: "STATUS_CHANGE", item: item.name, phase: "DESIGN", status: "IN_PROGRESS", id: `${RUN}-s2`, project: projectName });
+    expect(await approveSuggestion(again.row!.id)).toBe(`"${item.name}" was already In progress.`);
+    expect(await prisma.statusEvent.count({ where: { subStageId: item.id, source: "inbox" } })).toBe(1);
+  });
+
+  it("refuses a status that doesn't exist, and won't guess between several matching items", async () => {
+    const r = await createSuggestions([{ kind: "STATUS_CHANGE", item: "Anything", status: "Delayed", summary: "s", id: `${RUN}-s3` }]);
+    expect(r).toMatchObject({ created: 0 });
+    expect(r.rejected[0].error).toMatch(/status/);
+
+    const { row } = await send({ kind: "STATUS_CHANGE", item: "Delivery", phase: "SUPPLY", status: "DONE", id: `${RUN}-s4`, project: projectName });
+    await expect(approveSuggestion(row!.id)).rejects.toThrow(/Several items match/);
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: row!.id } })).status).toBe("PENDING");
+    expect(await prisma.subStage.count({ where: { phase: { projectId }, name: { contains: "Delivery" }, status: "DONE" } })).toBe(0);
+  });
+
+  it("approving an action item or a correspondence note only marks it reviewed, with or without a project", async () => {
+    const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
+
+    const action = await send({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan", by: "end of next week", id: `${RUN}-ai` });
+    expect(action.row?.projectId).toBeNull(); // no project: it would be listed as Unmatched
+    expect(await approveSuggestion(action.row!.id)).toBe("Noted.");
+    expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: action.row!.id } })).toMatchObject({ status: "APPROVED", projectId: null });
+
+    const note = await send({ kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed the site access dates", id: `${RUN}-cn`, project: projectName });
+    expect(await approveSuggestion(note.row!.id)).toBe("Noted.");
+    expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: note.row!.id } })).toMatchObject({ status: "APPROVED", projectId });
+
+    expect(await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } })).toEqual(before);
+  });
 });

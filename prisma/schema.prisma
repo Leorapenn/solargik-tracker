@@ -322,6 +322,8 @@ model Suggestion {
   sourceSubject    String?
   sourceReceivedAt DateTime?
   sourceLink       String? // link to the email (e.g. Outlook on the web)
+  sourceMessageId  String? // the sender's own id for the email (e.g. the Outlook message id)
+  confidence       String? // HIGH | MEDIUM | LOW: how sure the sender says it is
   externalId       String?    @unique // the sender's own id for it, so a retry doesn't create a duplicate
   status           String     @default("PENDING") // PENDING | APPROVED | REJECTED
   resultNote       String?

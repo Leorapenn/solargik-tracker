@@ -83,8 +83,14 @@ export type ProjectView = {
   lifecycle: string; // ACTIVE | PRE_NTP | ON_HOLD | SUSPENDED | CANCELLED
   stage: string | null; // the monday.com stage label
   status: string | null; // the monday.com status label
-  phases: { phase: string; status: string }[]; // each phase's status: NOT_STARTED | IN_PROGRESS | BLOCKED | DONE
+  // each phase's status (NOT_STARTED | IN_PROGRESS | BLOCKED | DONE) and its current typed update with the day it was last changed
+  phases: { phase: string; status: string; update: { text: string; date: string } | null }[];
+  // proposals already waiting for a person's review (newest first), so the agent doesn't propose the same again
+  pendingProposals: { kind: string; summary: string }[];
 };
+
+export const MAX_PENDING_PER_PROJECT = 15;
+const MAX_UPDATE_TEXT = 600;
 
 export type ProjectSource = {
   id: string;
@@ -94,7 +100,8 @@ export type ProjectSource = {
   mondayStatus: string | null;
   sharepointLink: string | null;
   customer: { id: string; name: string };
-  phases: { name: string; status: string; order: number }[];
+  phases: { name: string; status: string; order: number; statusUpdate: string | null; statusUpdateAt: Date | null }[];
+  suggestions: { kind: string; summary: string }[]; // PENDING ones, newest first
 };
 
 export function shapeProject(p: ProjectSource): ProjectView {
@@ -116,6 +123,13 @@ export function shapeProject(p: ProjectSource): ProjectView {
     lifecycle: p.lifecycle,
     stage: p.mondayStage,
     status: p.mondayStatus,
-    phases: [...p.phases].sort((a, b) => a.order - b.order).map((ph) => ({ phase: ph.name, status: ph.status })),
+    phases: [...p.phases]
+      .sort((a, b) => a.order - b.order)
+      .map((ph) => ({
+        phase: ph.name,
+        status: ph.status,
+        update: ph.statusUpdate?.trim() && ph.statusUpdateAt ? { text: ph.statusUpdate.trim().slice(0, MAX_UPDATE_TEXT), date: ph.statusUpdateAt.toISOString().slice(0, 10) } : null,
+      })),
+    pendingProposals: p.suggestions.slice(0, MAX_PENDING_PER_PROJECT).map((s) => ({ kind: s.kind, summary: s.summary })),
   };
 }

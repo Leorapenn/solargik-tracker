@@ -73,6 +73,60 @@ describe("matchProject", () => {
   });
 });
 
+describe("cleanIncoming: status changes, action items, correspondence, confidence and message id", () => {
+  const ok = (raw: Record<string, unknown>) => {
+    const r = cleanIncoming({ ...base, ...raw });
+    if (!r.ok) throw new Error(r.error);
+    return r.value;
+  };
+  const error = (raw: Record<string, unknown>) => {
+    const r = cleanIncoming({ ...base, ...raw });
+    return r.ok ? null : r.error;
+  };
+
+  it("accepts a status change only to one of the four statuses 360 has", () => {
+    expect(ok({ kind: "status_change", item: "Layout Approval", status: "in progress" }).payload).toEqual({ kind: "STATUS_CHANGE", phase: null, item: "Layout Approval", status: "IN_PROGRESS" });
+    expect(ok({ kind: "STATUS_CHANGE", item: "BOM Release", phase: "02 Supply", status: "Done" }).payload).toMatchObject({ phase: "SUPPLY", status: "DONE" });
+    expect(ok({ kind: "STATUS_CHANGE", item: "X", status: "not-started" }).payload).toMatchObject({ status: "NOT_STARTED" });
+    for (const status of ["Completed", "Delayed", "Stuck", "", undefined, "7 Hold"]) expect(error({ kind: "STATUS_CHANGE", item: "X", status })).toMatch(/status/);
+    expect(error({ kind: "STATUS_CHANGE", status: "DONE" })).toMatch(/item/);
+    expect(error({ kind: "STATUS_CHANGE", item: "X", status: "DONE", phase: "Nope" })).toMatch(/phase/);
+  });
+
+  it("accepts an action item with who and by when, and a correspondence note", () => {
+    expect(ok({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan Rossi", by: "end of next week" }).payload).toEqual({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan Rossi", by: "end of next week" });
+    expect(ok({ kind: "ACTION_ITEM", text: "Solargik to confirm the delivery date" }).payload).toEqual({ kind: "ACTION_ITEM", text: "Solargik to confirm the delivery date", who: null, by: null });
+    expect(error({ kind: "ACTION_ITEM", who: "Dan" })).toMatch(/text/);
+    expect(ok({ kind: "CORRESPONDENCE_NOTE", text: "  Customer confirmed the site access dates  " }).payload).toEqual({ kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed the site access dates" });
+    expect(error({ kind: "CORRESPONDENCE_NOTE" })).toMatch(/text/);
+  });
+
+  it("keeps the confidence (any case) and the email's own message id; refuses another confidence", () => {
+    const c = ok({ kind: "NOTE", text: "x", confidence: "Medium", source: { ...base.source, messageId: "AAMkAD-123=" } });
+    expect(c).toMatchObject({ confidence: "MEDIUM", sourceMessageId: "AAMkAD-123=" });
+    expect(ok({ kind: "NOTE", text: "x" })).toMatchObject({ confidence: null, sourceMessageId: null });
+    expect(error({ kind: "NOTE", text: "x", confidence: "certain" })).toMatch(/confidence/);
+  });
+
+  it("says in plain words what approving a status change or an action item does", () => {
+    expect(describePayload(ok({ kind: "STATUS_CHANGE", item: "Layout Approval", phase: "DESIGN", status: "DONE" }).payload)).toBe('Set "Layout Approval" (Design) to Done');
+    expect(describePayload(ok({ kind: "ACTION_ITEM", text: "Send the layout", who: "Dan", by: "Friday" }).payload)).toBe("Action item for Dan, by Friday: Send the layout");
+  });
+});
+
+describe("suggestionFingerprint with a message id", () => {
+  it("identifies the email by its message id when there is one, so a different link or subject changes nothing", () => {
+    const withId = (over: Record<string, unknown>) => {
+      const r = cleanIncoming({ ...base, kind: "NOTE", text: "Same point", ...over, source: { ...base.source, messageId: "MSG-1", ...(over.source as object | undefined) } });
+      if (!r.ok) throw new Error(r.error);
+      return suggestionFingerprint(r.value);
+    };
+    expect(withId({})).toBe(withId({ source: { link: "https://outlook.office.com/mail/other", subject: "Re: RF1 update" } }));
+    expect(withId({})).not.toBe(withId({ source: { messageId: "MSG-2" } }));
+    expect(withId({})).not.toBe(withId({ text: "Another point" }));
+  });
+});
+
 describe("suggestionFingerprint", () => {
   const clean = (over: Record<string, unknown> = {}) => {
     const r = cleanIncoming({ ...base, kind: "PHASE_UPDATE", phase: "DESIGN", text: "Waiting on geotech", ...over });

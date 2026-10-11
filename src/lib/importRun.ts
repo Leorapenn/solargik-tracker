@@ -12,7 +12,8 @@ const MAX_COUNT = 1_000_000;
 // a clock that is a little fast is fine; a time well in the future is a mistake
 const FUTURE_SLACK_MS = 10 * 60 * 1000;
 
-// `ranAt` is when the run finished: optional (default: now), an ISO date-time that has already happened.
+// `ranAt` is when the run STARTED (so the next run searches from there and misses nothing): optional (default: now),
+// an ISO date-time that has already happened.
 export function cleanImportRun(raw: unknown, now: Date = new Date()): Result<CleanImportRun> {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return { ok: false, error: "Send a JSON object." };
   const body = raw as Record<string, unknown>;

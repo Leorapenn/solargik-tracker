@@ -1,11 +1,12 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type PhaseName } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { toDateInputValue } from "@/lib/dates";
 import { cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
-import { KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchProject, suggestionFingerprint, type Payload, type SuggestionKind } from "@/lib/suggestions";
+import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
+import { patchSubStages } from "@/server/services/subStages";
 
 // ---- intake: what an outside reader sends ----
 
@@ -44,6 +45,8 @@ export async function createSuggestions(list: unknown[]): Promise<IntakeResult> 
           sourceSubject: c.sourceSubject,
           sourceReceivedAt: c.sourceReceivedAt,
           sourceLink: c.sourceLink,
+          sourceMessageId: c.sourceMessageId,
+          confidence: c.confidence,
           externalId,
         },
       });
@@ -74,6 +77,8 @@ export type SuggestionView = {
   sourceSubject: string | null;
   sourceReceivedAt: string | null;
   sourceLink: string | null;
+  sourceMessageId: string | null;
+  confidence: Confidence | null;
   status: string;
   resultNote: string | null;
   createdAt: string;
@@ -103,6 +108,8 @@ export async function listSuggestions(status: "PENDING" | "APPROVED" | "REJECTED
       sourceSubject: r.sourceSubject,
       sourceReceivedAt: r.sourceReceivedAt ? r.sourceReceivedAt.toISOString() : null,
       sourceLink: r.sourceLink,
+      sourceMessageId: r.sourceMessageId,
+      confidence: (r.confidence as Confidence | null) ?? null,
       status: r.status,
       resultNote: r.resultNote,
       createdAt: r.createdAt.toISOString(),
@@ -118,8 +125,23 @@ export async function pendingCount(): Promise<number> {
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
+// The one item of the project the email means: an exact name first, else a name that contains it. Refuses when none
+// or several match, so a person fixes it on the project page instead of the wrong item changing.
+async function findItem(projectId: string, projectName: string, name: string, phase: PhaseName | null): Promise<{ id: string; name: string; status: string }> {
+  const items = await prisma.subStage.findMany({
+    where: { phase: { projectId, ...(phase ? { name: phase } : {}) } },
+    select: { id: true, name: true, status: true },
+  });
+  const exact = items.filter((i) => same(i.name, name));
+  const found = exact.length > 0 ? exact : items.filter((i) => i.name.toLowerCase().includes(name.toLowerCase()));
+  if (found.length === 0) throw new UserError(`${projectName} has no item called "${name}".`);
+  if (found.length > 1) throw new UserError(`Several items match "${name}". Reject this and make the change on the project page.`);
+  return found[0];
+}
+
 async function applyPayload(payload: Payload, projectId: string | null): Promise<string> {
-  if (payload.kind === "NOTE") return "Noted.";
+  // these only record that a person looked at them; they change nothing
+  if (payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE") return "Noted."; // = REVIEW_ONLY_KINDS
   if (!projectId) throw new UserError("Choose which project this belongs to first.");
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, customerId: true } });
   if (!project) throw new UserError("That project no longer exists.");
@@ -132,16 +154,18 @@ async function applyPayload(payload: Payload, projectId: string | null): Promise
   }
 
   if (payload.kind === "ITEM_UPDATE") {
-    const items = await prisma.subStage.findMany({
-      where: { phase: { projectId, ...(payload.phase ? { name: payload.phase } : {}) } },
-      select: { id: true, name: true },
-    });
-    const exact = items.filter((i) => same(i.name, payload.item));
-    const found = exact.length > 0 ? exact : items.filter((i) => i.name.toLowerCase().includes(payload.item.toLowerCase()));
-    if (found.length === 0) throw new UserError(`${project.name} has no item called "${payload.item}".`);
-    if (found.length > 1) throw new UserError(`Several items match "${payload.item}". Reject this and add the update on the project page.`);
-    await setSubStageUpdate(found[0].id, payload.text);
-    return `Update saved on "${found[0].name}".`;
+    const item = await findItem(projectId, project.name, payload.item, payload.phase);
+    await setSubStageUpdate(item.id, payload.text);
+    return `Update saved on "${item.name}".`;
+  }
+
+  if (payload.kind === "STATUS_CHANGE") {
+    const item = await findItem(projectId, project.name, payload.item, payload.phase);
+    const label = ITEM_STATUS_LABELS[payload.status];
+    if (item.status === payload.status) return `"${item.name}" was already ${label}.`;
+    // the same path as changing the status by hand: dates are stamped, the history is written, the phase is re-derived
+    await prisma.$transaction((tx) => patchSubStages(tx, [item.id], { status: payload.status }, "inbox"), { timeout: 20000 });
+    return `"${item.name}" set to ${label}.`;
   }
 
   if (payload.kind === "MILESTONE_UPDATE") {
@@ -199,7 +223,7 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
   if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
 
   let payload = row.payload as unknown as Payload;
-  if (overrides.text !== undefined && (payload.kind === "PHASE_UPDATE" || payload.kind === "ITEM_UPDATE" || payload.kind === "NOTE")) {
+  if (overrides.text !== undefined && (payload.kind === "PHASE_UPDATE" || payload.kind === "ITEM_UPDATE" || payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE")) {
     const cleaned = cleanStatusText(overrides.text);
     if (!cleaned.ok) throw new UserError(cleaned.error);
     if (!cleaned.value) throw new UserError("The text can't be empty. Reject the suggestion instead.");
