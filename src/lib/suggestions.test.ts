@@ -114,6 +114,68 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
   });
 });
 
+describe("cleanIncoming: an impossible date is refused, not a crash", () => {
+  it("refuses 2026-13-40 and 2026-02-30 for a milestone update", () => {
+    for (const paidDate of ["2026-13-40", "2026-02-30", "0000-00-00"]) {
+      const r = cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "Milestone 1", paidDate });
+      expect(r).toEqual({ ok: false, error: `"paidDate" must be a date like 2026-10-07.` });
+    }
+  });
+});
+
+describe("cleanIncoming: change orders", () => {
+  const ok = (raw: Record<string, unknown>) => {
+    const r = cleanIncoming({ ...base, ...raw });
+    if (!r.ok) throw new Error(r.error);
+    return r.value.payload;
+  };
+  const error = (raw: Record<string, unknown>) => {
+    const r = cleanIncoming({ ...base, ...raw });
+    return r.ok ? null : r.error;
+  };
+  const co = { kind: "CHANGE_ORDER", reason: "Change Order 02: additional PDUs" };
+
+  it("accepts a new change order with only what the email states", () => {
+    expect(ok(co)).toEqual({ kind: "CHANGE_ORDER", reason: "Change Order 02: additional PDUs", amount: null, currency: null, dateSent: null, invoicedDate: null, invoiceStatus: null, paymentTermsDays: null, fileLink: null, invoiceLink: null });
+    expect(ok({ ...co, amount: 12500.5, currency: "eur", dateSent: "2026-10-07", invoicedDate: "2026-10-07", invoiceStatus: "sent", paymentTermsDays: 30, fileLink: "https://outlook.office.com/mail/1", invoiceLink: "https://outlook.office.com/mail/2" })).toMatchObject({
+      amount: "12500.5", currency: "EUR", dateSent: "2026-10-07", invoicedDate: "2026-10-07", invoiceStatus: "SENT", paymentTermsDays: 30, fileLink: "https://outlook.office.com/mail/1",
+    });
+    expect(ok({ ...co, amount: "$ 1200.00", paymentTermsDays: "10" })).toMatchObject({ amount: "1200.00", paymentTermsDays: 10 });
+    expect(ok({ ...co, paymentTermsDays: 0 })).toMatchObject({ paymentTermsDays: 0 });
+  });
+
+  it("never guesses money: only a plain number is accepted", () => {
+    for (const amount of ["12,500.50", "12.500,50", "12500,50", "twelve", "1e5", "-5", "12500.555", NaN, {}]) expect(error({ ...co, amount })).toMatch(/amount/);
+  });
+
+  it("refuses bad dates, terms, statuses, currencies, links and a missing reason", () => {
+    expect(error({ ...co, dateSent: "07/10/2026" })).toMatch(/dateSent/);
+    expect(error({ ...co, invoicedDate: "2026-13-40" })).toMatch(/invoicedDate/);
+    for (const t of [-1, 366, 1.5, "ten"]) expect(error({ ...co, paymentTermsDays: t })).toMatch(/paymentTermsDays/);
+    expect(error({ ...co, invoiceStatus: "OVERDUE" })).toMatch(/invoiceStatus/);
+    expect(error({ ...co, currency: "NIS" })).toMatch(/currency/);
+    expect(error({ ...co, fileLink: "ftp://x" })).toMatch(/fileLink/);
+    expect(error({ kind: "CHANGE_ORDER" })).toMatch(/reason/);
+    expect(error({ kind: "CHANGE_ORDER", reason: "x" })).toMatch(/reason/);
+  });
+
+  it("accepts an update of an existing change order and needs something to change", () => {
+    expect(ok({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02", invoicedDate: "2026-10-09", invoiceStatus: "PAID", invoiceLink: "https://outlook.office.com/mail/3" })).toEqual({
+      kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02", invoicedDate: "2026-10-09", invoiceStatus: "PAID", paymentTermsDays: null, fileLink: null, invoiceLink: "https://outlook.office.com/mail/3", payslipLink: null,
+    });
+    expect(error({ kind: "CHANGE_ORDER_UPDATE", invoiceStatus: "PAID" })).toMatch(/changeOrder/);
+    expect(error({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02" })).toMatch(/needs/);
+  });
+
+  it("says in plain words what approving would do", () => {
+    expect(describePayload(ok({ ...co, amount: 12500.5, currency: "EUR", invoicedDate: "2026-10-07", paymentTermsDays: 10, fileLink: "https://x.com/a" }))).toBe(
+      'Create change order "Change Order 02: additional PDUs" on Payments: amount 12500.5 EUR, invoiced 2026-10-07, Net+10, change order file link',
+    );
+    expect(describePayload(ok(co))).toContain("no amount stated");
+    expect(describePayload(ok({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02", invoiceStatus: "PAID", invoiceLink: "https://x.com/i" }))).toBe('For change order "Change Order 02": mark the invoice as paid, add the invoice link');
+  });
+});
+
 describe("suggestionFingerprint with a message id", () => {
   it("identifies the email by its message id when there is one, so a different link or subject changes nothing", () => {
     const withId = (over: Record<string, unknown>) => {

@@ -124,6 +124,77 @@ describe("suggestions", () => {
     expect(await prisma.subStage.count({ where: { phase: { projectId }, name: { contains: "Delivery" }, status: "DONE" } })).toBe(0);
   });
 
+  describe("change orders", () => {
+    const orders = () => prisma.changeOrder.findMany({ where: { projectId }, orderBy: { createdAt: "asc" } });
+    const emailLink = (n: string) => `https://outlook.office.com/mail/${RUN}-${n}`;
+    const reason = `Change Order 02: additional PDUs ${RUN}`;
+
+    it("creates the change order only on approval, with the email as its file link, and applies the reviewer's corrections", async () => {
+      const { row } = await send({
+        kind: "CHANGE_ORDER", reason, amount: 12000, currency: "USD", dateSent: "2026-10-07", id: `${RUN}-co1`, project: projectName,
+        source: { from: "x@y.com", subject: "CO 02", link: emailLink("co") },
+      });
+      expect(row).toMatchObject({ status: "PENDING", projectId });
+      expect(await orders()).toHaveLength(0); // nothing yet
+
+      // the reviewer fixes the amount and adds the invoice date and terms before approving
+      const note = await approveSuggestion(row!.id, { fields: { amount: "12500.50", invoicedDate: "2026-10-09", paymentTermsDays: "30" } });
+      expect(note).toBe(`Change order "${reason}" created on the Payments page, with its file link.`);
+      const [created] = await orders();
+      expect(created).toMatchObject({ reason, status: "SENT", invoiceStatus: "SENT", paymentTermsDays: 30, fileLink: emailLink("co"), invoiceLink: null, payslipLink: null });
+      expect(created.amount?.toString()).toBe("12500.5");
+      expect(created.dateSent?.toISOString().slice(0, 10)).toBe("2026-10-07");
+      expect(created.invoicedDate?.toISOString().slice(0, 10)).toBe("2026-10-09");
+      // what was approved (with the corrections) is what is kept on the proposal
+      expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: row!.id } })).payload).toMatchObject({ amount: "12500.50", invoicedDate: "2026-10-09" });
+    });
+
+    it("refuses a second change order with the same name, and a bad correction, and stays pending", async () => {
+      const dup = await send({ kind: "CHANGE_ORDER", reason: reason.toLowerCase(), id: `${RUN}-co2`, project: projectName });
+      await expect(approveSuggestion(dup.row!.id)).rejects.toThrow(/already has a change order/);
+      expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: dup.row!.id } })).status).toBe("PENDING");
+
+      const other = await send({ kind: "CHANGE_ORDER", reason: `Change Order 03 ${RUN}`, id: `${RUN}-co3`, project: projectName });
+      await expect(approveSuggestion(other.row!.id, { fields: { amount: "12,5" } })).rejects.toThrow(/amount/);
+      await expect(approveSuggestion(other.row!.id, { fields: { invoicedDate: "2026-13-40" } })).rejects.toThrow(/invoicedDate/);
+      await expect(approveSuggestion(other.row!.id, { fields: { reason: "" } })).rejects.toThrow(/reason/);
+      expect(await orders()).toHaveLength(1);
+      expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: other.row!.id } })).status).toBe("PENDING");
+    });
+
+    it("won't put an amount in the wrong currency on a project", async () => {
+      const { row } = await send({ kind: "CHANGE_ORDER", reason: `Change Order 04 ${RUN}`, amount: 800, currency: "EUR", id: `${RUN}-co4`, project: projectName });
+      await expect(approveSuggestion(row!.id)).rejects.toThrow(/in EUR, but .* payments are in USD/);
+      expect(await orders()).toHaveLength(1);
+      await prisma.project.update({ where: { id: projectId }, data: { paymentCurrency: "EUR" } });
+      await approveSuggestion(row!.id);
+      expect(await orders()).toHaveLength(2);
+      await prisma.project.update({ where: { id: projectId }, data: { paymentCurrency: "USD" } });
+    });
+
+    it("updates the existing change order when its invoice arrives, instead of creating another", async () => {
+      const before = (await orders())[0];
+      const { row } = await send({
+        kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02", invoicedDate: "2026-10-12", invoiceStatus: "paid", paymentTermsDays: 45, invoiceLink: emailLink("inv"),
+        id: `${RUN}-co5`, project: projectName,
+      });
+      expect(await approveSuggestion(row!.id)).toBe(`Change order "${reason}" updated.`);
+      const orderList = await orders();
+      expect(orderList).toHaveLength(2); // none added
+      const after = orderList.find((o) => o.id === before.id)!;
+      expect(after).toMatchObject({ invoiceStatus: "PAID", status: "COMPLETE", paymentTermsDays: 45, invoiceLink: emailLink("inv"), fileLink: emailLink("co") });
+      expect(after.amount?.toString()).toBe("12500.5"); // untouched
+      expect(after.invoicedDate?.toISOString().slice(0, 10)).toBe("2026-10-12");
+    });
+
+    it("says so when the change order to update doesn't exist or is ambiguous", async () => {
+      const none = await send({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 99", invoiceStatus: "PAID", id: `${RUN}-co6`, project: projectName });
+      await expect(approveSuggestion(none.row!.id)).rejects.toThrow(/no change order called/);
+      const several = await send({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 0", invoiceStatus: "PAID", id: `${RUN}-co7`, project: projectName });
+      await expect(approveSuggestion(several.row!.id)).rejects.toThrow(/Several change orders match/);
+    });
+  });
+
   it("approving an action item or a correspondence note only marks it reviewed, with or without a project", async () => {
     const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
 

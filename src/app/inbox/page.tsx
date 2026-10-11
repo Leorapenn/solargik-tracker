@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { agentInstructions } from "@/lib/suggestions";
@@ -27,10 +27,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
 
   const [items, projects, waiting, lastRun] = await Promise.all([
     listSuggestions(status),
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, paymentCurrency: true } }),
     pendingCount(),
     getLastImport(),
   ]);
+  const projectChoices = projects.map((p) => ({ id: p.id, name: p.name, currency: p.paymentCurrency }));
   const unmatched = items.filter((s) => !s.projectId);
   const matched = items.filter((s) => s.projectId);
   const connected = Boolean(process.env.INTAKE_TOKEN && process.env.INTAKE_TOKEN.length >= 16);
@@ -96,12 +97,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         </h2>
       )}
       {(status === "PENDING" ? unmatched : items).map((s) => (
-        <SuggestionCard key={s.id} s={s} projects={projects} />
+        <SuggestionCard key={s.id} s={s} projects={projectChoices} />
       ))}
       {status === "PENDING" && unmatched.length > 0 && matched.length > 0 && (
         <h2 style={{ margin: "12px 0 0", fontSize: 16, color: NAVY }}>Matched to a project ({matched.length})</h2>
       )}
-      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projects} />)}
+      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projectChoices} />)}
 
       <details style={{ ...cardStyle, padding: "14px 20px" }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700 }}>

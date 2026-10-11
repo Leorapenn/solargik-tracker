@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import { approve, reject } from "@/server/actions/suggestions";
 import type { SuggestionView } from "@/server/services/suggestions";
 import { formatDate, parseDateInput } from "@/lib/dates";
+import { DateField } from "@/components/DateField";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
+
+// The fields of a change-order proposal a reviewer can correct before approving (text, as typed).
+type ChangeOrderFields = { reason: string; amount: string; dateSent: string; invoicedDate: string; invoiceStatus: string; paymentTermsDays: string };
+const fieldLabel = { fontSize: 12.5, fontWeight: 700, color: NAVY, display: "flex", flexDirection: "column" as const, gap: 4 };
 
 const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
 // these only record that someone looked at them, so approving needs no project (but one can still be picked)
@@ -17,9 +22,23 @@ const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string
 
 // One proposed change from the email reader. Approve applies it (after you pick the project and reword the text if
 // needed); Reject discards it. Nothing changes until Approve.
-export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: { id: string; name: string }[] }) {
+export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: { id: string; name: string; currency: string }[] }) {
   const pending = s.status === "PENDING";
   const [projectId, setProjectId] = useState(s.projectId ?? "");
+  const p = s.payload;
+  const isChangeOrder = p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE";
+  const isNewChangeOrder = p.kind === "CHANGE_ORDER";
+  const [co, setCo] = useState<ChangeOrderFields>({
+    reason: p.kind === "CHANGE_ORDER" ? p.reason : "",
+    amount: p.kind === "CHANGE_ORDER" ? (p.amount ?? "") : "",
+    dateSent: p.kind === "CHANGE_ORDER" ? (p.dateSent ?? "") : "",
+    invoicedDate: p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE" ? (p.invoicedDate ?? "") : "",
+    invoiceStatus: p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE" ? (p.invoiceStatus ?? "") : "",
+    paymentTermsDays: (p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE") && p.paymentTermsDays !== null ? String(p.paymentTermsDays) : "",
+  });
+  const projectCurrency = projects.find((x) => x.id === projectId)?.currency ?? null;
+  const emailCurrency = p.kind === "CHANGE_ORDER" ? p.currency : null;
+  const currencyClash = Boolean(emailCurrency && projectCurrency && emailCurrency !== projectCurrency);
   const [editing, setEditing] = useState(false);
   const textPayload = "text" in s.payload ? s.payload.text : "";
   const [text, setText] = useState(textPayload);
@@ -74,6 +93,70 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
         />
       )}
 
+      {pending && isChangeOrder && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", border: `1px solid ${ROW_DIVIDER}`, borderRadius: 10, background: "#FAFBFC" }}>
+          <div style={{ fontSize: 12.5, color: TEXT_MUTED }}>
+            {isNewChangeOrder ? "Check these before approving: approving creates the change order on the Payments page." : "Check these before approving: approving updates that change order on the Payments page."} Empty means not stated.
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            {isNewChangeOrder && (
+              <label style={{ ...fieldLabel, flex: "1 1 100%" }}>
+                Reason
+                <input value={co.reason} maxLength={500} onChange={(e) => setCo({ ...co, reason: e.target.value })} style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }} />
+              </label>
+            )}
+            {isNewChangeOrder && (
+              <label style={fieldLabel}>
+                Amount{projectCurrency ? ` (${projectCurrency})` : emailCurrency ? ` (${emailCurrency})` : ""}
+                <input value={co.amount} inputMode="decimal" onChange={(e) => setCo({ ...co, amount: e.target.value })} placeholder="e.g. 12500.50" style={{ ...inputStyle, width: 150 }} />
+              </label>
+            )}
+            {isNewChangeOrder && (
+              <div style={fieldLabel}>
+                Date sent
+                <DateField ariaLabel="Date the change order was sent" value={co.dateSent || null} onCommit={(c) => setCo({ ...co, dateSent: c.date ?? "" })} />
+              </div>
+            )}
+            <div style={fieldLabel}>
+              Invoice date
+              <DateField ariaLabel="Invoice date" value={co.invoicedDate || null} onCommit={(c) => setCo({ ...co, invoicedDate: c.date ?? "" })} />
+            </div>
+            <label style={fieldLabel}>
+              Invoice status
+              <select value={co.invoiceStatus} onChange={(e) => setCo({ ...co, invoiceStatus: e.target.value })} style={{ ...inputStyle, width: 130 }}>
+                <option value="">Not stated</option>
+                <option value="SENT">Sent</option>
+                <option value="PAID">Paid</option>
+              </select>
+            </label>
+            <label style={fieldLabel}>
+              Terms (days)
+              <input value={co.paymentTermsDays} inputMode="numeric" onChange={(e) => setCo({ ...co, paymentTermsDays: e.target.value })} placeholder="e.g. 30" style={{ ...inputStyle, width: 100 }} />
+            </label>
+          </div>
+          {(p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE") && (p.fileLink || p.invoiceLink || (p.kind === "CHANGE_ORDER" && s.sourceLink)) && (
+            <div style={{ fontSize: 13, display: "flex", gap: 14, flexWrap: "wrap" }}>
+              {(p.fileLink || (p.kind === "CHANGE_ORDER" && s.sourceLink)) && (
+                <a href={p.fileLink ?? s.sourceLink ?? "#"} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                  Change order file (the email)
+                </a>
+              )}
+              {p.invoiceLink && (
+                <a href={p.invoiceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                  Invoice file (the email)
+                </a>
+              )}
+              <span style={{ color: TEXT_MUTED }}>These links will be saved on the change order.</span>
+            </div>
+          )}
+          {currencyClash && (
+            <div role="alert" style={{ fontSize: 13.5, color: "#8C1D18" }}>
+              The email gives the amount in {emailCurrency}, but this project&apos;s payments are in {projectCurrency}. Approving will be refused until that is sorted out.
+            </div>
+          )}
+        </div>
+      )}
+
       {pending ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
@@ -96,7 +179,7 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
-                const result = await approve(s.id, { projectId: projectId || null, ...(editing || text !== textPayload ? { text } : {}) });
+                const result = await approve(s.id, { projectId: projectId || null, ...(editing || text !== textPayload ? { text } : {}), ...(isChangeOrder ? { fields: co } : {}) });
                 setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
               })
             }

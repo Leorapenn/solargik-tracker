@@ -3,12 +3,13 @@ import type { PhaseName } from "@prisma/client";
 import { PHASE_ORDER, phaseShortName } from "@/lib/phases";
 import { checkPhone } from "@/lib/contacts";
 import { cleanStatusText } from "@/lib/statusUpdate";
+import { CURRENCIES, formatTerms, isCurrency } from "@/lib/payments";
 
 // What an outside reader (a Dots agent reading Outlook) may PROPOSE. Nothing here changes any data: a person
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
@@ -16,6 +17,8 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   ITEM_UPDATE: "Sub-phase update",
   STATUS_CHANGE: "Status change",
   MILESTONE_UPDATE: "Payment milestone",
+  CHANGE_ORDER: "New change order (created when approved)",
+  CHANGE_ORDER_UPDATE: "Change order update",
   ACTION_ITEM: "Action item (nothing to apply)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
@@ -30,6 +33,9 @@ export const ITEM_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"] a
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 export const ITEM_STATUS_LABELS: Record<ItemStatus, string> = { NOT_STARTED: "Not started", IN_PROGRESS: "In progress", BLOCKED: "Blocked", DONE: "Done" };
 
+// Overdue is worked out from the due date, never proposed.
+export type ChangeOrderInvoiceStatus = "SENT" | "PAID";
+
 export const CONFIDENCES = ["HIGH", "MEDIUM", "LOW"] as const;
 export type Confidence = (typeof CONFIDENCES)[number];
 
@@ -39,6 +45,12 @@ export type Payload =
   | { kind: "PHASE_UPDATE"; phase: PhaseName; text: string }
   | { kind: "ITEM_UPDATE"; phase: PhaseName | null; item: string; text: string }
   | { kind: "STATUS_CHANGE"; phase: PhaseName | null; item: string; status: ItemStatus }
+  // A change order the email announces. Approving CREATES it on the Payments page (links only, never files): fileLink
+  // is the email that carries the change order document, invoiceLink the one that carries its invoice. `currency`
+  // is what the email says the amount is in; it is only checked against the project's payment currency.
+  | { kind: "CHANGE_ORDER"; reason: string; amount: string | null; currency: string | null; dateSent: string | null; invoicedDate: string | null; invoiceStatus: ChangeOrderInvoiceStatus | null; paymentTermsDays: number | null; fileLink: string | null; invoiceLink: string | null }
+  // New facts about a change order that already exists (usually its invoice). `changeOrder` names it.
+  | { kind: "CHANGE_ORDER_UPDATE"; changeOrder: string; invoicedDate: string | null; invoiceStatus: ChangeOrderInvoiceStatus | null; paymentTermsDays: number | null; fileLink: string | null; invoiceLink: string | null; payslipLink: string | null }
   | { kind: "ACTION_ITEM"; text: string; who: string | null; by: string | null }
   | { kind: "CORRESPONDENCE_NOTE"; text: string }
   | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; invoiceLink: string | null; payslipLink: string | null }
@@ -69,7 +81,12 @@ const str = (v: unknown, max: number): string | null => {
 };
 const oneLine = (v: unknown, max: number) => str(typeof v === "string" ? v.replace(/\s+/g, " ") : v, max);
 
-const validDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v) && new Date(`${v}T00:00:00Z`).toISOString().startsWith(v);
+const validDate = (v: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const d = new Date(`${v}T00:00:00Z`);
+  // an impossible date like 2026-13-40 is an Invalid Date (and toISOString would throw on it)
+  return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
+};
 
 function link(v: unknown): Result<string | null> {
   const t = str(v, 2000);
@@ -87,6 +104,35 @@ function phaseOf(v: unknown): PhaseName | null {
   const t = typeof v === "string" ? v.trim().toLowerCase().replace(/^\d+\s*[-.:)]?\s*/, "").replace(/&/g, "") : "";
   const hit = PHASE_ORDER.find((p) => p.toLowerCase() === t || phaseShortName(p).toLowerCase().replace(/&/g, "") === t);
   return hit ?? null;
+}
+
+// Money is never guessed: a plain number (or a string like "12500.50") with at most two decimals. Anything with
+// thousands separators or a decimal comma is refused, so "12.500,50" can't silently become 12.5.
+export function cleanAmount(v: unknown): Result<string | null> {
+  if (v === undefined || v === null || v === "") return { ok: true, value: null };
+  const t = typeof v === "number" ? (Number.isFinite(v) ? String(v) : "") : typeof v === "string" ? v.trim().replace(/^[$€₪£]\s?/, "") : "";
+  if (!/^\d{1,12}(\.\d{1,2})?$/.test(t)) return { ok: false, error: `"amount" must be a plain number like 12500.50 (no thousands separators, at most two decimals).` };
+  return { ok: true, value: t };
+}
+
+// Payment terms in whole days after the invoice date ("Net+10" = 10); 0 = due on invoice.
+export function cleanTermsDays(v: unknown): Result<number | null> {
+  if (v === undefined || v === null || v === "") return { ok: true, value: null };
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\d{1,3}$/.test(v.trim()) ? Number(v.trim()) : NaN;
+  if (!Number.isInteger(n) || n < 0 || n > 365) return { ok: false, error: `"paymentTermsDays" must be a whole number of days from 0 to 365.` };
+  return { ok: true, value: n };
+}
+
+function invoiceStatusOf(v: unknown): Result<ChangeOrderInvoiceStatus | null> {
+  if (v === undefined || v === null || v === "") return { ok: true, value: null };
+  const t = typeof v === "string" ? v.trim().toUpperCase() : "";
+  return t === "SENT" || t === "PAID" ? { ok: true, value: t } : { ok: false, error: `"invoiceStatus" must be SENT or PAID.` };
+}
+
+function optionalDate(raw: Record<string, unknown>, key: string): Result<string | null> {
+  const v = str(raw[key], 20);
+  if (!v) return { ok: true, value: null };
+  return validDate(v) ? { ok: true, value: v } : { ok: false, error: `"${key}" must be a date like 2026-10-07.` };
 }
 
 // "in progress", "In-Progress" and "IN_PROGRESS" all mean IN_PROGRESS; anything that isn't one of the four statuses is refused.
@@ -151,6 +197,37 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const status = itemStatusOf(raw.status);
     if (!status) return { ok: false, error: `"status" must be one of: ${ITEM_STATUSES.join(", ")}.` };
     payload = { kind, phase, item, status };
+  } else if (kind === "CHANGE_ORDER" || kind === "CHANGE_ORDER_UPDATE") {
+    const amount = kind === "CHANGE_ORDER" ? cleanAmount(raw.amount) : ({ ok: true, value: null } as Result<string | null>);
+    if (!amount.ok) return amount;
+    const sent = kind === "CHANGE_ORDER" ? optionalDate(raw, "dateSent") : ({ ok: true, value: null } as Result<string | null>);
+    if (!sent.ok) return sent;
+    const invoiced = optionalDate(raw, "invoicedDate");
+    if (!invoiced.ok) return invoiced;
+    const invStatus = invoiceStatusOf(raw.invoiceStatus);
+    if (!invStatus.ok) return invStatus;
+    const terms = cleanTermsDays(raw.paymentTermsDays);
+    if (!terms.ok) return terms;
+    const fileLink = link(raw.fileLink);
+    if (!fileLink.ok) return { ok: false, error: `fileLink: ${fileLink.error}` };
+    const invoiceLink = link(raw.invoiceLink);
+    if (!invoiceLink.ok) return { ok: false, error: `invoiceLink: ${invoiceLink.error}` };
+    if (kind === "CHANGE_ORDER") {
+      const reason = oneLine(raw.reason, 500);
+      if (!reason || reason.length < 3) return { ok: false, error: `"reason" (what the change order is for, e.g. "Change Order 02: additional PDUs") is required for CHANGE_ORDER.` };
+      const currency = raw.currency === undefined || raw.currency === null || raw.currency === "" ? null : typeof raw.currency === "string" ? raw.currency.trim().toUpperCase() : "";
+      if (currency !== null && !isCurrency(currency)) return { ok: false, error: `"currency" must be one of: ${CURRENCIES.map((c) => c.code).join(", ")}. If the email uses another currency, leave it out and say so in the reason.` };
+      payload = { kind, reason, amount: amount.value, currency, dateSent: sent.value, invoicedDate: invoiced.value, invoiceStatus: invStatus.value, paymentTermsDays: terms.value, fileLink: fileLink.value, invoiceLink: invoiceLink.value };
+    } else {
+      const changeOrder = oneLine(raw.changeOrder, 200);
+      if (!changeOrder) return { ok: false, error: `"changeOrder" (which change order, e.g. "Change Order 02") is required for CHANGE_ORDER_UPDATE.` };
+      const payslipLink = link(raw.payslipLink);
+      if (!payslipLink.ok) return { ok: false, error: `payslipLink: ${payslipLink.error}` };
+      if (!invoiced.value && !invStatus.value && terms.value === null && !fileLink.value && !invoiceLink.value && !payslipLink.value) {
+        return { ok: false, error: "A CHANGE_ORDER_UPDATE needs an invoice date, an invoice status, payment terms or a link." };
+      }
+      payload = { kind, changeOrder, invoicedDate: invoiced.value, invoiceStatus: invStatus.value, paymentTermsDays: terms.value, fileLink: fileLink.value, invoiceLink: invoiceLink.value, payslipLink: payslipLink.value };
+    }
   } else if (kind === "ACTION_ITEM") {
     const t = text("text", true);
     if (!t.ok) return t;
@@ -259,6 +336,7 @@ export function agentInstructions(endpoint: string): string {
     "",
     "Rules:",
     "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'. Put the email's own id in source.messageId, and say how sure you are in 'confidence' (high, medium or low).",
+    "- CHANGE_ORDER when an email announces a NEW change order: reason (what it is for, e.g. \"Change Order 02: additional PDUs\"), and only what the email states: amount as a plain number (no thousands separators), currency, dateSent, invoicedDate, paymentTermsDays. Put this email's Outlook web link in fileLink when the change order document is attached to it. Approving it CREATES the change order on the Payments page, so never guess an amount, date or term. When the INVOICE for an existing change order arrives, use CHANGE_ORDER_UPDATE (changeOrder = its name as in the project's changeOrders list, invoicedDate, invoiceStatus SENT or PAID, paymentTermsDays, and the email's link in invoiceLink) instead of creating a second one.",
     "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM (who, by when) is for a clear request or commitment; CORRESPONDENCE_NOTE for other meaningful communication. Say in the text whether it was the customer or Solargik staff.",
     "- Give each suggestion a unique 'id' (the email's id plus a number) so a retry doesn't create duplicates. Without an id the tracker still skips an identical proposal from the same email, but an id is more reliable.",
     "- If an email is clearly about one of our customers but you can't tell which project, still send a suggestion (a NOTE if nothing else fits) and leave the project out: it will show under Unmatched for a person to assign. If an email is irrelevant (newsletters, unrelated senders), send nothing.",
@@ -276,6 +354,28 @@ export function describePayload(p: Payload): string {
       return `Set the update of "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to: ${p.text}`;
     case "STATUS_CHANGE":
       return `Set "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to ${ITEM_STATUS_LABELS[p.status]}`;
+    case "CHANGE_ORDER": {
+      const parts = [
+        p.amount ? `amount ${p.amount}${p.currency ? ` ${p.currency}` : ""}` : "no amount stated",
+        p.dateSent ? `sent ${p.dateSent}` : null,
+        p.invoicedDate ? `invoiced ${p.invoicedDate}${p.invoiceStatus === "PAID" ? " and paid" : ""}` : null,
+        p.paymentTermsDays !== null ? formatTerms(p.paymentTermsDays) : null,
+        p.fileLink ? "change order file link" : null,
+        p.invoiceLink ? "invoice link" : null,
+      ].filter(Boolean);
+      return `Create change order "${p.reason}" on Payments: ${parts.join(", ")}`;
+    }
+    case "CHANGE_ORDER_UPDATE": {
+      const parts = [
+        p.invoicedDate ? `invoice date ${p.invoicedDate}` : null,
+        p.invoiceStatus === "PAID" ? "mark the invoice as paid" : p.invoiceStatus === "SENT" ? "mark the invoice as sent" : null,
+        p.paymentTermsDays !== null ? `terms ${formatTerms(p.paymentTermsDays)}` : null,
+        p.fileLink ? "add the change order file link" : null,
+        p.invoiceLink ? "add the invoice link" : null,
+        p.payslipLink ? "add the payslip link" : null,
+      ].filter(Boolean);
+      return `For change order "${p.changeOrder}": ${parts.join(", ")}`;
+    }
     case "ACTION_ITEM":
       return `Action item${p.who ? ` for ${p.who}` : ""}${p.by ? `, by ${p.by}` : ""}: ${p.text}`;
     case "CORRESPONDENCE_NOTE":

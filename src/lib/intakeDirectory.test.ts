@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { emailDomain, folderNameFromLink, projectNamePart, projectNumber, shapeCustomer, shapeProject } from "./intakeDirectory";
 
 describe("emailDomain / projectNumber / projectNamePart", () => {
@@ -76,6 +76,7 @@ describe("shapeProject", () => {
       { kind: "NOTE", summary: "Customer asked about delivery timing" },
       { kind: "STATUS_CHANGE", summary: "Layout approval is done" },
     ],
+    changeOrders: [{ reason: "  Change Order 02:   additional PDUs ", status: "SENT", invoiceStatus: null }],
   };
 
   it("gives number, name, other names, customer, stage, statuses and the phases in order", () => {
@@ -98,6 +99,12 @@ describe("shapeProject", () => {
     expect(shapeProject({ ...source, suggestions: many }).pendingProposals).toHaveLength(15);
   });
 
+  it("lists each change order by name and state only: never an amount", () => {
+    const v = shapeProject(source);
+    expect(v.changeOrders).toEqual([{ name: "Change Order 02: additional PDUs", status: "SENT", invoiceStatus: null }]);
+    expect(Object.keys(v.changeOrders[0]).sort()).toEqual(["invoiceStatus", "name", "status"]);
+  });
+
   it("shortens a very long phase update", () => {
     const long = { ...source, phases: [{ name: "DESIGN", status: "DONE", order: 1, statusUpdate: "x".repeat(2000), statusUpdateAt: new Date("2026-10-06T00:00:00Z") }] };
     expect(shapeProject(long).phases[0].update?.text).toHaveLength(600);
@@ -105,7 +112,7 @@ describe("shapeProject", () => {
 
   it("contains exactly the agreed fields and never the SharePoint link", () => {
     const v = shapeProject(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "customer", "id", "lifecycle", "name", "number", "pendingProposals", "phases", "stage", "status"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "name", "number", "pendingProposals", "phases", "stage", "status"]);
     for (const ph of v.phases) expect(Object.keys(ph).sort()).toEqual(["phase", "status", "update"]);
     expect(JSON.stringify(v)).not.toMatch(/https?:|sharepoint\.com/i);
   });

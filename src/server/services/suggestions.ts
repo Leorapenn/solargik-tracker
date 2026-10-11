@@ -2,7 +2,8 @@ import { Prisma, type PhaseName } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { toDateInputValue } from "@/lib/dates";
-import { cleanMilestone, type MilestoneInput } from "@/lib/payments";
+import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/payments";
+import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
 import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
@@ -139,14 +140,16 @@ async function findItem(projectId: string, projectName: string, name: string, ph
   return found[0];
 }
 
-async function applyPayload(payload: Payload, projectId: string | null): Promise<string> {
+const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
+
+async function applyPayload(payload: Payload, projectId: string | null, sourceLink: string | null = null): Promise<string> {
   // these only record that a person looked at them; they change nothing
   // (= REVIEW_ONLY_KINDS) With a project they are listed on its page under "Correspondence and actions".
   if (payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE") {
     return projectId ? "Saved on the project page under Correspondence and actions." : "Noted. It has no project, so no project page shows it.";
   }
   if (!projectId) throw new UserError("Choose which project this belongs to first.");
-  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, customerId: true } });
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, customerId: true, paymentCurrency: true } });
   if (!project) throw new UserError("That project no longer exists.");
 
   if (payload.kind === "PHASE_UPDATE") {
@@ -193,7 +196,6 @@ async function applyPayload(payload: Payload, projectId: string | null): Promise
     };
     const cleaned = cleanMilestone(input);
     if (!cleaned.ok) throw new UserError(cleaned.error);
-    const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
     await prisma.milestone.update({
       where: { id: m.id },
       data: {
@@ -205,6 +207,64 @@ async function applyPayload(payload: Payload, projectId: string | null): Promise
       },
     });
     return `"${m.label}" updated.`;
+  }
+
+  // A change order is created exactly as the Payments page would save it (same validation). Files are never copied:
+  // fileLink / invoiceLink are links, usually to the email that carries the document.
+  if (payload.kind === "CHANGE_ORDER") {
+    if (payload.currency && payload.currency !== project.paymentCurrency) {
+      throw new UserError(`The email gives the amount in ${payload.currency}, but ${project.name}'s payments are in ${project.paymentCurrency}. Check the amount, or change the currency on the Payments page first, then approve again.`);
+    }
+    const existing = await prisma.changeOrder.findMany({ where: { projectId }, select: { reason: true } });
+    if (existing.length >= MAX_CHANGE_ORDERS) throw new UserError(`${project.name} already has ${MAX_CHANGE_ORDERS} change orders.`);
+    if (existing.some((c) => same(c.reason, payload.reason))) throw new UserError(`${project.name} already has a change order called "${payload.reason}". Update it on the Payments page, or reject this.`);
+    const cleaned = cleanChangeOrder({
+      id: "",
+      reason: payload.reason,
+      status: "SENT",
+      amount: payload.amount ?? "",
+      dateSent: payload.dateSent ?? "",
+      invoicedDate: payload.invoicedDate ?? "",
+      invoiceStatus: payload.invoiceStatus ?? (payload.invoicedDate ? "SENT" : ""),
+      paymentTermsDays: payload.paymentTermsDays === null ? "" : String(payload.paymentTermsDays),
+      fileLink: payload.fileLink ?? sourceLink ?? "",
+      invoiceLink: payload.invoiceLink ?? "",
+      payslipLink: "",
+    });
+    if (!cleaned.ok) throw new UserError(cleaned.error);
+    const c = cleaned.value;
+    await prisma.changeOrder.create({
+      data: { projectId, reason: c.reason, status: c.status, amount: c.amount, dateSent: day(c.dateSent), invoicedDate: day(c.invoicedDate), invoiceStatus: c.invoiceStatus, paymentTermsDays: c.paymentTermsDays, fileLink: c.fileLink, invoiceLink: c.invoiceLink, payslipLink: c.payslipLink },
+    });
+    return `Change order "${c.reason}" created on the Payments page${c.fileLink ? ", with its file link" : ""}.`;
+  }
+
+  if (payload.kind === "CHANGE_ORDER_UPDATE") {
+    const orders = await prisma.changeOrder.findMany({ where: { projectId } });
+    const exact = orders.filter((c) => same(c.reason, payload.changeOrder));
+    const found = exact.length > 0 ? exact : orders.filter((c) => c.reason.toLowerCase().includes(payload.changeOrder.toLowerCase()));
+    if (found.length !== 1) throw new UserError(found.length === 0 ? `${project.name} has no change order called "${payload.changeOrder}".` : `Several change orders match "${payload.changeOrder}". Reject this and update the right one on the Payments page.`);
+    const c = found[0];
+    const cleaned = cleanChangeOrder({
+      id: c.id,
+      reason: c.reason,
+      status: c.status,
+      amount: c.amount === null ? "" : c.amount.toString(),
+      dateSent: c.dateSent ? toDateInputValue(c.dateSent) : "",
+      invoicedDate: payload.invoicedDate ?? (c.invoicedDate ? toDateInputValue(c.invoicedDate) : ""),
+      invoiceStatus: payload.invoiceStatus ?? c.invoiceStatus ?? (payload.invoicedDate ? "SENT" : ""),
+      paymentTermsDays: payload.paymentTermsDays !== null ? String(payload.paymentTermsDays) : c.paymentTermsDays === null ? "" : String(c.paymentTermsDays),
+      fileLink: payload.fileLink ?? c.fileLink ?? "",
+      invoiceLink: payload.invoiceLink ?? c.invoiceLink ?? "",
+      payslipLink: payload.payslipLink ?? c.payslipLink ?? "",
+    });
+    if (!cleaned.ok) throw new UserError(cleaned.error);
+    const n = cleaned.value;
+    await prisma.changeOrder.update({
+      where: { id: c.id },
+      data: { status: n.status, invoicedDate: day(n.invoicedDate), invoiceStatus: n.invoiceStatus, paymentTermsDays: n.paymentTermsDays, fileLink: n.fileLink, invoiceLink: n.invoiceLink, payslipLink: n.payslipLink },
+    });
+    return `Change order "${c.reason}" updated.`;
   }
 
   // CONTACT
@@ -220,7 +280,11 @@ async function applyPayload(payload: Payload, projectId: string | null): Promise
 
 // Approves a pending suggestion: applies it, and marks it approved. `overrides` lets the reviewer pick the project
 // and reword the text first. If applying fails (an unknown item, say) it stays pending and the reason is returned.
-export async function approveSuggestion(id: string, overrides: { projectId?: string | null; text?: string } = {}): Promise<string> {
+// What the reviewer can correct on a change-order card before approving (empty text clears a value).
+export const CHANGE_ORDER_EDIT_KEYS = ["reason", "amount", "dateSent", "invoicedDate", "invoiceStatus", "paymentTermsDays"] as const;
+export type ChangeOrderEdits = Partial<Record<(typeof CHANGE_ORDER_EDIT_KEYS)[number], string>>;
+
+export async function approveSuggestion(id: string, overrides: { projectId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<string> {
   const row = await prisma.suggestion.findUnique({ where: { id } });
   if (!row) throw new UserError("That suggestion no longer exists.");
   if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
@@ -232,9 +296,20 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
     if (!cleaned.value) throw new UserError("The text can't be empty. Reject the suggestion instead.");
     payload = { ...payload, text: cleaned.value };
   }
+  // corrections to a change order go through the same validation as an incoming proposal
+  if (overrides.fields && (payload.kind === "CHANGE_ORDER" || payload.kind === "CHANGE_ORDER_UPDATE")) {
+    const edits: Record<string, string> = {};
+    for (const key of CHANGE_ORDER_EDIT_KEYS) {
+      const value = overrides.fields[key];
+      if (typeof value === "string" && !(key === "reason" && payload.kind === "CHANGE_ORDER_UPDATE")) edits[key] = value;
+    }
+    const merged = cleanIncoming({ ...payload, ...edits, summary: row.summary });
+    if (!merged.ok) throw new UserError(merged.error);
+    payload = merged.value.payload;
+  }
   const projectId = overrides.projectId === undefined ? row.projectId : overrides.projectId;
 
-  const note = await applyPayload(payload, projectId);
+  const note = await applyPayload(payload, projectId, row.sourceLink);
   // claim it only if it is still pending, so a double click can't apply it twice
   const claimed = await prisma.suggestion.updateMany({
     where: { id, status: "PENDING" },

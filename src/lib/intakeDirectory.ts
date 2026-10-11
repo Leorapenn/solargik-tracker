@@ -87,6 +87,8 @@ export type ProjectView = {
   phases: { phase: string; status: string; update: { text: string; date: string } | null }[];
   // proposals already waiting for a person's review (newest first), so the agent doesn't propose the same again
   pendingProposals: { kind: string; summary: string }[];
+  // the project's change orders (their names and state only, no amounts), so an invoice can update the right one
+  changeOrders: { name: string; status: string; invoiceStatus: string | null }[];
 };
 
 export const MAX_PENDING_PER_PROJECT = 15;
@@ -102,6 +104,7 @@ export type ProjectSource = {
   customer: { id: string; name: string };
   phases: { name: string; status: string; order: number; statusUpdate: string | null; statusUpdateAt: Date | null }[];
   suggestions: { kind: string; summary: string }[]; // PENDING ones, newest first
+  changeOrders: { reason: string; status: string; invoiceStatus: string | null }[];
 };
 
 export function shapeProject(p: ProjectSource): ProjectView {
@@ -131,5 +134,6 @@ export function shapeProject(p: ProjectSource): ProjectView {
         update: ph.statusUpdate?.trim() && ph.statusUpdateAt ? { text: ph.statusUpdate.trim().slice(0, MAX_UPDATE_TEXT), date: ph.statusUpdateAt.toISOString().slice(0, 10) } : null,
       })),
     pendingProposals: p.suggestions.slice(0, MAX_PENDING_PER_PROJECT).map((s) => ({ kind: s.kind, summary: s.summary })),
+    changeOrders: p.changeOrders.map((c) => ({ name: c.reason.replace(/\s+/g, " ").trim().slice(0, 150), status: c.status, invoiceStatus: c.invoiceStatus })),
   };
 }

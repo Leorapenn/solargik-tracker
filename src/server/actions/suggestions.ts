@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
-import { approveSuggestion, rejectSuggestion } from "@/server/services/suggestions";
+import { CHANGE_ORDER_EDIT_KEYS, approveSuggestion, rejectSuggestion, type ChangeOrderEdits } from "@/server/services/suggestions";
 
 function refresh() {
   revalidatePath("/inbox");
@@ -15,10 +15,18 @@ function refresh() {
 }
 
 // Approving is the only way a suggestion changes real data. `overrides` = the project picked and the reworded text.
-export async function approve(id: string, overrides: { projectId?: string | null; text?: string } = {}): Promise<ActionResult<{ note: string }>> {
+export async function approve(id: string, overrides: { projectId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<ActionResult<{ note: string }>> {
   await requireActionAuth();
   return run(async () => {
-    const note = await approveSuggestion(id, overrides);
+    // only the known text fields of a change order can be corrected, and only as text
+    const fields: ChangeOrderEdits = {};
+    if (overrides.fields && typeof overrides.fields === "object") {
+      for (const key of CHANGE_ORDER_EDIT_KEYS) {
+        const v = (overrides.fields as Record<string, unknown>)[key];
+        if (typeof v === "string") fields[key] = v.slice(0, 600);
+      }
+    }
+    const note = await approveSuggestion(id, { projectId: overrides.projectId, text: overrides.text, ...(overrides.fields ? { fields } : {}) });
     refresh();
     return { note };
   });

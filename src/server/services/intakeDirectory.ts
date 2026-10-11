@@ -38,6 +38,7 @@ export async function listProjectsForMatching(): Promise<ProjectView[]> {
       customer: { select: { id: true, name: true } },
       phases: { select: { name: true, status: true, order: true, statusUpdate: true, statusUpdateAt: true } },
       suggestions: { where: { status: "PENDING" }, orderBy: { createdAt: "desc" }, take: MAX_PENDING_PER_PROJECT, select: { kind: true, summary: true } },
+      changeOrders: { orderBy: { createdAt: "asc" }, select: { reason: true, status: true, invoiceStatus: true } }, // names and state only: never the amounts
     },
   });
   return rows.map(shapeProject).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
