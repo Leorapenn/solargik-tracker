@@ -22,9 +22,11 @@ const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string
 
 // One proposed change from the email reader. Approve applies it (after you pick the project and reword the text if
 // needed); Reject discards it. Nothing changes until Approve.
-export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: { id: string; name: string; currency: string }[] }) {
+export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; projects: { id: string; name: string; currency: string }[]; customers: { id: string; name: string }[] }) {
   const pending = s.status === "PENDING";
   const [projectId, setProjectId] = useState(s.projectId ?? "");
+  // a note or action item with no project can be filed on the customer's page instead
+  const [customerId, setCustomerId] = useState(s.customerId ?? "");
   const p = s.payload;
   const isChangeOrder = p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE";
   const isNewChangeOrder = p.kind === "CHANGE_ORDER";
@@ -167,6 +169,16 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
               </option>
             ))}
           </select>
+          {!needsProject && !projectId && (
+            <select aria-label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ ...inputStyle, maxWidth: 260, borderColor: customerId ? undefined : "#F0C069" }}>
+              <option value="">General item: pick the customer</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} (general)
+                </option>
+              ))}
+            </select>
+          )}
           {TEXT_KINDS.includes(s.kind) && (
             <button type="button" style={secondaryButton} onClick={() => setEditing(!editing)}>
               {editing ? "Done editing" : "Edit text"}
@@ -179,7 +191,7 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
-                const result = await approve(s.id, { projectId: projectId || null, ...(editing || text !== textPayload ? { text } : {}), ...(isChangeOrder ? { fields: co } : {}) });
+                const result = await approve(s.id, { projectId: projectId || null, ...(!projectId ? { customerId: customerId || null } : {}), ...(editing || text !== textPayload ? { text } : {}), ...(isChangeOrder ? { fields: co } : {}) });
                 setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
               })
             }
@@ -204,7 +216,7 @@ export function SuggestionCard({ s, projects }: { s: SuggestionView; projects: {
       ) : (
         <div style={{ fontSize: 13, color: TEXT_MUTED }}>
           {s.status === "APPROVED" ? "Approved" : "Rejected"}
-          {s.projectName ? ` · ${s.projectName}` : ""}
+          {s.projectName ? ` · ${s.projectName}` : s.customerName ? ` · ${s.customerName} (general)` : ""}
           {s.resultNote ? ` · ${s.resultNote}` : ""}
         </div>
       )}

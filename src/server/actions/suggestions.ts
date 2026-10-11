@@ -15,7 +15,7 @@ function refresh() {
 }
 
 // Approving is the only way a suggestion changes real data. `overrides` = the project picked and the reworded text.
-export async function approve(id: string, overrides: { projectId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<ActionResult<{ note: string }>> {
+export async function approve(id: string, overrides: { projectId?: string | null; customerId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<ActionResult<{ note: string }>> {
   await requireActionAuth();
   return run(async () => {
     // only the known text fields of a change order can be corrected, and only as text
@@ -26,7 +26,8 @@ export async function approve(id: string, overrides: { projectId?: string | null
         if (typeof v === "string") fields[key] = v.slice(0, 600);
       }
     }
-    const note = await approveSuggestion(id, { projectId: overrides.projectId, text: overrides.text, ...(overrides.fields ? { fields } : {}) });
+    const customerId = typeof overrides.customerId === "string" ? overrides.customerId : overrides.customerId === null ? null : undefined;
+    const note = await approveSuggestion(id, { projectId: overrides.projectId, customerId, text: overrides.text, ...(overrides.fields ? { fields } : {}) });
     refresh();
     return { note };
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentInstructions, cleanIncoming, describePayload, matchProject, suggestionFingerprint } from "./suggestions";
+import { agentInstructions, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint } from "./suggestions";
 
 const base = { summary: "Design update", project: "259", source: { from: "dan@revalue.com", subject: "RF1 update", receivedAt: "2026-10-06T08:00:00Z", link: "https://outlook.office.com/mail/id/1" } };
 
@@ -173,6 +173,43 @@ describe("cleanIncoming: change orders", () => {
     );
     expect(describePayload(ok(co))).toContain("no amount stated");
     expect(describePayload(ok({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02", invoiceStatus: "PAID", invoiceLink: "https://x.com/i" }))).toBe('For change order "Change Order 02": mark the invoice as paid, add the invoice link');
+  });
+});
+
+describe("matchCustomer", () => {
+  const customers = [
+    { id: "r", name: "Revalue", aliases: ["Revalue Energies", "ReValue S.p.A."] },
+    { id: "s", name: "Solar Partners", aliases: [] },
+    { id: "t", name: "Terna", aliases: ["Terna Energy"] },
+  ];
+  it("matches a name or name variant exactly, ignoring case", () => {
+    expect(matchCustomer("Revalue", customers)).toBe("r");
+    expect(matchCustomer("  revalue energies ", customers)).toBe("r");
+    expect(matchCustomer("REVALUE S.P.A.", customers)).toBe("r");
+  });
+  it("matches a reference that contains the name, or is inside it, when only one customer fits", () => {
+    expect(matchCustomer("Revalue Energies Italia Srl", customers)).toBe("r");
+    expect(matchCustomer("Solar", customers)).toBe("s");
+  });
+  it("returns nothing when it is unknown, ambiguous, too short or empty, so a person picks", () => {
+    expect(matchCustomer("Nobody Corp", customers)).toBeNull();
+    expect(matchCustomer("Ter", customers)).toBe("t"); // 3 letters, only Terna fits
+    expect(matchCustomer("Te", customers)).toBeNull();
+    expect(matchCustomer("", customers)).toBeNull();
+    expect(matchCustomer(null, customers)).toBeNull();
+    expect(matchCustomer("Energ", [{ id: "a", name: "Alpha Energy", aliases: [] }, { id: "b", name: "Beta Energy", aliases: [] }])).toBeNull();
+    expect(matchCustomer("Acme", [{ id: "a", name: "Acme", aliases: [] }, { id: "b", name: "Acme", aliases: [] }])).toBeNull();
+  });
+  it("is read from the customer field of an incoming proposal", () => {
+    const r = cleanIncoming({ ...base, kind: "NOTE", text: "x", customer: "  Revalue  " });
+    expect(r.ok && r.value.customerRef).toBe("Revalue");
+    const none = cleanIncoming({ ...base, kind: "NOTE", text: "x" });
+    expect(none.ok && none.value.customerRef).toBeNull();
+  });
+  it("is part of what the agent is told: general items get a customer and no project", () => {
+    const text = agentInstructions("https://example.com/api/intake/suggestions");
+    expect(text).toContain("'customer'");
+    expect(text).toContain("NO 'project'");
   });
 });
 

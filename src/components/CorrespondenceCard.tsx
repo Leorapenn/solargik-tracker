@@ -8,12 +8,12 @@ const BADGE = {
 } as const;
 
 // The approved notes and action items for this project (see src/lib/correspondence.ts). Read-only.
-export function CorrespondenceCard({ items }: { items: CorrespondenceItem[] }) {
+export function CorrespondenceCard({ items, empty }: { items: CorrespondenceItem[]; empty?: string }) {
   return (
     <div style={{ ...cardStyle, padding: 20, maxHeight: 560, overflowY: "auto" }}>
       {items.length === 0 ? (
         <div style={{ color: TEXT_MUTED, fontSize: 14 }}>
-          Nothing here yet. When you approve a note or an action item from the Inbox for this project, it appears here.
+          {empty ?? "Nothing here yet. When you approve a note or an action item from the Inbox for this project, it appears here."}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>

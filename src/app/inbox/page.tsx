@@ -25,9 +25,10 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const raw = Array.isArray(params.status) ? params.status[0] : params.status;
   const status = TABS.find((t) => t.key === raw?.toUpperCase())?.key ?? "PENDING";
 
-  const [items, projects, waiting, lastRun] = await Promise.all([
+  const [items, projects, customers, waiting, lastRun] = await Promise.all([
     listSuggestions(status),
     prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, paymentCurrency: true } }),
+    prisma.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     pendingCount(),
     getLastImport(),
   ]);
@@ -97,12 +98,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         </h2>
       )}
       {(status === "PENDING" ? unmatched : items).map((s) => (
-        <SuggestionCard key={s.id} s={s} projects={projectChoices} />
+        <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} />
       ))}
       {status === "PENDING" && unmatched.length > 0 && matched.length > 0 && (
         <h2 style={{ margin: "12px 0 0", fontSize: 16, color: NAVY }}>Matched to a project ({matched.length})</h2>
       )}
-      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projectChoices} />)}
+      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} />)}
 
       <details style={{ ...cardStyle, padding: "14px 20px" }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700 }}>

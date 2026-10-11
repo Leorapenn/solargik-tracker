@@ -14,6 +14,8 @@ import { LifecycleFilterBar } from "@/components/LifecycleFilterBar";
 import { SortSummary } from "@/components/SortSummary";
 import { SortTh } from "@/components/SortTh";
 import { ContactsCard } from "@/components/ContactsCard";
+import { CorrespondenceCard } from "@/components/CorrespondenceCard";
+import { listCustomerCorrespondence } from "@/server/services/correspondence";
 import { CustomerEditor } from "@/components/CustomerEditor";
 import { CustomerTypeSelect } from "@/components/CustomerTypeSelect";
 import { FlagsEditor } from "@/components/FlagsEditor";
@@ -53,7 +55,7 @@ export default async function CustomerDetailPage({
   const query = await searchParams;
   const filter = parseLifecycle(typeof query.lifecycle === "string" ? query.lifecycle : undefined);
 
-  const [customer, flagSuggestions] = await Promise.all([
+  const [customer, flagSuggestions, correspondence] = await Promise.all([
     prisma.customer.findUnique({
       where: { id },
       include: {
@@ -69,6 +71,7 @@ export default async function CustomerDetailPage({
       },
     }),
     knownFlags(),
+    listCustomerCorrespondence(id),
   ]);
   if (!customer) notFound();
 
@@ -288,6 +291,15 @@ export default async function CustomerDetailPage({
 
         <ContactsCard customerId={customer.id} people={people} />
       </div>
+
+      {/* general questions, requests and commitments with this customer that aren't about one project (approved from the Inbox) */}
+      <details open style={{ marginTop: 4 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
+          Correspondence and actions{correspondence.length > 0 ? ` (${correspondence.length})` : ""}
+        </summary>
+        <div style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 8 }}>General items for {customer.name}, not about one project. Items about a project are on that project&apos;s page.</div>
+        <CorrespondenceCard items={correspondence} empty={`Nothing here yet. When you approve a general note or action item for ${customer.name} from the Inbox, it appears here.`} />
+      </details>
     </main>
   );
 }

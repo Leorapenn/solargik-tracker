@@ -49,7 +49,8 @@ export async function GET(request: Request) {
     bookkeeping: "/api/intake/import-run: GET = get_last_import (when the last run finished), POST {emailsChecked, ranAt = when this run STARTED} = record_import_run (send your suggestions first; the tracker counts proposals and unmatched itself).",
     commonFields: {
       kind: Object.keys(KIND_LABELS),
-      project: "the project code or name as written in the email, e.g. '259' or 'Rignano Flaminio 1'",
+      project: "the project code or name as written in the email, e.g. '259' or 'Rignano Flaminio 1'. Leave it out for a general item that is not about one project.",
+      customer: "the customer's name as written, e.g. 'Revalue'. With no project, a note or action item is filed on this customer's page.",
       summary: "one line saying what you propose (required, max 200 characters)",
       evidence: "the sentence(s) from the email that support it (max 1500 characters)",
       source: { from: "sender", subject: "email subject", receivedAt: "ISO date-time", messageId: "the email's own id (e.g. the Outlook message id)", link: "https link to the email (optional)" },

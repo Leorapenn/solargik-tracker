@@ -4,6 +4,7 @@ import { seedSubStageTemplates } from "../../../prisma/seedData";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
 import { approveSuggestion, createSuggestions, listSuggestions, rejectSuggestion } from "./suggestions";
+import { listCustomerCorrespondence } from "./correspondence";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -195,12 +196,59 @@ describe("suggestions", () => {
     });
   });
 
+  describe("general items for a customer", () => {
+    it("matches the customer at intake and files a general note on the customer's page only", async () => {
+      const general = await send({ kind: "CORRESPONDENCE_NOTE", text: "General question about the framework agreement", summary: `general ${RUN}`, id: `${RUN}-g1`, customer: `test customer ${RUN}` });
+      expect(general.row).toMatchObject({ projectId: null, customerId });
+      expect(await approveSuggestion(general.row!.id)).toBe(`Saved on Test Customer ${RUN}'s page under Correspondence and actions.`);
+      expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: general.row!.id } })).toMatchObject({ status: "APPROVED", projectId: null, customerId });
+
+      // an item about a project belongs to the project page, not the customer's general list
+      const aboutProject = await send({ kind: "ACTION_ITEM", text: "Send the layout", summary: `project item ${RUN}`, id: `${RUN}-g2`, project: projectName });
+      expect(aboutProject.row?.customerId).toBe(customerId); // the project's customer
+      await approveSuggestion(aboutProject.row!.id);
+      // pending and rejected ones stay out too
+      await send({ kind: "CORRESPONDENCE_NOTE", text: "x", summary: `pending ${RUN}`, id: `${RUN}-g3`, customer: `Test Customer ${RUN}` });
+      const rejected = await send({ kind: "CORRESPONDENCE_NOTE", text: "x", summary: `rejected ${RUN}`, id: `${RUN}-g4`, customer: `Test Customer ${RUN}` });
+      await rejectSuggestion(rejected.row!.id);
+
+      const list = await listCustomerCorrespondence(customerId);
+      expect(list.map((i) => i.summary)).toEqual([`general ${RUN}`]);
+      expect(await listCustomerCorrespondence("no-such-customer")).toEqual([]);
+    });
+
+    it("lets the reviewer pick the customer, or none, and refuses a customer that doesn't exist", async () => {
+      const a = await send({ kind: "ACTION_ITEM", text: "Revalue asks for the price list", who: "Solargik", summary: `picked ${RUN}`, id: `${RUN}-g5` });
+      expect(a.row?.customerId).toBeNull();
+      await expect(approveSuggestion(a.row!.id, { customerId: "no-such-customer" })).rejects.toThrow(/customer no longer exists/);
+      expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: a.row!.id } })).status).toBe("PENDING");
+      expect(await approveSuggestion(a.row!.id, { customerId })).toBe(`Saved on Test Customer ${RUN}'s page under Correspondence and actions.`);
+      expect((await listCustomerCorrespondence(customerId)).map((i) => i.summary)).toContain(`picked ${RUN}`);
+
+      const none = await send({ kind: "NOTE", text: "General", summary: `none ${RUN}`, id: `${RUN}-g6`, customer: `Test Customer ${RUN}` });
+      expect(await approveSuggestion(none.row!.id, { customerId: null })).toBe("Noted. It has no project or customer, so no page shows it.");
+      expect((await listCustomerCorrespondence(customerId)).map((i) => i.summary)).not.toContain(`none ${RUN}`);
+    });
+
+    it("picking a project overrides the customer: the item shows on the project page, not the customer's general list", async () => {
+      const n = await send({ kind: "CORRESPONDENCE_NOTE", text: "Turns out this is about one project", summary: `moved ${RUN}`, id: `${RUN}-g7`, customer: `Test Customer ${RUN}` });
+      await approveSuggestion(n.row!.id, { projectId, customerId: null });
+      expect((await listCustomerCorrespondence(customerId)).map((i) => i.summary)).not.toContain(`moved ${RUN}`);
+      expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: n.row!.id } })).customerId).toBe(customerId);
+    });
+
+    it("leaves the customer empty when the name matches none or several", async () => {
+      const unknown = await send({ kind: "CORRESPONDENCE_NOTE", text: "x", summary: `unknown ${RUN}`, id: `${RUN}-g8`, customer: "Nobody Corp" });
+      expect(unknown.row?.customerId).toBeNull();
+    });
+  });
+
   it("approving an action item or a correspondence note only marks it reviewed, with or without a project", async () => {
     const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
 
     const action = await send({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan", by: "end of next week", id: `${RUN}-ai` });
     expect(action.row?.projectId).toBeNull(); // no project: it would be listed as Unmatched
-    expect(await approveSuggestion(action.row!.id)).toBe("Noted. It has no project, so no project page shows it.");
+    expect(await approveSuggestion(action.row!.id)).toBe("Noted. It has no project or customer, so no page shows it.");
     expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: action.row!.id } })).toMatchObject({ status: "APPROVED", projectId: null });
 
     const note = await send({ kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed the site access dates", id: `${RUN}-cn`, project: projectName });

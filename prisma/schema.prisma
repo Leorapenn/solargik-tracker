@@ -55,6 +55,7 @@ model Customer {
   aliases      CustomerAlias[]
   projects     Project[]
   contacts     Contact[]
+  suggestions  Suggestion[]
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 }
@@ -322,6 +323,10 @@ model Suggestion {
   sourceSubject    String?
   sourceReceivedAt DateTime?
   sourceLink       String? // link to the email (e.g. Outlook on the web)
+  // The customer a proposal is about. Set at intake (matched from the customer name the sender wrote) or picked by the
+  // reviewer. For notes and action items with no project it is what files them on the customer's page.
+  customerId       String?
+  customer         Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
   sourceMessageId  String? // the sender's own id for the email (e.g. the Outlook message id)
   confidence       String? // HIGH | MEDIUM | LOW: how sure the sender says it is
   externalId       String?    @unique // the sender's own id for it, so a retry doesn't create a duplicate
@@ -335,6 +340,7 @@ model Suggestion {
 
   @@index([status, createdAt])
   @@index([importRunId])
+  @@index([customerId])
 }
 
 // One finished run of the email-reading agent, reported by the agent itself (record_import_run). The newest

@@ -5,7 +5,7 @@ import { toDateInputValue } from "@/lib/dates";
 import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
-import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
+import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 import { patchSubStages } from "@/server/services/subStages";
 
@@ -17,7 +17,8 @@ export type IntakeResult = { created: number; duplicates: number; rejected: { in
 // already received is skipped, so a retry never duplicates.
 export async function createSuggestions(list: unknown[]): Promise<IntakeResult> {
   if (list.length > MAX_PER_REQUEST) throw new UserError(`Send at most ${MAX_PER_REQUEST} suggestions at a time.`);
-  const projects = await prisma.project.findMany({ select: { id: true, name: true } });
+  const projects = await prisma.project.findMany({ select: { id: true, name: true, customerId: true } });
+  const customers = (await prisma.customer.findMany({ select: { id: true, name: true, aliases: { select: { alias: true } } } })).map((c) => ({ id: c.id, name: c.name, aliases: c.aliases.map((a) => a.alias) }));
   const result: IntakeResult = { created: 0, duplicates: 0, rejected: [] };
 
   for (const [index, raw] of list.entries()) {
@@ -33,12 +34,16 @@ export async function createSuggestions(list: unknown[]): Promise<IntakeResult> 
       result.duplicates += 1;
       continue;
     }
+    // the project when it is unambiguous; the customer from what the sender wrote, else from the project's customer
+    const projectId = matchProject(c.projectRef, projects);
+    const customerId = matchCustomer(c.customerRef, customers) ?? projects.find((p) => p.id === projectId)?.customerId ?? null;
     try {
       await prisma.suggestion.create({
         data: {
           kind: c.payload.kind,
           payload: c.payload as unknown as Prisma.InputJsonObject,
-          projectId: matchProject(c.projectRef, projects),
+          projectId,
+          customerId,
           projectRef: c.projectRef,
           summary: c.summary,
           evidence: c.evidence,
@@ -74,6 +79,8 @@ export type SuggestionView = {
   projectId: string | null;
   projectName: string | null;
   projectRef: string | null;
+  customerId: string | null;
+  customerName: string | null;
   sourceFrom: string | null;
   sourceSubject: string | null;
   sourceReceivedAt: string | null;
@@ -90,7 +97,7 @@ export async function listSuggestions(status: "PENDING" | "APPROVED" | "REJECTED
     where: { status },
     orderBy: status === "PENDING" ? { createdAt: "asc" } : { reviewedAt: "desc" },
     take: limit,
-    include: { project: { select: { name: true } } },
+    include: { project: { select: { name: true } }, customer: { select: { name: true } } },
   });
   return rows.map((r) => {
     const payload = r.payload as unknown as Payload;
@@ -105,6 +112,8 @@ export async function listSuggestions(status: "PENDING" | "APPROVED" | "REJECTED
       projectId: r.projectId,
       projectName: r.project?.name ?? null,
       projectRef: r.projectRef,
+      customerId: r.customerId,
+      customerName: r.customer?.name ?? null,
       sourceFrom: r.sourceFrom,
       sourceSubject: r.sourceSubject,
       sourceReceivedAt: r.sourceReceivedAt ? r.sourceReceivedAt.toISOString() : null,
@@ -142,11 +151,14 @@ async function findItem(projectId: string, projectName: string, name: string, ph
 
 const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
 
-async function applyPayload(payload: Payload, projectId: string | null, sourceLink: string | null = null): Promise<string> {
+async function applyPayload(payload: Payload, projectId: string | null, sourceLink: string | null = null, customerName: string | null = null): Promise<string> {
   // these only record that a person looked at them; they change nothing
-  // (= REVIEW_ONLY_KINDS) With a project they are listed on its page under "Correspondence and actions".
+  // (= REVIEW_ONLY_KINDS) With a project they are listed on its page, with only a customer on the customer's page,
+  // under "Correspondence and actions".
   if (payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE") {
-    return projectId ? "Saved on the project page under Correspondence and actions." : "Noted. It has no project, so no project page shows it.";
+    if (projectId) return "Saved on the project page under Correspondence and actions.";
+    if (customerName) return `Saved on ${customerName}'s page under Correspondence and actions.`;
+    return "Noted. It has no project or customer, so no page shows it.";
   }
   if (!projectId) throw new UserError("Choose which project this belongs to first.");
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, customerId: true, paymentCurrency: true } });
@@ -284,7 +296,7 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
 export const CHANGE_ORDER_EDIT_KEYS = ["reason", "amount", "dateSent", "invoicedDate", "invoiceStatus", "paymentTermsDays"] as const;
 export type ChangeOrderEdits = Partial<Record<(typeof CHANGE_ORDER_EDIT_KEYS)[number], string>>;
 
-export async function approveSuggestion(id: string, overrides: { projectId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<string> {
+export async function approveSuggestion(id: string, overrides: { projectId?: string | null; customerId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<string> {
   const row = await prisma.suggestion.findUnique({ where: { id } });
   if (!row) throw new UserError("That suggestion no longer exists.");
   if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
@@ -309,11 +321,22 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
   }
   const projectId = overrides.projectId === undefined ? row.projectId : overrides.projectId;
 
-  const note = await applyPayload(payload, projectId, row.sourceLink);
+  // The customer: that of the project when there is one; otherwise the one picked (or matched at intake). With no
+  // project, a note or action item filed under a customer shows on that customer's page.
+  let customerId: string | null;
+  if (projectId) {
+    customerId = (await prisma.project.findUnique({ where: { id: projectId }, select: { customerId: true } }))?.customerId ?? null;
+  } else {
+    customerId = overrides.customerId === undefined ? row.customerId : overrides.customerId;
+  }
+  const customer = customerId ? await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true } }) : null;
+  if (customerId && !customer) throw new UserError("That customer no longer exists.");
+
+  const note = await applyPayload(payload, projectId, row.sourceLink, projectId ? null : (customer?.name ?? null));
   // claim it only if it is still pending, so a double click can't apply it twice
   const claimed = await prisma.suggestion.updateMany({
     where: { id, status: "PENDING" },
-    data: { status: "APPROVED", reviewedAt: new Date(), resultNote: note, projectId: projectId ?? null, payload: payload as unknown as Prisma.InputJsonObject },
+    data: { status: "APPROVED", reviewedAt: new Date(), resultNote: note, projectId: projectId ?? null, customerId: customer?.id ?? null, payload: payload as unknown as Prisma.InputJsonObject },
   });
   if (claimed.count === 0) throw new UserError("That suggestion was already handled.");
   return note;
