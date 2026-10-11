@@ -33,6 +33,8 @@ import { parseSort, sortRows } from "@/lib/sort";
 import { projectSummary } from "@/lib/statusUpdate";
 import { PhaseUpdate } from "@/components/PhaseUpdate";
 import { ProjectSummary } from "@/components/ProjectSummary";
+import { CorrespondenceCard } from "@/components/CorrespondenceCard";
+import { listProjectCorrespondence } from "@/server/services/correspondence";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +55,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions, profile, payments, contractSigned] = await Promise.all([
+  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -72,6 +74,7 @@ export default async function ProjectDetailPage({
     getProfile(id),
     getPaymentData(id),
     getContractSigningDate(id),
+    listProjectCorrespondence(id),
   ]);
 
   if (!project) notFound();
@@ -271,7 +274,9 @@ export default async function ProjectDetailPage({
           );
         })}
       </div>
-      <details open style={{ marginTop: 4 }}>
+      {/* the status update card is narrower now; the approved notes and action items from emails sit beside it */}
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start", marginTop: 4 }}>
+      <details open style={{ flex: "3 1 440px", minWidth: 0 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Status update</summary>
         <div style={{ ...cardStyle, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
@@ -299,6 +304,13 @@ export default async function ProjectDetailPage({
           </div>
         </div>
       </details>
+      <details open style={{ flex: "2 1 340px", minWidth: 0 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
+          Correspondence and actions{correspondence.length > 0 ? ` (${correspondence.length})` : ""}
+        </summary>
+        <CorrespondenceCard items={correspondence} />
+      </details>
+      </div>
       <details open style={{ marginTop: 4 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Project profile</summary>
         <ProjectProfileCard

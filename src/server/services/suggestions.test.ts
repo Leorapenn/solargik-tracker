@@ -129,11 +129,11 @@ describe("suggestions", () => {
 
     const action = await send({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan", by: "end of next week", id: `${RUN}-ai` });
     expect(action.row?.projectId).toBeNull(); // no project: it would be listed as Unmatched
-    expect(await approveSuggestion(action.row!.id)).toBe("Noted.");
+    expect(await approveSuggestion(action.row!.id)).toBe("Noted. It has no project, so no project page shows it.");
     expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: action.row!.id } })).toMatchObject({ status: "APPROVED", projectId: null });
 
     const note = await send({ kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed the site access dates", id: `${RUN}-cn`, project: projectName });
-    expect(await approveSuggestion(note.row!.id)).toBe("Noted.");
+    expect(await approveSuggestion(note.row!.id)).toBe("Saved on the project page under Correspondence and actions.");
     expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: note.row!.id } })).toMatchObject({ status: "APPROVED", projectId });
 
     expect(await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } })).toEqual(before);

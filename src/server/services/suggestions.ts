@@ -141,7 +141,10 @@ async function findItem(projectId: string, projectName: string, name: string, ph
 
 async function applyPayload(payload: Payload, projectId: string | null): Promise<string> {
   // these only record that a person looked at them; they change nothing
-  if (payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE") return "Noted."; // = REVIEW_ONLY_KINDS
+  // (= REVIEW_ONLY_KINDS) With a project they are listed on its page under "Correspondence and actions".
+  if (payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE") {
+    return projectId ? "Saved on the project page under Correspondence and actions." : "Noted. It has no project, so no project page shows it.";
+  }
   if (!projectId) throw new UserError("Choose which project this belongs to first.");
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, customerId: true } });
   if (!project) throw new UserError("That project no longer exists.");
