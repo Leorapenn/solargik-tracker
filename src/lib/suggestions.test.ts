@@ -176,6 +176,57 @@ describe("cleanIncoming: change orders", () => {
   });
 });
 
+describe("cleanIncoming: signed contracts, proof of payment and a note's file link", () => {
+  const file = "https://solargik.sharepoint.com/sites/Projects/Shared%20Documents/EXECUTION/259/Contracts%20%2B%20Legal/Agreement.pdf";
+  const ok = (raw: Record<string, unknown>) => {
+    const r = cleanIncoming({ ...base, ...raw });
+    if (!r.ok) throw new Error(r.error);
+    return r.value;
+  };
+  const error = (raw: Record<string, unknown>) => {
+    const r = cleanIncoming({ ...base, ...raw });
+    return r.ok ? null : r.error;
+  };
+
+  it("accepts a contract document with a file link, and an optional signing date", () => {
+    expect(ok({ kind: "contract_document", description: "  Signed Framework Supply Agreement ", fileLink: file, signedDate: "2025-06-30" }).payload).toEqual({
+      kind: "CONTRACT_DOCUMENT",
+      description: "Signed Framework Supply Agreement",
+      fileLink: file,
+      signedDate: "2025-06-30",
+    });
+    expect(ok({ kind: "CONTRACT_DOCUMENT", description: "Agreement", fileLink: file }).payload).toMatchObject({ signedDate: null });
+  });
+
+  it("refuses a contract document with no description, no file link, a bad link or an impossible date", () => {
+    expect(error({ kind: "CONTRACT_DOCUMENT", fileLink: file })).toMatch(/description/);
+    expect(error({ kind: "CONTRACT_DOCUMENT", description: "Agreement" })).toMatch(/fileLink/);
+    expect(error({ kind: "CONTRACT_DOCUMENT", description: "Agreement", fileLink: "C:\\Users\\x\\Agreement.pdf" })).toMatch(/web address/);
+    expect(error({ kind: "CONTRACT_DOCUMENT", description: "Agreement", fileLink: file, signedDate: "2025-13-40" })).toMatch(/signedDate/);
+  });
+
+  it("a note can carry a file link, and stays as before without one", () => {
+    expect(ok({ kind: "CORRESPONDENCE_NOTE", text: "Amendment signed", fileLink: file }).payload).toEqual({ kind: "CORRESPONDENCE_NOTE", text: "Amendment signed", fileLink: file });
+    expect(ok({ kind: "CORRESPONDENCE_NOTE", text: "Amendment signed" }).payload).toEqual({ kind: "CORRESPONDENCE_NOTE", text: "Amendment signed" });
+    expect(error({ kind: "CORRESPONDENCE_NOTE", text: "x", fileLink: "not a link" })).toMatch(/web address/);
+  });
+
+  it("proof of payment travels as the payslip link of a milestone or change-order update", () => {
+    expect(ok({ kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "PAYMENT_RECEIVED", paidDate: "2026-10-09", payslipLink: file }).payload).toMatchObject({ payslipLink: file, paidDate: "2026-10-09", status: "PAYMENT_RECEIVED" });
+    expect(ok({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 02", invoiceStatus: "PAID", payslipLink: file }).payload).toMatchObject({ invoiceStatus: "PAID", payslipLink: file });
+  });
+
+  it("says in plain words what approving a contract document does, and tells the agent about it", () => {
+    expect(describePayload(ok({ kind: "CONTRACT_DOCUMENT", description: "Signed Framework Supply Agreement", fileLink: file, signedDate: "2025-06-30" }).payload)).toBe(
+      `Set the project's contract link to "Signed Framework Supply Agreement" and its signing date to 2025-06-30 (if empty)`,
+    );
+    const text = agentInstructions("https://example.com/api/intake/suggestions");
+    expect(text).toContain("CONTRACT_DOCUMENT");
+    expect(text).toContain("PROOF OF PAYMENT");
+    expect(text).toContain("payslipLink");
+  });
+});
+
 describe("matchCustomer", () => {
   const customers = [
     { id: "r", name: "Revalue", aliases: ["Revalue Energies", "ReValue S.p.A."] },

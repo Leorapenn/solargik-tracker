@@ -2,6 +2,7 @@ import { Prisma, type PhaseName } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { toDateInputValue } from "@/lib/dates";
+import { cleanWebLink } from "@/lib/links";
 import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
@@ -277,6 +278,20 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
       data: { status: n.status, invoicedDate: day(n.invoicedDate), invoiceStatus: n.invoiceStatus, paymentTermsDays: n.paymentTermsDays, fileLink: n.fileLink, invoiceLink: n.invoiceLink, payslipLink: n.payslipLink },
     });
     return `Change order "${c.reason}" updated.`;
+  }
+
+  // The signed contract: only the link (and, when empty, the signing date) is saved on the project profile. A contract
+  // link that is already there is never replaced, so an amendment can't overwrite the main contract.
+  if (payload.kind === "CONTRACT_DOCUMENT") {
+    const cleanedLink = cleanWebLink(payload.fileLink);
+    if (!cleanedLink.ok) throw new UserError(cleanedLink.error);
+    if (!cleanedLink.value) throw new UserError("The contract link is empty.");
+    const profile = await prisma.projectProfile.findUnique({ where: { projectId }, select: { contractLink: true, contractSigningDate: true } });
+    if (profile?.contractLink) throw new UserError(`${project.name} already has a contract link. Reject this, or clear the link in the project profile first and approve again.`);
+    const signing = payload.signedDate && !profile?.contractSigningDate ? day(payload.signedDate) : null;
+    const data = { contractLink: cleanedLink.value, ...(signing ? { contractSigningDate: signing } : {}) };
+    await prisma.projectProfile.upsert({ where: { projectId }, create: { projectId, ...data }, update: data });
+    return `Contract link saved on the project profile${signing ? " and the signing date set" : ""}.`;
   }
 
   // CONTACT

@@ -20,6 +20,15 @@ const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string
   LOW: { bg: "#FBE0DE", text: "#8C1D18", label: "Low confidence" },
 };
 
+// A saved file in SharePoint is shown by its name; anything else (the Outlook link) says it is the email.
+function fileLabel(url: string | null | undefined, name: string): string {
+  try {
+    return url && new URL(url).hostname.endsWith("sharepoint.com") ? `${name} (SharePoint)` : `${name} (the email)`;
+  } catch {
+    return name;
+  }
+}
+
 // One proposed change from the email reader. Approve applies it (after you pick the project and reword the text if
 // needed); Reject discards it. Nothing changes until Approve.
 export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; projects: { id: string; name: string; currency: string }[]; customers: { id: string; name: string }[] }) {
@@ -50,6 +59,13 @@ export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; 
   const confidence = s.confidence ? CONFIDENCE_STYLE[s.confidence] : null;
 
   const received = s.sourceReceivedAt ? formatDate(parseDateInput(s.sourceReceivedAt.slice(0, 10))) : null;
+
+  // the other files an approval will link: a contract, a document with a note, a milestone's invoice, proofs of payment
+  const extraLinks: { label: string; href: string }[] = [];
+  if (p.kind === "CONTRACT_DOCUMENT") extraLinks.push({ label: fileLabel(p.fileLink, "Contract file"), href: p.fileLink });
+  if (p.kind === "CORRESPONDENCE_NOTE" && p.fileLink) extraLinks.push({ label: fileLabel(p.fileLink, "Document"), href: p.fileLink });
+  if (p.kind === "MILESTONE_UPDATE" && p.invoiceLink) extraLinks.push({ label: fileLabel(p.invoiceLink, "Invoice file"), href: p.invoiceLink });
+  if ((p.kind === "MILESTONE_UPDATE" || p.kind === "CHANGE_ORDER_UPDATE") && p.payslipLink) extraLinks.push({ label: fileLabel(p.payslipLink, "Proof of payment"), href: p.payslipLink });
 
   return (
     <section style={{ ...cardStyle, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -140,12 +156,12 @@ export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; 
             <div style={{ fontSize: 13, display: "flex", gap: 14, flexWrap: "wrap" }}>
               {(p.fileLink || (p.kind === "CHANGE_ORDER" && s.sourceLink)) && (
                 <a href={p.fileLink ?? s.sourceLink ?? "#"} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
-                  Change order file (the email)
+                  {fileLabel(p.fileLink ?? s.sourceLink, "Change order file")}
                 </a>
               )}
               {p.invoiceLink && (
                 <a href={p.invoiceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
-                  Invoice file (the email)
+                  {fileLabel(p.invoiceLink, "Invoice file")}
                 </a>
               )}
               <span style={{ color: TEXT_MUTED }}>These links will be saved on the change order.</span>
@@ -156,6 +172,17 @@ export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; 
               The email gives the amount in {emailCurrency}, but this project&apos;s payments are in {projectCurrency}. Approving will be refused until that is sorted out.
             </div>
           )}
+        </div>
+      )}
+
+      {extraLinks.length > 0 && (
+        <div style={{ fontSize: 13, display: "flex", gap: 14, flexWrap: "wrap" }}>
+          {extraLinks.map((l) => (
+            <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+              {l.label}
+            </a>
+          ))}
+          {pending && <span style={{ color: TEXT_MUTED }}>{p.kind === "CORRESPONDENCE_NOTE" ? "Open it to check it before approving." : "These links will be saved when you approve."}</span>}
         </div>
       )}
 

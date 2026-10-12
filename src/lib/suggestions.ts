@@ -9,7 +9,7 @@ import { CURRENCIES, formatTerms, isCurrency } from "@/lib/payments";
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
@@ -19,6 +19,7 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   MILESTONE_UPDATE: "Payment milestone",
   CHANGE_ORDER: "New change order (created when approved)",
   CHANGE_ORDER_UPDATE: "Change order update",
+  CONTRACT_DOCUMENT: "Signed contract (sets the project's contract link when approved)",
   ACTION_ITEM: "Action item (nothing to apply)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
@@ -51,8 +52,12 @@ export type Payload =
   | { kind: "CHANGE_ORDER"; reason: string; amount: string | null; currency: string | null; dateSent: string | null; invoicedDate: string | null; invoiceStatus: ChangeOrderInvoiceStatus | null; paymentTermsDays: number | null; fileLink: string | null; invoiceLink: string | null }
   // New facts about a change order that already exists (usually its invoice). `changeOrder` names it.
   | { kind: "CHANGE_ORDER_UPDATE"; changeOrder: string; invoicedDate: string | null; invoiceStatus: ChangeOrderInvoiceStatus | null; paymentTermsDays: number | null; fileLink: string | null; invoiceLink: string | null; payslipLink: string | null }
+  // The signed contract of a project, saved as a file in its SharePoint folder. Approving sets the project profile's
+  // contract link (links only, never files), but only when none is set yet, and the signing date when it is empty.
+  | { kind: "CONTRACT_DOCUMENT"; description: string; fileLink: string; signedDate: string | null }
   | { kind: "ACTION_ITEM"; text: string; who: string | null; by: string | null }
-  | { kind: "CORRESPONDENCE_NOTE"; text: string }
+  // `fileLink`: a document that belongs with the note (e.g. an amendment saved in SharePoint), shown as "Open file".
+  | { kind: "CORRESPONDENCE_NOTE"; text: string; fileLink?: string }
   | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; invoiceLink: string | null; payslipLink: string | null }
   | { kind: "CONTACT"; name: string; email: string | null; phone: string | null; role: string | null }
   | { kind: "NOTE"; text: string };
@@ -233,10 +238,21 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const t = text("text", true);
     if (!t.ok) return t;
     payload = { kind, text: t.value!, who: oneLine(raw.who, 120), by: oneLine(raw.by, 100) };
+  } else if (kind === "CONTRACT_DOCUMENT") {
+    const description = oneLine(raw.description, 200);
+    if (!description) return { ok: false, error: `"description" (what the document is, e.g. "Signed Framework Supply Agreement") is required for CONTRACT_DOCUMENT.` };
+    const fileLink = link(raw.fileLink);
+    if (!fileLink.ok) return { ok: false, error: `fileLink: ${fileLink.error}` };
+    if (!fileLink.value) return { ok: false, error: `"fileLink" (the link to the saved contract file) is required for CONTRACT_DOCUMENT.` };
+    const signed = optionalDate(raw, "signedDate");
+    if (!signed.ok) return signed;
+    payload = { kind, description, fileLink: fileLink.value, signedDate: signed.value };
   } else if (kind === "CORRESPONDENCE_NOTE") {
     const t = text("text", true);
     if (!t.ok) return t;
-    payload = { kind, text: t.value! };
+    const fileLink = link(raw.fileLink);
+    if (!fileLink.ok) return { ok: false, error: `fileLink: ${fileLink.error}` };
+    payload = fileLink.value ? { kind, text: t.value!, fileLink: fileLink.value } : { kind, text: t.value! };
   } else if (kind === "MILESTONE_UPDATE") {
     const milestone = oneLine(raw.milestone, 60);
     if (!milestone) return { ok: false, error: `"milestone" (its name, e.g. "Milestone 2") is required.` };
@@ -354,6 +370,8 @@ export function agentInstructions(endpoint: string): string {
     "Rules:",
     "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'. Put the email's own id in source.messageId, and say how sure you are in 'confidence' (high, medium or low).",
     "- CHANGE_ORDER when an email announces a NEW change order: reason (what it is for, e.g. \"Change Order 02: additional PDUs\"), and only what the email states: amount as a plain number (no thousands separators), currency, dateSent, invoicedDate, paymentTermsDays. Put this email's Outlook web link in fileLink when the change order document is attached to it. Approving it CREATES the change order on the Payments page, so never guess an amount, date or term. When the INVOICE for an existing change order arrives, use CHANGE_ORDER_UPDATE (changeOrder = its name as in the project's changeOrders list, invoicedDate, invoiceStatus SENT or PAID, paymentTermsDays, and the email's link in invoiceLink) instead of creating a second one.",
+    "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
+    "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
     "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM (who, by when) is for a clear request or commitment; CORRESPONDENCE_NOTE for other meaningful communication. Say in the text whether it was the customer or Solargik staff.",
     "- Give each suggestion a unique 'id' (the email's id plus a number) so a retry doesn't create duplicates. Without an id the tracker still skips an identical proposal from the same email, but an id is more reliable.",
     "- Always send 'customer' too (the customer's name as written, e.g. 'Revalue'). A general question, request or commitment for the customer that is NOT about one project (for example a question about a framework agreement or an invoice process) is a CORRESPONDENCE_NOTE or ACTION_ITEM with 'customer' set and NO 'project': a person files it on the customer's page.",
@@ -394,6 +412,8 @@ export function describePayload(p: Payload): string {
       ].filter(Boolean);
       return `For change order "${p.changeOrder}": ${parts.join(", ")}`;
     }
+    case "CONTRACT_DOCUMENT":
+      return `Set the project's contract link to "${p.description}"${p.signedDate ? ` and its signing date to ${p.signedDate} (if empty)` : ""}`;
     case "ACTION_ITEM":
       return `Action item${p.who ? ` for ${p.who}` : ""}${p.by ? `, by ${p.by}` : ""}: ${p.text}`;
     case "CORRESPONDENCE_NOTE":

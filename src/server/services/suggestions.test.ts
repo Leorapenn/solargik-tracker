@@ -257,4 +257,47 @@ describe("suggestions", () => {
 
     expect(await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } })).toEqual(before);
   });
+
+  it("approving a signed contract sets the contract link (and the signing date when empty), never replaces a link, and needs a file link", async () => {
+    const link = (name: string) => `https://solargik.sharepoint.com/sites/Projects/Shared%20Documents/EXECUTION/${encodeURIComponent(projectName)}/Contracts%20%2B%20Legal/${encodeURIComponent(name)}`;
+    expect(await createSuggestions([{ kind: "CONTRACT_DOCUMENT", description: "No file", summary: "s", id: `${RUN}-k0` }])).toMatchObject({ created: 0 });
+
+    const first = await send({ kind: "CONTRACT_DOCUMENT", description: "Signed Framework Supply Agreement", fileLink: link("Agreement.pdf"), signedDate: "2025-06-30", id: `${RUN}-k1`, project: projectName });
+    expect(first.row).toMatchObject({ status: "PENDING", kind: "CONTRACT_DOCUMENT" });
+    expect(await prisma.projectProfile.findUnique({ where: { projectId } })).toBeNull(); // nothing yet
+
+    expect(await approveSuggestion(first.row!.id)).toBe("Contract link saved on the project profile and the signing date set.");
+    const profile = await prisma.projectProfile.findUniqueOrThrow({ where: { projectId } });
+    expect(profile.contractLink).toBe(link("Agreement.pdf"));
+    expect(profile.contractSigningDate?.toISOString().slice(0, 10)).toBe("2025-06-30");
+
+    // an amendment can't replace the main contract link, and the pending proposal stays pending with the reason
+    const second = await send({ kind: "CONTRACT_DOCUMENT", description: "Amendment 1", fileLink: link("Amendment 1.pdf"), signedDate: "2026-01-15", id: `${RUN}-k2`, project: projectName });
+    await expect(approveSuggestion(second.row!.id)).rejects.toThrow(/already has a contract link/);
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: second.row!.id } })).status).toBe("PENDING");
+    expect(await prisma.projectProfile.findUniqueOrThrow({ where: { projectId } })).toMatchObject({ contractLink: link("Agreement.pdf") });
+
+    // once the link is cleared by a person, a later contract can be approved, but an existing signing date is kept
+    await prisma.projectProfile.update({ where: { projectId }, data: { contractLink: null } });
+    expect(await approveSuggestion(second.row!.id)).toBe("Contract link saved on the project profile.");
+    const after = await prisma.projectProfile.findUniqueOrThrow({ where: { projectId } });
+    expect(after.contractLink).toBe(link("Amendment 1.pdf"));
+    expect(after.contractSigningDate?.toISOString().slice(0, 10)).toBe("2025-06-30");
+  });
+
+  it("a proof of payment is linked through the milestone and change-order updates, and a note can carry a file link", async () => {
+    const slip = "https://solargik.sharepoint.com/sites/Projects/Shared%20Documents/EXECUTION/x/Contracts%20%2B%20Legal/Invoices/Proof%20of%20payment.pdf";
+    const m = await send({ kind: "MILESTONE_UPDATE", milestone: "Milestone 1", status: "PAYMENT_RECEIVED", paidDate: "2026-10-09", payslipLink: slip, id: `${RUN}-pp1`, project: projectName });
+    await approveSuggestion(m.row!.id);
+    expect(await prisma.milestone.findFirstOrThrow({ where: { projectId } })).toMatchObject({ status: "PAYMENT_RECEIVED", payslipLink: slip });
+
+    const co = await prisma.changeOrder.create({ data: { projectId, reason: `Change Order 07 ${RUN}`, status: "SENT", amount: 100, invoicedDate: new Date("2026-10-01"), invoiceStatus: "SENT", paymentTermsDays: 10 } });
+    const u = await send({ kind: "CHANGE_ORDER_UPDATE", changeOrder: "Change Order 07", invoiceStatus: "PAID", payslipLink: slip, id: `${RUN}-pp2`, project: projectName });
+    await approveSuggestion(u.row!.id);
+    expect(await prisma.changeOrder.findUniqueOrThrow({ where: { id: co.id } })).toMatchObject({ invoiceStatus: "PAID", status: "COMPLETE", payslipLink: slip });
+
+    const n = await send({ kind: "CORRESPONDENCE_NOTE", text: "Amendment 2 signed by both sides", fileLink: slip, id: `${RUN}-nf`, project: projectName });
+    expect((n.row!.payload as { fileLink?: string }).fileLink).toBe(slip);
+    await approveSuggestion(n.row!.id);
+  });
 });

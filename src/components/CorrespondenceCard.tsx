@@ -53,6 +53,11 @@ export function CorrespondenceCard({ items, empty }: { items: CorrespondenceItem
                       Open email
                     </a>
                   )}
+                  {item.fileLink && (
+                    <a href={item.fileLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13, fontWeight: 700, color: NAVY }}>
+                      Open file
+                    </a>
+                  )}
                   {item.kindLabel === "Action" && <ActionDoneToggle id={item.id} done={item.done} />}
                 </div>
               </div>

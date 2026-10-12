@@ -53,6 +53,15 @@ describe("shapeCorrespondence", () => {
   });
 });
 
+describe("a note's file link", () => {
+  const file = "https://solargik.sharepoint.com/sites/Projects/Shared%20Documents/EXECUTION/259/Contracts%20%2B%20Legal/Amendment.pdf";
+  it("shows on notes only", () => {
+    expect(shapeCorrespondence(row({ payload: { text: "Amendment signed", fileLink: file } }))?.fileLink).toBe(file);
+    expect(shapeCorrespondence(row({ payload: { text: "Amendment signed" } }))?.fileLink).toBeNull();
+    expect(shapeCorrespondence(row({ kind: "ACTION_ITEM", payload: { text: "x", fileLink: file } }))?.fileLink).toBeNull();
+  });
+});
+
 describe("shapeAndSort", () => {
   it("puts the newest email first and drops other kinds", () => {
     const rows = [

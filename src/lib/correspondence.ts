@@ -15,6 +15,7 @@ export type CorrespondenceItem = {
   from: string | null;
   subject: string | null;
   link: string | null;
+  fileLink?: string | null; // notes only: a saved document that belongs with the note (SharePoint)
   date: string; // YYYY-MM-DD: the day the email was received, else the day it was approved
   done: boolean; // action items only: ticked as done
   doneOn: string | null; // YYYY-MM-DD
@@ -52,6 +53,7 @@ export function shapeCorrespondence(row: CorrespondenceRow): CorrespondenceItem 
     from: row.sourceFrom,
     subject: row.sourceSubject,
     link: row.sourceLink,
+    fileLink: row.kind === "CORRESPONDENCE_NOTE" ? text(payload.fileLink) : null,
     date: day(row.sourceReceivedAt ?? row.reviewedAt ?? row.createdAt),
     done: row.kind === "ACTION_ITEM" && Boolean(row.doneAt),
     doneOn: row.kind === "ACTION_ITEM" && row.doneAt ? day(row.doneAt) : null,
