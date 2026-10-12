@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
@@ -31,8 +31,8 @@ import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
-const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "â€”");
-const DASH = <span style={{ color: TEXT_MUTED }}>â€”</span>;
+const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "—");
+const DASH = <span style={{ color: TEXT_MUTED }}>—</span>;
 // "Open" for a stored file link, a dash when there is none.
 const fileLinkCell = (url: string | null) =>
   url ? (
@@ -76,7 +76,7 @@ let counter = 0;
 const keyed = <T,>(data: T): Keyed<T> => ({ key: `k${++counter}`, data });
 
 const num = (s: string) => {
-  const t = s.trim().replace(/[$â‚¬â‚ªÂ£,\s]/g, "");
+  const t = s.trim().replace(/[$€₪£,\s]/g, "");
   const n = Number(t);
   return t === "" || !Number.isFinite(n) ? null : n;
 };
@@ -190,7 +190,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
     payslipLink: "",
   });
   const unusedLabels = MILESTONE_LABELS.filter((l) => !milestones.some((m) => m.data.label === l));
-  // the dropdown offers the standard names not used yet, starting with the next one; "Otherâ€¦" is a plain "Milestone N"
+  // the dropdown offers the standard names not used yet, starting with the next one; "Other…" is a plain "Milestone N"
   const chosenLabel = addPick !== null && (addPick === "" || unusedLabels.includes(addPick)) ? addPick : (unusedLabels[0] ?? "");
 
   // ---- read-only view ----
@@ -213,11 +213,11 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ color: TEXT_MUTED, fontSize: 14 }}>
           Contract value <strong style={{ color: NAVY }}>{money(saved.contractValue, saved.currency)}</strong>
-          {" Â· "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced, saved.currency)}</strong>
-          {" Â· "}Paid <strong style={{ color: NAVY }}>{money(totals.paid, saved.currency)}</strong>
+          {" · "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced, saved.currency)}</strong>
+          {" · "}Paid <strong style={{ color: NAVY }}>{money(totals.paid, saved.currency)}</strong>
           {totals.percentTotal !== null && (
             <>
-              {" Â· "}Milestones cover{" "}
+              {" · "}Milestones cover{" "}
               <strong style={{ color: totals.percentTotal === 100 ? NAVY : "#9A4B00" }}>{totals.percentTotal}%</strong> of the contract
             </>
           )}
@@ -226,7 +226,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
         {editing ? (
           <>
             <button type="button" style={primaryButton} disabled={pending} onClick={save}>
-              {pending ? "Savingâ€¦" : "Save"}
+              {pending ? "Saving…" : "Save"}
             </button>
             <button type="button" style={secondaryButton} disabled={pending} onClick={cancel}>
               Cancel
@@ -283,7 +283,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     {l}
                   </option>
                 ))}
-                <option value="">Otherâ€¦</option>
+                <option value="">Other…</option>
               </select>
               <button type="button" style={secondaryButton} disabled={milestones.length >= 12} onClick={() => {
                   setMilestones((list) => [...list, keyed(emptyMilestone(chosenLabel || `Milestone ${list.length + 1}`))]);
@@ -323,7 +323,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                         <option value=""></option>
                         {saved.items.map((i) => (
                           <option key={i.id} value={i.id}>
-                            {i.phaseLabel} Â· {i.name}
+                            {i.phaseLabel} · {i.name}
                           </option>
                         ))}
                       </select>,
@@ -384,7 +384,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                     <td style={td}>{m.percent === null ? DASH : `${m.percent}%`}</td>
                     <td style={td}>{m.amount === null ? DASH : money(m.amount, saved.currency)}</td>
                     <td style={{ ...td, color: m.linkedName ? undefined : TEXT_MUTED }} title={m.linkedStatus ? `Item status: ${m.linkedStatus}` : undefined}>
-                      {m.linkedName ?? "â€”"}
+                      {m.linkedName ?? "—"}
                     </td>
                     <td style={td}>{m.dueDate ? fmt(m.dueDate) : DASH}</td>
                     <td style={td}>
