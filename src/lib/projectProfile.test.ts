@@ -42,6 +42,9 @@ describe("cleanProfile", () => {
     expect(cleanProfile({ ...EMPTY_PROFILE, geotechStatus: "IFI" }).ok).toBe(false); // wrong dropdown's value
     expect(cleanProfile({ ...EMPTY_PROFILE, contractLink: "javascript:alert(1)" }).ok).toBe(false);
     expect(cleanProfile({ ...EMPTY_PROFILE, contractLink: "not a link" }).ok).toBe(false);
+    expect(cleanProfile({ ...EMPTY_PROFILE, contractLink: "/api/intake/projects" }).ok).toBe(false);
+    const uploaded = cleanProfile({ ...EMPTY_PROFILE, contractLink: "/api/files/Contract-abc.pdf" });
+    expect(uploaded.ok && uploaded.value.contractLink).toBe("/api/files/Contract-abc.pdf");
     expect(cleanProfile({ ...EMPTY_PROFILE, designNotes: "x".repeat(LONG_TEXT_MAX + 1) }).ok).toBe(false);
     expect(cleanProfile({ ...EMPTY_PROFILE, soma: "x".repeat(201) }).ok).toBe(false);
   });

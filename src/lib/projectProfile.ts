@@ -1,5 +1,6 @@
 import type { StageStatus } from "@prisma/client";
 import { CUSTOMER_TYPES } from "@/lib/customerType";
+import { cleanFileLink } from "@/lib/uploads";
 
 // The project profile: dropdown options (all colored), what each field accepts, and the values that are
 // shown from existing sub-stages instead of being stored again.
@@ -162,18 +163,10 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
     result.choices[field] = v || null;
   }
 
-  const link = str("contractLink").trim();
-  if (link) {
-    if (link.length > 1000) return { ok: false, error: "The contract link is too long." };
-    let url: URL | null = null;
-    try {
-      url = new URL(link);
-    } catch {
-      /* handled below */
-    }
-    if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) return { ok: false, error: "The contract link must be a web address starting with https://" };
-    result.contractLink = url.toString();
-  }
+  // a web address, or one of our own uploaded files (see src/lib/uploads.ts)
+  const link = cleanFileLink(str("contractLink"), { tooLong: "The contract link is too long.", invalid: "The contract link must be a web address starting with https://" });
+  if (!link.ok) return link;
+  if (link.value) result.contractLink = link.value;
 
   result.projectEngineerId = str("projectEngineerId").trim() || null;
   return { ok: true, value: result };

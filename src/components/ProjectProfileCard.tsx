@@ -25,6 +25,7 @@ import {
 import { CUSTOMER_TYPES } from "@/lib/customerType";
 import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
+import { FileLinkField } from "@/components/FileLinkField";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 const fmt = (iso: string) => (iso ? formatDate(parseDateInput(iso)) : "");
@@ -39,12 +40,15 @@ export function ProjectProfileCard({
   people,
   contractReading,
   contractSigned,
+  uploadsEnabled,
 }: {
   projectId: string;
   initial: ProfileInput;
   linked: Record<LinkedKey, LinkedValue>;
   people: { id: string; name: string }[];
   contractReading: boolean;
+  // true once the private file store is connected: the Upload button beside the contract link
+  uploadsEnabled: boolean;
   // the signing date taken from the contract, if known: it wins over the Contract Signing item's own date
   contractSigned: string | null;
 }) {
@@ -288,7 +292,7 @@ export function ProjectProfileCard({
             "Contract file",
             editing ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <input aria-label="Contract link" placeholder="Paste the SharePoint / OneDrive link to the contract" value={form.contractLink} onChange={(e) => set("contractLink", e.target.value)} style={{ ...inputStyle, width: "100%" }} />
+                <FileLinkField ariaLabel="Contract link" placeholder="Paste a link to the contract, or upload it" value={form.contractLink} onChange={(v) => set("contractLink", v)} uploadsEnabled={uploadsEnabled} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <button type="button" style={secondaryButton} onClick={copyPrompt}>
                     {copied ? "Copied ✓" : "Copy contract prompt"}

@@ -1,5 +1,6 @@
 import type { StageStatus } from "@prisma/client";
 import type { Choice } from "@/lib/projectProfile";
+import { cleanFileLink } from "@/lib/uploads";
 
 // Payment milestones and change orders: statuses (colored), amounts, the derived "Overdue", which milestone is
 // "upcoming", the change-order rule, and validation of what the Payments editor sends.
@@ -269,17 +270,9 @@ function number(v: unknown, label: string, max: number): { ok: true; value: numb
   if (n > max) return { ok: false, error: `${label} is too large.` };
   return { ok: true, value: n };
 }
+// A file link is a web address or one of our own uploaded files (see src/lib/uploads.ts).
 function link(v: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
-  const t = str(v).trim();
-  if (!t) return { ok: true, value: null };
-  if (t.length > 1000) return { ok: false, error: "A link is too long." };
-  try {
-    const url = new URL(t);
-    if (url.protocol === "https:" || url.protocol === "http:") return { ok: true, value: url.toString() };
-  } catch {
-    /* falls through */
-  }
-  return { ok: false, error: "A file link must be a web address starting with https://" };
+  return cleanFileLink(str(v), { tooLong: "A link is too long.", invalid: "A file link must be a web address starting with https://" });
 }
 
 export function cleanMilestone(input: Partial<Record<keyof MilestoneInput, unknown>>): Result<CleanMilestone> {

@@ -8,6 +8,7 @@ import { ProjectEditor } from "@/components/ProjectEditor";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { matchesFilters, parseRowFilters } from "@/lib/rowFilters";
 import { ProjectProfileCard } from "@/components/ProjectProfileCard";
+import { uploadsConfigured } from "@/server/uploads";
 import { linkedValues } from "@/lib/projectProfile";
 import { getContractSigningDate, getProfile } from "@/server/services/projectProfile";
 import { getPaymentData } from "@/server/services/payments";
@@ -318,6 +319,7 @@ export default async function ProjectDetailPage({
           initial={profile}
           people={people}
           contractReading={Boolean(process.env.ANTHROPIC_API_KEY)}
+          uploadsEnabled={uploadsConfigured()}
           contractSigned={contractSigned}
           linked={linkedValues(
             project.phases.flatMap((phase) =>

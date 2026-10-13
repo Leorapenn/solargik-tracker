@@ -146,6 +146,10 @@ describe("cleanMilestone", () => {
     const ok = cleanMilestone({ ...base, invoiceLink: "https://x.sharepoint.com/inv.pdf", payslipLink: "" });
     expect(ok.ok && [ok.value.invoiceLink, ok.value.payslipLink]).toEqual(["https://x.sharepoint.com/inv.pdf", null]);
     expect(cleanMilestone({ ...base, payslipLink: "ftp://x/y" }).ok).toBe(false);
+    // an uploaded file is our own link; any other path on this site is not a file link
+    const uploaded = cleanMilestone({ ...base, invoiceLink: "/api/files/Invoice-1-abc.pdf" });
+    expect(uploaded.ok && uploaded.value.invoiceLink).toBe("/api/files/Invoice-1-abc.pdf");
+    expect(cleanMilestone({ ...base, invoiceLink: "/api/intake/projects" }).ok).toBe(false);
   });
 
   it("only keeps the dates that fit the status", () => {
@@ -243,5 +247,8 @@ describe("change orders", () => {
     expect(cleanChangeOrder({ ...base, invoiceStatus: "MAYBE" }).ok).toBe(false);
     expect(cleanChangeOrder({ ...base, fileLink: "javascript:alert(1)" }).ok).toBe(false);
     expect(cleanChangeOrder({ ...base, fileLink: "https://solargik.sharepoint.com/co1.pdf" }).ok).toBe(true);
+    const uploaded = cleanChangeOrder({ ...base, fileLink: "/api/files/CO-1-abc.pdf", invoiceLink: "/api/files/Inv-1-abc.pdf", payslipLink: "/api/files/Slip-1-abc.png" });
+    expect(uploaded.ok && [uploaded.value.fileLink, uploaded.value.invoiceLink, uploaded.value.payslipLink]).toEqual(["/api/files/CO-1-abc.pdf", "/api/files/Inv-1-abc.pdf", "/api/files/Slip-1-abc.png"]);
+    expect(cleanChangeOrder({ ...base, fileLink: "/api/files/../x" }).ok).toBe(false);
   });
 });

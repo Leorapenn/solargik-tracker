@@ -29,6 +29,7 @@ import {
 import type { ChangeOrderView, MilestoneView, PaymentData } from "@/server/services/payments";
 import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
+import { FileLinkField } from "@/components/FileLinkField";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : "—");
@@ -83,7 +84,7 @@ const num = (s: string) => {
 
 // The payments of one project: milestones (with the upcoming one highlighted) and change orders.
 // Read-only until Edit is pressed; Save sends the whole list at once.
-export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { projectId: string; projectName: string; initial: PaymentData; todayIso: string }) {
+export function PaymentsEditor({ projectId, projectName, initial, todayIso, uploadsEnabled }: { projectId: string; projectName: string; initial: PaymentData; todayIso: string; uploadsEnabled: boolean }) {
   const [saved, setSaved] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [milestones, setMilestones] = useState<Keyed<MilestoneInput>[]>([]);
@@ -349,10 +350,10 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                   </div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                     <div style={{ flex: "1 1 280px" }}>
-                      {label("Invoice file link", <input aria-label={`Invoice link of ${m.label}`} placeholder="Paste the SharePoint / OneDrive link to the invoice" value={m.invoiceLink} onChange={(e) => setMilestone(key, { invoiceLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                      {label("Invoice file link", <FileLinkField ariaLabel={`Invoice link of ${m.label}`} placeholder="Paste a link to the invoice, or upload it" value={m.invoiceLink} onChange={(v) => setMilestone(key, { invoiceLink: v })} uploadsEnabled={uploadsEnabled} />)}
                     </div>
                     <div style={{ flex: "1 1 280px" }}>
-                      {label("Payslip file link", <input aria-label={`Payslip link of ${m.label}`} placeholder="Paste the link to the payslip / proof of payment" value={m.payslipLink} onChange={(e) => setMilestone(key, { payslipLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                      {label("Payslip file link", <FileLinkField ariaLabel={`Payslip link of ${m.label}`} placeholder="Paste a link to the payslip / proof of payment, or upload it" value={m.payslipLink} onChange={(v) => setMilestone(key, { payslipLink: v })} uploadsEnabled={uploadsEnabled} />)}
                     </div>
                   </div>
                 </div>
@@ -440,13 +441,13 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso }: { 
                   {label("Due date", <span style={{ padding: "7px 0", fontSize: 14 }}>{(() => { const due = changeOrderDueDate(o.invoicedDate || null, num(o.paymentTermsDays)); return due ? fmt(due) : <span style={{ color: TEXT_MUTED }}>Set the invoiced date and terms</span>; })()}</span>)}
                   {label("Invoice status", <ColorSelect ariaLabel={`Invoice status of change order ${index + 1}`} value={o.invoiceStatus} options={CHANGE_ORDER_INVOICE_STATUS} onChange={(v) => setOrder(key, { invoiceStatus: v })} />)}
                 </div>
-                {label("File link", <input aria-label={`File link of change order ${index + 1}`} placeholder="Paste the SharePoint / OneDrive link to the change order" value={o.fileLink} onChange={(e) => setOrder(key, { fileLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                {label("File link", <FileLinkField ariaLabel={`File link of change order ${index + 1}`} placeholder="Paste a link to the change order, or upload it" value={o.fileLink} onChange={(v) => setOrder(key, { fileLink: v })} uploadsEnabled={uploadsEnabled} />)}
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <div style={{ flex: "1 1 280px" }}>
-                    {label("Invoice file link", <input aria-label={`Invoice link of change order ${index + 1}`} placeholder="Paste the link to the invoice" value={o.invoiceLink} onChange={(e) => setOrder(key, { invoiceLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                    {label("Invoice file link", <FileLinkField ariaLabel={`Invoice link of change order ${index + 1}`} placeholder="Paste a link to the invoice, or upload it" value={o.invoiceLink} onChange={(v) => setOrder(key, { invoiceLink: v })} uploadsEnabled={uploadsEnabled} />)}
                   </div>
                   <div style={{ flex: "1 1 280px" }}>
-                    {label("Payslip file link", <input aria-label={`Payslip link of change order ${index + 1}`} placeholder="Paste the link to the payslip / proof of payment" value={o.payslipLink} onChange={(e) => setOrder(key, { payslipLink: e.target.value })} style={{ ...inputStyle, width: "100%" }} />)}
+                    {label("Payslip file link", <FileLinkField ariaLabel={`Payslip link of change order ${index + 1}`} placeholder="Paste a link to the payslip / proof of payment, or upload it" value={o.payslipLink} onChange={(v) => setOrder(key, { payslipLink: v })} uploadsEnabled={uploadsEnabled} />)}
                   </div>
                 </div>
               </div>
