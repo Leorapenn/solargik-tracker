@@ -169,24 +169,20 @@ describe("cleanMilestone", () => {
 });
 
 describe("hover text on a change order's labels", () => {
-  it("names which status it is, so the two pills can't be confused", () => {
-    expect(changeOrderStatusTitle("COMPLETE")).toMatch(/^Change order status: Complete\./);
-    expect(changeOrderInvoiceStatusTitle("PAID")).toMatch(/^Invoice status: Paid\./);
-    expect(changeOrderInvoiceStatusTitle("PAID")).toContain("Payment confirmed");
-    expect(changeOrderStatusTitle("OVERDUE")).toContain("past its due date");
+  it("only names which status it is, so the two pills can't be confused", () => {
+    expect(changeOrderStatusTitle("COMPLETE")).toBe("Change Order Status");
+    expect(changeOrderInvoiceStatusTitle("PAID")).toBe("Invoice status");
   });
-  it("has an explanation for every status that exists", () => {
-    for (const s of CHANGE_ORDER_STATUS) expect(changeOrderStatusTitle(s.value)).toMatch(new RegExp(`^Change order status: ${s.label}\\. .{10,}`));
-    for (const s of CHANGE_ORDER_INVOICE_STATUS) expect(changeOrderInvoiceStatusTitle(s.value)).toMatch(new RegExp(`^Invoice status: ${s.label}\\. .{10,}`));
+  it("says the same for every status that exists, with no explanation added", () => {
+    for (const s of CHANGE_ORDER_STATUS) expect(changeOrderStatusTitle(s.value)).toBe("Change Order Status");
+    for (const s of CHANGE_ORDER_INVOICE_STATUS) expect(changeOrderInvoiceStatusTitle(s.value)).toBe("Invoice status");
   });
   it("gives nothing for an empty or unknown status", () => {
     expect(changeOrderStatusTitle(null)).toBeUndefined();
     expect(changeOrderInvoiceStatusTitle("NOPE")).toBeUndefined();
   });
-  it("says what the three file links are", () => {
-    expect(CHANGE_ORDER_LINK_TITLES.payslip).toContain("payment confirmation");
-    expect(CHANGE_ORDER_LINK_TITLES.invoice).toContain("Invoice");
-    expect(CHANGE_ORDER_LINK_TITLES.file).toContain("change order");
+  it("gives the three file links short plain names", () => {
+    expect(CHANGE_ORDER_LINK_TITLES).toEqual({ file: "Change order file", invoice: "Invoice", payslip: "Payslip (proof of payment)" });
   });
 });
 

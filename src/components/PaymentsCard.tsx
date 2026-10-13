@@ -137,14 +137,14 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
                 style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 14 }}
                 title={`Sent: ${fmt(c.dateSent)}\nInvoiced: ${fmt(c.invoicedDate)}\nTerms: ${formatTerms(c.paymentTermsDays) ?? "—"}\nDue: ${fmt(shown.dueDate)}`}
               >
-                <span style={{ flex: "1 1 260px", minWidth: 0 }} title="Reason for the change order">
+                <span style={{ flex: "1 1 260px", minWidth: 0 }} title="Reason">
                   {c.reason}
                 </span>
                 <strong style={{ color: NAVY }} title="Change order amount">
                   {money(c.amount, data.currency)}
                 </strong>
                 {shown.dueDate && c.invoiceStatus !== "PAID" && (
-                  <span title="Due date: the invoice date plus the payment terms" style={{ fontSize: 13, color: shown.overdue ? "#8C1D18" : TEXT_MUTED, fontWeight: shown.overdue ? 600 : 400 }}>
+                  <span title="Due date" style={{ fontSize: 13, color: shown.overdue ? "#8C1D18" : TEXT_MUTED, fontWeight: shown.overdue ? 600 : 400 }}>
                     Due {fmt(shown.dueDate)}
                   </span>
                 )}
