@@ -5,7 +5,7 @@ import { requirePageAuth } from "@/lib/auth";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { getPaymentData } from "@/server/services/payments";
 import { PaymentsEditor } from "@/components/PaymentsEditor";
-import { uploadsConfigured } from "@/server/uploads";
+import { uploadMode } from "@/server/uploads";
 import { NAVY, TEXT_MUTED, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,7 @@ export default async function ProjectPaymentsPage({ params }: { params: Promise<
         <h1 style={pageTitleStyle}>{project.name}</h1>
         <div style={{ color: TEXT_MUTED, marginTop: 4 }}>{project.customer.name}</div>
       </div>
-      <PaymentsEditor projectId={id} projectName={project.name} initial={data} todayIso={toDateInputValue(todayInAppTz())} uploadsEnabled={uploadsConfigured()} />
+      <PaymentsEditor projectId={id} projectName={project.name} initial={data} todayIso={toDateInputValue(todayInAppTz())} uploadMode={uploadMode()} />
     </main>
   );
 }

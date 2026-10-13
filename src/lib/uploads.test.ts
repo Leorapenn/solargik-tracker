@@ -9,6 +9,7 @@ import {
   ownFileLink,
   safeFileName,
   servedContentType,
+  uploadPathnameFor,
 } from "./uploads";
 
 const messages = { tooLong: "too long", invalid: "invalid" };
@@ -43,6 +44,18 @@ describe("checkUpload", () => {
     expect(checkUpload({ name: "a.pdf", size: 10, type: "text/html" }).ok).toBe(false);
     expect(checkUpload({ name: "a.pdf", size: 0 }).ok).toBe(false);
     expect(checkUpload({ name: "a.pdf", size: MAX_UPLOAD_BYTES + 1 }).ok).toBe(false);
+  });
+});
+
+describe("uploadPathnameFor", () => {
+  it("puts a random suffix before the extension and always makes an allowed pathname", () => {
+    expect(uploadPathnameFor("Invoice 12.PDF", "a1b2c3d4e5f6")).toBe("uploads/Invoice-12-a1b2c3d4e5f6.pdf");
+    expect(uploadPathnameFor("../../evil?.png", "a1b2c3d4e5f6")).toBe("uploads/evil-a1b2c3d4e5f6.png");
+    expect(uploadPathnameFor("חשבונית.pdf", "a1b2c3d4e5f6")).toBe("uploads/file-a1b2c3d4e5f6.pdf");
+    for (const name of ["a.pdf", "B (1).jpeg", "x".repeat(300) + ".png", "noext"]) expect(isUploadPathname(uploadPathnameFor(name, "0123456789ab"))).toBe(true);
+  });
+  it("gives two files with the same name two different pathnames", () => {
+    expect(uploadPathnameFor("a.pdf", "000000000001")).not.toBe(uploadPathnameFor("a.pdf", "000000000002"));
   });
 });
 

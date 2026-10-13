@@ -26,6 +26,7 @@ import { CUSTOMER_TYPES } from "@/lib/customerType";
 import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
 import { FileLinkField } from "@/components/FileLinkField";
+import type { UploadMode } from "@/lib/uploads";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 const fmt = (iso: string) => (iso ? formatDate(parseDateInput(iso)) : "");
@@ -40,7 +41,7 @@ export function ProjectProfileCard({
   people,
   contractReading,
   contractSigned,
-  uploadsEnabled,
+  uploadMode,
 }: {
   projectId: string;
   initial: ProfileInput;
@@ -48,7 +49,7 @@ export function ProjectProfileCard({
   people: { id: string; name: string }[];
   contractReading: boolean;
   // true once the private file store is connected: the Upload button beside the contract link
-  uploadsEnabled: boolean;
+  uploadMode: UploadMode;
   // the signing date taken from the contract, if known: it wins over the Contract Signing item's own date
   contractSigned: string | null;
 }) {
@@ -292,7 +293,7 @@ export function ProjectProfileCard({
             "Contract file",
             editing ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <FileLinkField ariaLabel="Contract link" placeholder="Paste a link to the contract, or upload it" value={form.contractLink} onChange={(v) => set("contractLink", v)} uploadsEnabled={uploadsEnabled} />
+                <FileLinkField ariaLabel="Contract link" placeholder="Paste a link to the contract, or upload it" value={form.contractLink} onChange={(v) => set("contractLink", v)} uploadMode={uploadMode} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <button type="button" style={secondaryButton} onClick={copyPrompt}>
                     {copied ? "Copied ✓" : "Copy contract prompt"}

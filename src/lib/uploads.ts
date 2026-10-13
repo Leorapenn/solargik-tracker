@@ -2,6 +2,10 @@
 // what is saved next to a record is only our own link to it, "/api/files/<name>", which the site serves to a logged-in
 // person (never a public address). These helpers are pure so they can be tested and used on the page and the server.
 
+// How the site talks to the private store: "token" = a read-write token (BLOB_READ_WRITE_TOKEN), "oidc" = Vercel's
+// keyless connection (BLOB_STORE_ID + BLOB_WEBHOOK_PUBLIC_KEY, which is what a newly linked store uses), null = not connected.
+export type UploadMode = "token" | "oidc" | null;
+
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const ALLOWED_UPLOAD_TYPES = ["application/pdf", "image/png", "image/jpeg"] as const;
 const EXTENSION_TYPES: Record<string, (typeof ALLOWED_UPLOAD_TYPES)[number]> = {
@@ -45,6 +49,16 @@ export function checkUpload(file: { name: string; size: number; type?: string })
   if (file.size <= 0) return { ok: false, error: "That file is empty." };
   if (file.size > MAX_UPLOAD_BYTES) return { ok: false, error: "That file is larger than 10 MB." };
   return { ok: true, contentType: byExtension };
+}
+
+// The pathname the browser asks to upload to: "uploads/<safe name>" with a random suffix before the extension, so two
+// files with the same name never collide (the store also refuses to overwrite). `suffix` is random hex from the caller.
+export function uploadPathnameFor(originalName: string, suffix: string): string {
+  const name = safeFileName(originalName);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  return `${BLOB_FOLDER}${stem}-${suffix}${ext}`;
 }
 
 // The name inside the store for a stored file name, or null when it isn't a name we could have stored.
