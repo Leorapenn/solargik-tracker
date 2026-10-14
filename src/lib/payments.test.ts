@@ -103,9 +103,10 @@ describe("upcomingMilestoneId", () => {
 });
 
 describe("highlightLabel", () => {
-  it("says Upcoming until the invoice is sent, then Open", () => {
+  it("says Upcoming until the invoice is sent or the due date has passed, then Open", () => {
     expect(highlightLabel("NOT_DUE")).toBe("Upcoming");
     expect(highlightLabel("INVOICE_SENT")).toBe("Open");
+    expect(highlightLabel("OVERDUE")).toBe("Open");
   });
 });
 
