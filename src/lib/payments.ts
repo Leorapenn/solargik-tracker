@@ -125,6 +125,9 @@ export function upcomingMilestoneId(
   return next?.id ?? null;
 }
 
+// The tag on the highlighted milestone: "Upcoming" until its invoice is sent, then "Open" (invoiced, not yet paid).
+export const highlightLabel = (status: string) => (status === "INVOICE_SENT" ? "Open" : "Upcoming");
+
 // Which milestone a project is "up to": the first one (in order) that has not been paid, with its status;
 // "all-paid" once every milestone is paid, "none" when the project has no milestones.
 export type MilestoneProgress =

@@ -19,6 +19,7 @@ import {
   changeOrderStatusFor,
   effectiveStatus,
   formatTerms,
+  highlightLabel,
   milestoneAmount,
   milestoneTotals,
   money,
@@ -381,7 +382,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
                     <td style={{ ...td, fontWeight: 700, color: NAVY }}>
                       {m.label}
                       {m.optional && <span style={{ fontWeight: 400, color: TEXT_MUTED }}> (optional)</span>}
-                      {m.id === upcoming && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, background: "#F28C28", color: "#fff", borderRadius: 999, padding: "2px 8px" }}>Upcoming</span>}
+                      {m.id === upcoming && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, background: "#F28C28", color: "#fff", borderRadius: 999, padding: "2px 8px" }}>{highlightLabel(m.status)}</span>}
                     </td>
                     <td style={td}>{m.percent === null ? DASH : `${m.percent}%`}</td>
                     <td style={td}>{m.amount === null ? DASH : money(m.amount, saved.currency)}</td>

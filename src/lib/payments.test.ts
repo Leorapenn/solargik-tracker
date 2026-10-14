@@ -20,6 +20,7 @@ import {
   totalsByCurrency,
   milestoneTotals,
   money,
+  highlightLabel,
   upcomingMilestoneId,
 } from "./payments";
 
@@ -98,6 +99,13 @@ describe("upcomingMilestoneId", () => {
     expect(upcomingMilestoneId(list.slice(0, 2))).toBeNull();
     expect(upcomingMilestoneId([{ id: "z", order: 1, status: "INVOICE_SENT", linkedStatus: null }])).toBe("z");
     expect(upcomingMilestoneId([])).toBeNull();
+  });
+});
+
+describe("highlightLabel", () => {
+  it("says Upcoming until the invoice is sent, then Open", () => {
+    expect(highlightLabel("NOT_DUE")).toBe("Upcoming");
+    expect(highlightLabel("INVOICE_SENT")).toBe("Open");
   });
 });
 

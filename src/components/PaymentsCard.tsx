@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, formatTerms, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
+import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, formatTerms, highlightLabel, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
 import type { PaymentData } from "@/server/services/payments";
 import { ChoicePill } from "@/components/ColorSelect";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib/theme";
@@ -81,7 +81,7 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
                 >
                   <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: TEXT_MUTED }}>
                     {m.label}
-                    {isUpcoming && <span style={{ marginLeft: 6, color: "#B85E00" }}>· Upcoming</span>}
+                    {isUpcoming && <span style={{ marginLeft: 6, color: "#B85E00" }}>· {highlightLabel(m.status)}</span>}
                   </span>
                   <span style={{ fontSize: 17, fontWeight: 700, color: NAVY }}>{money(milestoneAmount(m, data.contractValue), data.currency)}</span>
                   <span>
