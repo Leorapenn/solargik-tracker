@@ -12,7 +12,9 @@ export function deriveLifecycle(stage: string | null | undefined, status: string
   // A Suspended stage wins over Status "Stuck/On Hold" (the two usually appear together).
   if (s === "suspended") return "SUSPENDED";
   if (st === "stuck/on hold" || s === "7 hold") return "ON_HOLD";
-  if (s === "0 pre ntp & pre ap") return "PRE_NTP";
+  // Only the Status decides Pre-NTP: a project whose STAGE is still "0 Pre NTP & Pre AP" but whose Status
+  // has moved on (Design, Logistics, Construction...) is already running.
+  if (st === "pre ntp") return "PRE_NTP";
   return "ACTIVE";
 }
 

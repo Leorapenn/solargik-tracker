@@ -18,9 +18,12 @@ describe("deriveLifecycle", () => {
     expect(deriveLifecycle("Suspended", "Construction")).toBe("SUSPENDED");
   });
 
-  it("marks STAGE '0 Pre NTP & Pre AP' as PRE_NTP even when Status says Logistics/Design", () => {
-    expect(deriveLifecycle("0 Pre NTP & Pre AP", "Logistics")).toBe("PRE_NTP");
+  it("marks a project PRE_NTP only when its Status is Pre NTP, whatever the stage says", () => {
     expect(deriveLifecycle("0 Pre NTP & Pre AP", "Pre NTP")).toBe("PRE_NTP");
+    expect(deriveLifecycle(null, "Pre NTP")).toBe("PRE_NTP");
+    expect(deriveLifecycle("0 Pre NTP & Pre AP", "Logistics")).toBe("ACTIVE");
+    expect(deriveLifecycle("0 Pre NTP & Pre AP", "Design")).toBe("ACTIVE");
+    expect(deriveLifecycle("0 Pre NTP & Pre AP", "Construction")).toBe("ACTIVE");
   });
 
   it("gives cancelled precedence over hold and suspended", () => {
