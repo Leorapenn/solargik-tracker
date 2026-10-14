@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { toDateInputValue, todayInAppTz, formatDate, parseDateInput } from "@/lib/dates";
-import { MILESTONE_STATUS, effectiveStatus, milestoneAmount, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
+import { CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderStatusTitle, changeOrdersRollup, effectiveStatus, milestoneAmount, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
 import { parseSort, sortRows } from "@/lib/sort";
 import { ChoicePill } from "@/components/ColorSelect";
 import { SortSummary } from "@/components/SortSummary";
@@ -15,7 +15,8 @@ export const dynamic = "force-dynamic";
 type Params = Record<string, string | string[] | undefined>;
 
 const STATUS_RANK: Record<MilestoneStatus, number> = { OVERDUE: 0, NOT_DUE: 1, INVOICE_SENT: 2, PAYMENT_RECEIVED: 3 };
-const SORT_LABELS = { project: "Project", customer: "Customer", contract: "Contract value", paid: "Paid", next: "Next milestone", due: "Milestone due date", status: "Milestone status", orders: "Open change orders" };
+const ORDER_RANK = { OVERDUE: 0, SENT: 1, COMPLETE: 2 } as const;
+const SORT_LABELS = { project: "Project", customer: "Customer", contract: "Contract value", paid: "Paid", next: "Next milestone", due: "Milestone due date", status: "Milestone status", orders: "Change order status" };
 
 export default async function PaymentsPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
@@ -32,7 +33,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       paymentBase: true,
       customer: { select: { name: true } },
       milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true } },
-      changeOrders: { select: { status: true } },
+      changeOrders: { select: { status: true, invoiceStatus: true, invoicedDate: true, paymentTermsDays: true } },
     },
   });
 
@@ -63,7 +64,10 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       next,
       nextAmount: next ? milestoneAmount(next, contract) : null,
       nextStatus: next ? effectiveStatus(next, todayIso) : null,
-      openOrders: p.changeOrders.filter((c) => c.status !== "COMPLETE").length,
+      orders: changeOrdersRollup(
+        p.changeOrders.map((c) => ({ status: c.status, invoiceStatus: c.invoiceStatus, invoicedDate: c.invoicedDate ? toDateInputValue(c.invoicedDate) : null, paymentTermsDays: c.paymentTermsDays })),
+        todayIso,
+      ),
     };
   });
 
@@ -76,7 +80,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     next: (r: Row) => r.next?.label ?? null,
     due: (r: Row) => r.next?.dueDate ?? null,
     status: (r: Row) => (r.nextStatus ? STATUS_RANK[r.nextStatus] : null),
-    orders: (r: Row) => r.openOrders,
+    // worst first; projects with no change orders last
+    orders: (r: Row) => (r.orders.status ? ORDER_RANK[r.orders.status] * 1000 - r.orders.open : null),
   };
   const sort = parseSort(params, Object.keys(accessors), { key: "status", dir: "asc" });
   const sorted = sortRows(rows, accessors, sort);
@@ -102,7 +107,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                 <SortTh label="Next milestone" sortKey="next" {...th} />
                 <SortTh label="Milestone due date" sortKey="due" {...th} />
                 <SortTh label="Milestone status" sortKey="status" {...th} />
-                <SortTh label="Open change orders" sortKey="orders" {...th} />
+                <SortTh label="Change order status" sortKey="orders" {...th} />
               </tr>
             </thead>
             <tbody>
@@ -127,7 +132,18 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                   </td>
                   <td style={bodyCell}>{r.next?.dueDate ? formatDate(parseDateInput(r.next.dueDate)) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
                   <td style={bodyCell}>{r.nextStatus ? <ChoicePill choice={MILESTONE_STATUS[r.nextStatus]} /> : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
-                  <td style={bodyCell}>{r.openOrders > 0 ? r.openOrders : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
+                  <td style={bodyCell}>
+                    {r.orders.status ? (
+                      <>
+                        <ChoicePill choice={CHANGE_ORDER_STATUS.find((s) => s.value === r.orders.status) ?? null} title={changeOrderStatusTitle(r.orders.status)} />
+                        <span style={{ color: TEXT_MUTED, marginLeft: 8, fontSize: 13 }}>
+                          {r.orders.open > 0 ? `${r.orders.open} of ${r.orders.total} open` : `${r.orders.total} complete`}
+                        </span>
+                      </>
+                    ) : (
+                      <span style={{ color: TEXT_MUTED }}>—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
               {sorted.length === 0 && (

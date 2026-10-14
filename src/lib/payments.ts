@@ -196,6 +196,25 @@ export function changeOrderDisplay(
   };
 }
 
+// One status for all of a project's change orders, for the main Payments table: Overdue if any is overdue (as shown by
+// changeOrderDisplay), else Sent if any is still open, else Complete when every one is complete; null when there are none.
+export type ChangeOrderRollup = { status: "OVERDUE" | "SENT" | "COMPLETE" | null; open: number; overdue: number; total: number };
+export function changeOrdersRollup(
+  orders: { status: string; invoiceStatus: string | null; invoicedDate: string | null; paymentTermsDays: number | null }[],
+  todayIso: string,
+): ChangeOrderRollup {
+  let open = 0;
+  let overdue = 0;
+  for (const o of orders) {
+    const shown = changeOrderDisplay(o, todayIso);
+    if (shown.status === "COMPLETE") continue;
+    open += 1;
+    if (shown.status === "OVERDUE" || shown.overdue) overdue += 1;
+  }
+  const status = orders.length === 0 ? null : overdue > 0 ? "OVERDUE" : open > 0 ? "SENT" : "COMPLETE";
+  return { status, open, overdue, total: orders.length };
+}
+
 // ---- validation of what the editor sends ----
 
 export type MilestoneInput = {

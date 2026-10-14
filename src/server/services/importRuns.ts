@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
-import { cleanImportRun } from "@/lib/importRun";
+import { MANUAL_SOURCE_PREFIX, cleanImportRun } from "@/lib/importRun";
 
 export type ImportRunView = {
   id: string;
@@ -37,7 +37,8 @@ export async function getLastImport(): Promise<ImportRunView | null> {
 // The agent sends its suggestions first and records the run last, so those are the ones this run produced (the
 // first run claims everything so far). `ranAt` is when the run STARTED, so the next run's search window has no gap;
 // it plays no part in claiming. Emails the agent skipped as irrelevant produce no suggestion, so they are never
-// counted as unmatched. `claimUntil` (tests only) leaves out suggestions created after that moment.
+// counted as unmatched. Proposals put in by hand (source starting "Manual: ") are never claimed: they did not come
+// from the run. `claimUntil` (tests only) leaves out suggestions created after that moment.
 export async function recordImportRun(raw: unknown, claimUntil?: Date): Promise<ImportRunView> {
   const cleaned = cleanImportRun(raw);
   if (!cleaned.ok) throw new UserError(cleaned.error);
@@ -46,7 +47,12 @@ export async function recordImportRun(raw: unknown, claimUntil?: Date): Promise<
   const run = await prisma.$transaction(async (tx) => {
     const created = await tx.importRun.create({ data: { ranAt, emailsChecked } });
     await tx.suggestion.updateMany({
-      where: { importRunId: null, ...(claimUntil ? { createdAt: { lte: claimUntil } } : {}) },
+      where: {
+        importRunId: null,
+        // (a plain NOT would also drop rows with no source at all, so the null case is spelled out)
+        OR: [{ sourceFrom: null }, { NOT: { sourceFrom: { startsWith: MANUAL_SOURCE_PREFIX } } }],
+        ...(claimUntil ? { createdAt: { lte: claimUntil } } : {}),
+      },
       data: { importRunId: created.id },
     });
     return created;

@@ -23,9 +23,9 @@ describe("import runs", () => {
     runIds.push(r.id);
     return r;
   };
-  const suggest = async (createdAt: Date, withProject: boolean) => {
+  const suggest = async (createdAt: Date, withProject: boolean, sourceFrom?: string) => {
     const s = await prisma.suggestion.create({
-      data: { kind: "NOTE", payload: { kind: "NOTE", text: "x" }, summary: `s ${RUN}`, createdAt, projectId: withProject ? projectId : null },
+      data: { kind: "NOTE", payload: { kind: "NOTE", text: "x" }, summary: `s ${RUN}`, createdAt, projectId: withProject ? projectId : null, ...(sourceFrom ? { sourceFrom } : {}) },
     });
     suggestionIds.push(s.id);
     return s;
@@ -74,6 +74,22 @@ describe("import runs", () => {
     expect(run).toMatchObject({ proposalsCreated: 1, unmatched: 0 });
     const first = await prisma.importRun.findFirstOrThrow({ where: { ranAt: at("2021-03-01T06:00:00Z"), id: { in: runIds } } });
     expect(await prisma.suggestion.count({ where: { importRunId: first.id } })).toBe(3);
+  });
+
+  it("never credits a proposal put in by hand to a run, and still credits email ones with or without a sender", async () => {
+    const byHand = await suggest(at("2021-03-07T06:00:00Z"), false, "Manual: change order records");
+    const fromEmail = await suggest(at("2021-03-07T06:05:00Z"), false, "someone@example.com");
+    const noSource = await suggest(at("2021-03-07T06:10:00Z"), true);
+    // an address that merely starts with the word is not "manual"
+    const lookalike = await suggest(at("2021-03-07T06:15:00Z"), true, "manual@example.com");
+    const run = await record({ emailsChecked: 4, ranAt: "2021-03-07T06:00:00Z" }, at("2021-03-07T07:00:00Z"));
+    expect(run).toMatchObject({ proposalsCreated: 3, unmatched: 1 });
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: byHand.id } })).importRunId).toBeNull();
+    for (const s of [fromEmail, noSource, lookalike]) expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: s.id } })).importRunId).toBe(run.id);
+    // and a later run does not pick the hand-made one up either
+    const later = await record({ emailsChecked: 0, ranAt: "2021-03-07T08:00:00Z" }, at("2021-03-07T09:00:00Z"));
+    expect(later).toMatchObject({ proposalsCreated: 0 });
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: byHand.id } })).importRunId).toBeNull();
   });
 
   it("a run with no new suggestions reports zeros", async () => {

@@ -6,6 +6,11 @@ import { APP_TIMEZONE } from "@/lib/dates";
 
 export type CleanImportRun = { ranAt: Date; emailsChecked: number };
 
+// A proposal put in by hand (not by the email routine) has a source ("from") that starts with this text, e.g.
+// "Manual: Solargik change order records". It is never credited to a routine run, so the Inbox's "Last email check"
+// counts only what the routine produced. An email address can't contain ": ", so a real sender never matches.
+export const MANUAL_SOURCE_PREFIX = "Manual: ";
+
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
 const MAX_COUNT = 1_000_000;
