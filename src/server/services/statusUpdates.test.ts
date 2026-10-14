@@ -25,7 +25,7 @@ describe("status updates", () => {
   });
 
   afterAll(async () => {
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
   });

@@ -25,7 +25,7 @@ describe("project correspondence", () => {
 
   afterAll(async () => {
     await prisma.suggestion.deleteMany({ where: { summary: { contains: RUN } } });
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
   });

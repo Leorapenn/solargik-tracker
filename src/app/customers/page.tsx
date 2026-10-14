@@ -9,7 +9,7 @@ import { SpreadBreakdown } from "@/components/SpreadBreakdown";
 import { SortLink } from "@/components/SortTh";
 import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
-import { flagSeverity, parseFlagColors } from "@/lib/flags";
+import { flagSeverity, parseFlagColors, parseFlagNotes } from "@/lib/flags";
 import { knownFlags } from "@/server/services/flags";
 import { ImportanceSelect } from "@/components/ImportanceSelect";
 import { updateCustomerImportance } from "@/server/actions/updateCustomerImportance";
@@ -202,6 +202,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                     name={customer.name}
                     flags={customer.flags}
                     colors={parseFlagColors(customer.flagColors)}
+                    notes={parseFlagNotes(customer.flagNotes)}
                     suggestions={flagSuggestions}
                     extra={
                       <>

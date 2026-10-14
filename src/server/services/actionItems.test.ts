@@ -33,7 +33,7 @@ describe("action items", () => {
 
   afterAll(async () => {
     await prisma.suggestion.deleteMany({ where: { id: { in: ids } } });
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
   });

@@ -40,7 +40,7 @@ describe("import runs", () => {
   afterAll(async () => {
     await prisma.suggestion.deleteMany({ where: { id: { in: suggestionIds } } });
     await prisma.importRun.deleteMany({ where: { id: { in: runIds } } });
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
   });

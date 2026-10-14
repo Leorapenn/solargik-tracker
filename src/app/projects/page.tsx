@@ -14,7 +14,7 @@ import { SortSummary } from "@/components/SortSummary";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { milestoneProgress, money, projectContract } from "@/lib/payments";
 import { capacityKwp, formatKwp } from "@/lib/capacity";
-import { flagSeverity, parseFlagColors } from "@/lib/flags";
+import { flagSeverity, parseFlagColors, parseFlagNotes } from "@/lib/flags";
 import { MilestoneCell } from "@/components/MilestoneCell";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { knownFlags } from "@/server/services/flags";
@@ -202,6 +202,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                         name={project.name}
                         flags={project.flags}
                         colors={parseFlagColors(project.flagColors)}
+                        notes={parseFlagNotes(project.flagNotes)}
                         suggestions={flagSuggestions}
                       />
                     </td>

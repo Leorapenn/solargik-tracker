@@ -34,7 +34,7 @@ describe("phase owners", () => {
   afterAll(async () => {
     await prisma.phaseDefaultOwner.deleteMany({ where: { phase: "DESIGN" } });
     if (savedDefault) await prisma.phaseDefaultOwner.create({ data: savedDefault });
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.person.deleteMany({ where: { id: { in: [personId, otherId, inactiveId] } } });
     await prisma.$disconnect();

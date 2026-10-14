@@ -49,6 +49,8 @@ model Customer {
   flags        String[]           @default([])
   // Green / yellow / red per flag label: {"Payment risk": "RED"}. A flag with no entry counts as yellow.
   flagColors   Json               @default("{}")
+  // Why a flag is there, per flag label: {"Customer relationship": {"text": "...", "at": "2026-10-14"}}. Optional, typed by hand.
+  flagNotes    Json               @default("{}")
   // What kind of customer it is: EPC / DEVELOPER / DEVELOPER_EPC / INVESTOR / END_USER (src/lib/customerType.ts).
   // Set by hand, or filled once from the monday.com Control Table when empty; the importer never overwrites it.
   customerType String?
@@ -133,6 +135,8 @@ model Project {
   sharepointLink          String?
   // Severity of each project flag: {label: GREEN | YELLOW | RED}, like Customer.flagColors. Never imported.
   flagColors              Json             @default("{}")
+  // Why a flag is there, per label: {label: {text, at}}, like Customer.flagNotes. Never imported.
+  flagNotes               Json             @default("{}")
   // The project manager on the customer's side (typed or copied from one of the customer's contacts).
   customerManagerName     String?
   customerManagerEmail    String?

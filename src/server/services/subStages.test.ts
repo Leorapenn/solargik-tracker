@@ -38,7 +38,7 @@ describe("patchSubStages", () => {
   });
 
   afterAll(async () => {
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.person.delete({ where: { id: personId } });
     await prisma.$disconnect();

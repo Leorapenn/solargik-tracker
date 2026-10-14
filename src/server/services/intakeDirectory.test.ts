@@ -36,9 +36,9 @@ describe("the agent's matching lists and proposal duplicates", () => {
 
   afterAll(async () => {
     await prisma.suggestion.deleteMany({ where: { summary: { contains: RUN } } });
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customerAlias.delete({ where: { id: aliasId } });
-    await prisma.contact.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.contact.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
   });

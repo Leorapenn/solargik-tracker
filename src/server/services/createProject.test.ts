@@ -20,7 +20,7 @@ describe("createProject", () => {
   afterAll(async () => {
     // Deleting the customer's projects cascades to their phases and
     // sub-stages (onDelete: Cascade in schema.prisma).
-    await prisma.project.deleteMany({ where: { customerId } });
+    if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
   });

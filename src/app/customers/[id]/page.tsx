@@ -20,7 +20,7 @@ import { CustomerEditor } from "@/components/CustomerEditor";
 import { CustomerTypeSelect } from "@/components/CustomerTypeSelect";
 import { FlagsEditor } from "@/components/FlagsEditor";
 import { FlagChip } from "@/components/FlagChip";
-import { colorOf, parseFlagColors } from "@/lib/flags";
+import { colorOf, parseFlagColors, parseFlagNotes } from "@/lib/flags";
 import { formatTotals, milestoneProgress, money, projectContract, totalsByCurrency } from "@/lib/payments";
 import { MilestoneCell } from "@/components/MilestoneCell";
 import { capacityKwp, formatKwp } from "@/lib/capacity";
@@ -171,6 +171,7 @@ export default async function CustomerDetailPage({
             id={customer.id}
             flags={customer.flags}
             colors={parseFlagColors(customer.flagColors)}
+            notes={parseFlagNotes(customer.flagNotes)}
             suggestions={flagSuggestions}
           />
         </div>
@@ -239,7 +240,7 @@ export default async function CustomerDetailPage({
                       {project.flags.length > 0 && (
                         <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
                           {project.flags.map((flag) => (
-                            <FlagChip key={flag} label={flag} color={colorOf(parseFlagColors(project.flagColors), flag)} />
+                            <FlagChip key={flag} label={flag} color={colorOf(parseFlagColors(project.flagColors), flag)} note={parseFlagNotes(project.flagNotes)[flag]} />
                           ))}
                         </div>
                       )}

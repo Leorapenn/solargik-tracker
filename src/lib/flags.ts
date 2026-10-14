@@ -48,3 +48,47 @@ export function flagSeverity(labels: string[], colors: Record<string, FlagColor>
 }
 
 export const withoutFlag = (flags: string[], label: string) => flags.filter((f) => f.toLowerCase() !== label.toLowerCase());
+
+// An optional explanation of why a flag is there. Only the latest text is kept, with the calendar day it was
+// last changed (YYYY-MM-DD, set by the server).
+export const MAX_FLAG_NOTE = 500;
+export type FlagNote = { text: string; at: string };
+
+export function cleanFlagNote(raw: string | null | undefined): { ok: true; value: string | null } | { ok: false; error: string } {
+  const value = (raw ?? "").replace(/\r\n?/g, "\n").trim();
+  if (value.length > MAX_FLAG_NOTE) return { ok: false, error: `Keep the note under ${MAX_FLAG_NOTE} characters.` };
+  return { ok: true, value: value === "" ? null : value };
+}
+
+// Reads the stored {label: {text, at}} map defensively (it is JSON in the database).
+export function parseFlagNotes(value: unknown): Record<string, FlagNote> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, FlagNote> = {};
+  for (const [label, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object") continue;
+    const { text, at } = entry as { text?: unknown; at?: unknown };
+    if (typeof text === "string" && text.trim() !== "") out[label] = { text, at: typeof at === "string" ? at : "" };
+  }
+  return out;
+}
+
+// What a note does when saved: empty text removes it, identical text keeps its date, anything else gets today's date.
+export function nextFlagNote(previous: FlagNote | undefined, text: string | null, today: string): FlagNote | null {
+  if (text === null) return null;
+  if (previous && previous.text === text) return previous;
+  return { text, at: today };
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function formatNoteDate(at: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(at);
+  return m ? `${m[3]} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : "";
+}
+
+// The hover text of a flag chip: its severity, then the note (and when it was last changed) if there is one.
+export function flagTitle(severity: string | null, note: FlagNote | undefined): string {
+  const head = severity ? `${severity} flag` : "Flag";
+  if (!note) return head;
+  const when = formatNoteDate(note.at);
+  return `${head}: ${note.text}${when ? ` (updated ${when})` : ""}`;
+}

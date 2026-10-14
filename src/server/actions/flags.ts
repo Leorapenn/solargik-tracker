@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
 import type { FlagColor } from "@/lib/flags";
-import { addFlag as add, removeFlag as remove, setFlagColor as recolor, type FlagTarget } from "@/server/services/flags";
+import { addFlag as add, removeFlag as remove, setFlagColor as recolor, setFlagNote as renote, type FlagTarget } from "@/server/services/flags";
 
 function refresh(kind: FlagTarget) {
   revalidatePath("/customers", "layout");
@@ -30,6 +30,17 @@ export async function removeFlag(kind: FlagTarget, id: string, label: string): P
   return run(async () => {
     if (!valid(kind)) throw new Error("bad kind");
     await remove(kind, id, label);
+    refresh(kind);
+    return {};
+  });
+}
+
+// Why a flag is there: free text, empty clears it. The server stamps the date it was last changed.
+export async function setFlagNote(kind: FlagTarget, id: string, label: string, note: string): Promise<ActionResult> {
+  await requireActionAuth();
+  return run(async () => {
+    if (!valid(kind)) throw new Error("bad kind");
+    await renote(kind, id, label, note);
     refresh(kind);
     return {};
   });
