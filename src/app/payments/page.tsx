@@ -139,7 +139,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                         {r.next.label} <span style={{ color: TEXT_MUTED }}>· {money(r.nextAmount, r.currency)}</span>
                       </>
                     ) : (
-                      <span style={{ color: TEXT_MUTED }}>{r.hasMilestones ? "All paid" : "No milestones yet"}</span>
+                      <span style={{ color: TEXT_MUTED }}>{r.hasMilestones ? "All milestones paid" : "No milestones yet"}</span>
                     )}
                   </td>
                   <td style={bodyCell}>{r.next && milestoneDueDate(r.next) ? formatDate(parseDateInput(milestoneDueDate(r.next)!)) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
