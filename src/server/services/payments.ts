@@ -25,6 +25,7 @@ export type MilestoneView = {
   dueDate: string | null;
   invoiceSentDate: string | null;
   paidDate: string | null;
+  paymentTermsDays: number | null;
   invoiceLink: string | null;
   payslipLink: string | null;
   order: number;
@@ -86,6 +87,7 @@ export async function getPaymentData(projectId: string): Promise<PaymentData | n
       dueDate: iso(m.dueDate),
       invoiceSentDate: iso(m.invoiceSentDate),
       paidDate: iso(m.paidDate),
+      paymentTermsDays: m.paymentTermsDays,
       invoiceLink: m.invoiceLink,
       payslipLink: m.payslipLink,
       order: m.order,
@@ -175,6 +177,7 @@ export async function savePayments(
           status: m.status,
           invoiceSentDate: day(m.invoiceSentDate),
           paidDate: day(m.paidDate),
+          paymentTermsDays: m.paymentTermsDays,
           invoiceLink: m.invoiceLink,
           payslipLink: m.payslipLink,
         };

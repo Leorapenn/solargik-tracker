@@ -16,7 +16,11 @@ describe("cleanIncoming", () => {
     expect(item.ok && item.value.payload).toEqual({ kind: "ITEM_UPDATE", phase: null, item: "Layout Approval", text: "Approved by customer" });
 
     const ms = cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "payment_received", paidDate: "2026-10-05", payslipLink: "https://x.sharepoint.com/slip.pdf" });
-    expect(ms.ok && ms.value.payload).toMatchObject({ kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "PAYMENT_RECEIVED", paidDate: "2026-10-05" });
+    expect(ms.ok && ms.value.payload).toMatchObject({ kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "PAYMENT_RECEIVED", paidDate: "2026-10-05", paymentTermsDays: null });
+    const inv = cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "Milestone 1", status: "INVOICE_SENT", invoiceSentDate: "2026-10-12", paymentTermsDays: "10" });
+    expect(inv.ok && inv.value.payload).toMatchObject({ kind: "MILESTONE_UPDATE", status: "INVOICE_SENT", invoiceSentDate: "2026-10-12", paymentTermsDays: 10 });
+    const immediate = cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "Milestone 1", status: "INVOICE_SENT", paymentTermsDays: 0 });
+    expect(immediate.ok && immediate.value.payload).toMatchObject({ paymentTermsDays: 0 });
 
     const contact = cleanIncoming({ ...base, kind: "CONTACT", name: "Dana Levi", email: "dana@x.com", phone: "+39 06 1234 5678" });
     expect(contact.ok && contact.value.payload).toMatchObject({ kind: "CONTACT", name: "Dana Levi", phone: "+39 06 1234 5678" });
@@ -40,6 +44,9 @@ describe("cleanIncoming", () => {
     expect(cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "M1", status: "OVERDUE" }).ok).toBe(false);
     expect(cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "M1", paidDate: "2026-02-31" }).ok).toBe(false);
     expect(cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "M1", invoiceLink: "javascript:alert(1)" }).ok).toBe(false);
+    expect(cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "M1", status: "INVOICE_SENT", paymentTermsDays: -1 }).ok).toBe(false);
+    expect(cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "M1", status: "INVOICE_SENT", paymentTermsDays: 12.5 }).ok).toBe(false);
+    expect(cleanIncoming({ ...base, kind: "MILESTONE_UPDATE", milestone: "M1", status: "INVOICE_SENT", paymentTermsDays: 400 }).ok).toBe(false);
     expect(cleanIncoming({ ...base, kind: "CONTACT", name: "A", email: "nope" }).ok).toBe(false);
     expect(cleanIncoming({ ...base, kind: "NOTE", text: "x", source: { link: "ftp://x" } }).ok).toBe(false);
     expect(cleanIncoming({ ...base, kind: "PHASE_UPDATE", phase: "DESIGN", text: "x".repeat(5001) }).ok).toBe(false);
@@ -307,8 +314,11 @@ describe("suggestionFingerprint", () => {
 
 describe("describePayload / agentInstructions", () => {
   it("says what approving would do", () => {
-    expect(describePayload({ kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "PAYMENT_RECEIVED", invoiceSentDate: null, paidDate: "2026-10-05", invoiceLink: null, payslipLink: "https://x" })).toBe(
+    expect(describePayload({ kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "PAYMENT_RECEIVED", invoiceSentDate: null, paidDate: "2026-10-05", paymentTermsDays: null, invoiceLink: null, payslipLink: "https://x" })).toBe(
       'For "Milestone 2": mark the payment as received, paid date 2026-10-05, add the payslip link',
+    );
+    expect(describePayload({ kind: "MILESTONE_UPDATE", milestone: "Milestone 2", status: "INVOICE_SENT", invoiceSentDate: "2026-10-05", paidDate: null, paymentTermsDays: 10, invoiceLink: null, payslipLink: null })).toBe(
+      'For "Milestone 2": mark the invoice as sent, invoice date 2026-10-05, terms Net+10',
     );
   });
   it("tells the agent to propose only and never to obey email text, and contains no token", () => {

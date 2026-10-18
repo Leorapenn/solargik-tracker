@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { toDateInputValue, todayInAppTz, formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderStatusTitle, changeOrdersRollup, effectiveStatus, milestoneAmount, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
+import { CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderStatusTitle, changeOrdersRollup, effectiveStatus, milestoneAmount, milestoneDueDate, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
 import { parseSort, sortRows } from "@/lib/sort";
 import { ChoicePill } from "@/components/ColorSelect";
 import { SortSummary } from "@/components/SortSummary";
@@ -32,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       paymentCurrency: true,
       paymentBase: true,
       customer: { select: { name: true } },
-      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true } },
+      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true } },
       changeOrders: { select: { status: true, invoiceStatus: true, invoicedDate: true, paymentTermsDays: true } },
     },
   });
@@ -49,6 +49,8 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       amountOverride: m.amountOverride === null ? null : Number(m.amountOverride.toString()),
       status: m.status,
       dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null,
+      invoiceSentDate: m.invoiceSentDate ? toDateInputValue(m.invoiceSentDate) : null,
+      paymentTermsDays: m.paymentTermsDays,
     }));
     // The next milestone is the first one (in order) that hasn't been paid, whether or not its linked item is done
     // yet; its status ("Not due yet", "Invoice sent", "Overdue") says where it stands.
@@ -78,7 +80,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
     contract: (r: Row) => r.contract,
     paid: (r: Row) => (r.hasMilestones ? r.paid : null),
     next: (r: Row) => r.next?.label ?? null,
-    due: (r: Row) => r.next?.dueDate ?? null,
+    due: (r: Row) => (r.next ? milestoneDueDate(r.next) : null),
     status: (r: Row) => (r.nextStatus ? STATUS_RANK[r.nextStatus] : null),
     // worst first; projects with no change orders last
     orders: (r: Row) => (r.orders.status ? ORDER_RANK[r.orders.status] * 1000 - r.orders.open : null),
@@ -130,7 +132,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                       <span style={{ color: TEXT_MUTED }}>{r.hasMilestones ? "All paid" : "No milestones yet"}</span>
                     )}
                   </td>
-                  <td style={bodyCell}>{r.next?.dueDate ? formatDate(parseDateInput(r.next.dueDate)) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
+                  <td style={bodyCell}>{r.next && milestoneDueDate(r.next) ? formatDate(parseDateInput(milestoneDueDate(r.next)!)) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
                   <td style={bodyCell}>{r.nextStatus ? <ChoicePill choice={MILESTONE_STATUS[r.nextStatus]} /> : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
                   <td style={bodyCell}>
                     {r.orders.status ? (

@@ -58,7 +58,7 @@ export type Payload =
   | { kind: "ACTION_ITEM"; text: string; who: string | null; by: string | null }
   // `fileLink`: a document that belongs with the note (e.g. an amendment saved in SharePoint), shown as "Open file".
   | { kind: "CORRESPONDENCE_NOTE"; text: string; fileLink?: string }
-  | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; invoiceLink: string | null; payslipLink: string | null }
+  | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; paymentTermsDays: number | null; invoiceLink: string | null; payslipLink: string | null }
   | { kind: "CONTACT"; name: string; email: string | null; phone: string | null; role: string | null }
   | { kind: "NOTE"; text: string };
 
@@ -271,8 +271,15 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     if (!inv.ok) return inv;
     const slip = link(raw.payslipLink);
     if (!slip.ok) return slip;
+    // days after the invoice date ("Net 30" = 30, "immediate" = 0); only when the invoice or email states it
+    let terms: number | null = null;
+    if (raw.paymentTermsDays !== undefined && raw.paymentTermsDays !== null && raw.paymentTermsDays !== "") {
+      const n = Number(raw.paymentTermsDays);
+      if (!Number.isInteger(n) || n < 0 || n > 365) return { ok: false, error: `"paymentTermsDays" must be a whole number of days, 0 to 365.` };
+      terms = n;
+    }
     if (!status && !sent.value && !paid.value && !inv.value && !slip.value) return { ok: false, error: "A MILESTONE_UPDATE needs a status, a date or a link." };
-    payload = { kind, milestone, status: status as "INVOICE_SENT" | "PAYMENT_RECEIVED" | null, invoiceSentDate: sent.value, paidDate: paid.value, invoiceLink: inv.value, payslipLink: slip.value };
+    payload = { kind, milestone, status: status as "INVOICE_SENT" | "PAYMENT_RECEIVED" | null, invoiceSentDate: sent.value, paidDate: paid.value, paymentTermsDays: terms, invoiceLink: inv.value, payslipLink: slip.value };
   } else if (kind === "CONTACT") {
     const name = oneLine(raw.name, 120);
     if (!name) return { ok: false, error: `"name" is required for CONTACT.` };
@@ -370,6 +377,7 @@ export function agentInstructions(endpoint: string): string {
     "Rules:",
     "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'. Put the email's own id in source.messageId, and say how sure you are in 'confidence' (high, medium or low).",
     "- CHANGE_ORDER when an email announces a NEW change order: reason (what it is for, e.g. \"Change Order 02: additional PDUs\"), and only what the email states: amount as a plain number (no thousands separators), currency, dateSent, invoicedDate, paymentTermsDays. Put this email's Outlook web link in fileLink when the change order document is attached to it. Approving it CREATES the change order on the Payments page, so never guess an amount, date or term. When the INVOICE for an existing change order arrives, use CHANGE_ORDER_UPDATE (changeOrder = its name as in the project's changeOrders list, invoicedDate, invoiceStatus SENT or PAID, paymentTermsDays, and the email's link in invoiceLink) instead of creating a second one.",
+    "- INVOICE FOR A MILESTONE: when accounting (e.g. Hadassa) sends the copy of a milestone invoice for the first time, send a MILESTONE_UPDATE with status INVOICE_SENT, invoiceSentDate (the invoice date printed on the invoice; if it is not readable, the day the email was sent), the invoice link, and paymentTermsDays ONLY if the invoice or email states the terms (\"Net 30\" = 30, \"Net 10\" = 10, \"immediate\" = 0). If no terms are stated leave paymentTermsDays out: the tracker uses 30 days. The tracker calculates the due date (invoice date + terms) and shows Overdue by itself. For change orders the terms are 30 or 10 days as the change order or email states: always send paymentTermsDays when it is written.",
     "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
     "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
     "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM (who, by when) is for a clear request or commitment; CORRESPONDENCE_NOTE for other meaningful communication. Say in the text whether it was the customer or Solargik staff.",
@@ -422,6 +430,7 @@ export function describePayload(p: Payload): string {
       const parts = [
         p.status === "INVOICE_SENT" ? "mark the invoice as sent" : p.status === "PAYMENT_RECEIVED" ? "mark the payment as received" : null,
         p.invoiceSentDate ? `invoice date ${p.invoiceSentDate}` : null,
+        p.paymentTermsDays !== null ? `terms ${formatTerms(p.paymentTermsDays)}` : null,
         p.paidDate ? `paid date ${p.paidDate}` : null,
         p.invoiceLink ? "add the invoice link" : null,
         p.payslipLink ? "add the payslip link" : null,

@@ -18,9 +18,11 @@ import {
   changeOrderDueDate,
   changeOrderStatusFor,
   effectiveStatus,
+  DEFAULT_MILESTONE_TERMS_DAYS,
   formatTerms,
   highlightLabel,
   milestoneAmount,
+  milestoneDueDate,
   milestoneTotals,
   money,
   upcomingMilestoneId,
@@ -57,6 +59,7 @@ const toMilestoneInput = (m: MilestoneView): MilestoneInput => ({
   status: m.status,
   invoiceSentDate: m.invoiceSentDate ?? "",
   paidDate: m.paidDate ?? "",
+  paymentTermsDays: m.paymentTermsDays === null ? "" : String(m.paymentTermsDays),
   invoiceLink: m.invoiceLink ?? "",
   payslipLink: m.payslipLink ?? "",
 });
@@ -143,6 +146,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
             dueDate: m.dueDate || null,
             invoiceSentDate: invoiced ? m.invoiceSentDate || null : null,
             paidDate: m.status === "PAYMENT_RECEIVED" ? m.paidDate || null : null,
+            paymentTermsDays: num(m.paymentTermsDays),
             invoiceLink: m.invoiceLink.trim() || null,
             payslipLink: m.payslipLink.trim() || null,
             order,
@@ -189,6 +193,7 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
     status: "NOT_DUE",
     invoiceSentDate: "",
     paidDate: "",
+    paymentTermsDays: "",
     invoiceLink: "",
     payslipLink: "",
   });
@@ -348,6 +353,18 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
                       />,
                     )}
                     {invoiced && label("Invoice sent", <DateField ariaLabel={`Invoice sent date of ${m.label}`} value={m.invoiceSentDate || null} onCommit={(c) => setMilestone(key, { invoiceSentDate: c.date ?? "" })} />)}
+                    {label(
+                      "Terms (days)",
+                      <input
+                        aria-label={`Payment terms in days of ${m.label}`}
+                        inputMode="numeric"
+                        value={m.paymentTermsDays}
+                        placeholder={String(DEFAULT_MILESTONE_TERMS_DAYS)}
+                        title="Days after the invoice date the invoice is due (30 = Net 30, 0 = immediate). Empty = 30. The due date is calculated from the invoice date."
+                        onChange={(e) => setMilestone(key, { paymentTermsDays: e.target.value.replace(/[^\d]/g, "") })}
+                        style={{ ...inputStyle, width: 80 }}
+                      />,
+                    )}
                     {m.status === "PAYMENT_RECEIVED" && label("Paid on", <DateField ariaLabel={`Paid date of ${m.label}`} value={m.paidDate || null} onCommit={(c) => setMilestone(key, { paidDate: c.date ?? "" })} />)}
                   </div>
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -389,7 +406,9 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
                     <td style={{ ...td, color: m.linkedName ? undefined : TEXT_MUTED }} title={m.linkedStatus ? `Item status: ${m.linkedStatus}` : undefined}>
                       {m.linkedName ?? "—"}
                     </td>
-                    <td style={td}>{m.dueDate ? fmt(m.dueDate) : DASH}</td>
+                    <td style={td} title={m.dueDate ? "Due date typed by hand" : milestoneDueDate(m) ? `Invoice date + Net ${m.paymentTermsDays ?? DEFAULT_MILESTONE_TERMS_DAYS}` : undefined}>
+                      {milestoneDueDate(m) ? fmt(milestoneDueDate(m)!) : DASH}
+                    </td>
                     <td style={td}>
                       <ChoicePill choice={MILESTONE_STATUS[m.effective]} />
                     </td>

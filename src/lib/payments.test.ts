@@ -15,6 +15,7 @@ import {
   formatTotals,
   isCurrency,
   milestoneAmount,
+  milestoneDueDate,
   milestoneProgress,
   projectContract,
   totalsByCurrency,
@@ -87,17 +88,56 @@ describe("effectiveStatus", () => {
   });
 });
 
+describe("milestone due date from the invoice date and payment terms", () => {
+  const sent = (invoiceSentDate: string, paymentTermsDays: number | null = null, extra: Record<string, unknown> = {}) => ({ status: "INVOICE_SENT", dueDate: null as string | null, invoiceSentDate, paymentTermsDays, ...extra });
+  it("is Net 30 by default: the invoice date plus 30 days", () => {
+    expect(milestoneDueDate(sent("2026-09-01"))).toBe("2026-10-01");
+    expect(milestoneDueDate(sent("2026-12-15"))).toBe("2027-01-14"); // across the year end
+  });
+  it("uses the terms the invoice states, 0 meaning immediate", () => {
+    expect(milestoneDueDate(sent("2026-10-01", 10))).toBe("2026-10-11");
+    expect(milestoneDueDate(sent("2026-10-01", 0))).toBe("2026-10-01");
+  });
+  it("only exists once the invoice is sent and not paid; a typed due date wins", () => {
+    expect(milestoneDueDate({ status: "NOT_DUE", dueDate: null, invoiceSentDate: "2026-09-01", paymentTermsDays: null })).toBeNull();
+    expect(milestoneDueDate({ status: "PAYMENT_RECEIVED", dueDate: null, invoiceSentDate: "2026-09-01", paymentTermsDays: null })).toBeNull();
+    expect(milestoneDueDate({ status: "INVOICE_SENT", dueDate: null, invoiceSentDate: null, paymentTermsDays: null })).toBeNull();
+    expect(milestoneDueDate(sent("2026-09-01", 30, { dueDate: "2026-11-15" }))).toBe("2026-11-15");
+  });
+  it("makes an unpaid invoiced milestone Overdue by itself once that date has passed", () => {
+    expect(effectiveStatus(sent("2026-08-30"), TODAY)).toBe("OVERDUE"); // due 29 Sep
+    expect(effectiveStatus(sent("2026-09-05"), TODAY)).toBe("INVOICE_SENT"); // due 5 Oct = today, not overdue
+    expect(effectiveStatus(sent("2026-09-20"), TODAY)).toBe("INVOICE_SENT");
+    expect(effectiveStatus(sent("2026-09-20", 10), TODAY)).toBe("OVERDUE"); // Net 10: due 30 Sep
+    expect(effectiveStatus({ ...sent("2026-01-01"), status: "PAYMENT_RECEIVED" }, TODAY)).toBe("PAYMENT_RECEIVED");
+  });
+  it("shows the calculated due date on the project's milestone progress", () => {
+    const p = milestoneProgress([{ label: "Milestone 1", order: 1, status: "INVOICE_SENT", dueDate: null, invoiceSentDate: "2026-09-20", paymentTermsDays: 10 }], TODAY);
+    expect(p).toMatchObject({ kind: "current", status: "OVERDUE", dueDate: "2026-09-30" });
+  });
+  it("accepts the terms the editor sends: whole days from 0 to 365, empty = default", () => {
+    const base = { label: "M1", status: "INVOICE_SENT", invoiceSentDate: "2026-10-01" };
+    expect(cleanMilestone({ ...base, paymentTermsDays: "" })).toMatchObject({ ok: true, value: { paymentTermsDays: null } });
+    expect(cleanMilestone({ ...base, paymentTermsDays: "10" })).toMatchObject({ ok: true, value: { paymentTermsDays: 10 } });
+    expect(cleanMilestone({ ...base, paymentTermsDays: "0" })).toMatchObject({ ok: true, value: { paymentTermsDays: 0 } });
+    expect(cleanMilestone({ ...base, paymentTermsDays: "1.5" }).ok).toBe(false);
+    expect(cleanMilestone({ ...base, paymentTermsDays: "400" }).ok).toBe(false);
+    expect(cleanMilestone({ ...base, paymentTermsDays: "-5" }).ok).toBe(false);
+  });
+});
+
 describe("upcomingMilestoneId", () => {
-  it("picks the first unpaid milestone whose linked item is done (or that has no link)", () => {
+  it("picks the first unpaid milestone in order, whether or not its linked item is done", () => {
     const list = [
-      { id: "a", order: 1, status: "PAYMENT_RECEIVED", linkedStatus: null },
+      { id: "a", order: 1, status: "PAYMENT_RECEIVED" },
       { id: "b", order: 2, status: "NOT_DUE", linkedStatus: "IN_PROGRESS" as const },
       { id: "c", order: 3, status: "NOT_DUE", linkedStatus: "DONE" as const },
-      { id: "d", order: 4, status: "NOT_DUE", linkedStatus: null },
+      { id: "d", order: 4, status: "NOT_DUE" },
     ];
-    expect(upcomingMilestoneId(list)).toBe("c");
-    expect(upcomingMilestoneId(list.slice(0, 2))).toBeNull();
-    expect(upcomingMilestoneId([{ id: "z", order: 1, status: "INVOICE_SENT", linkedStatus: null }])).toBe("z");
+    expect(upcomingMilestoneId(list)).toBe("b");
+    expect(upcomingMilestoneId(list.slice(0, 1))).toBeNull();
+    expect(upcomingMilestoneId([{ id: "z", order: 1, status: "INVOICE_SENT" }])).toBe("z");
+    expect(upcomingMilestoneId([{ id: "y", order: 2, status: "NOT_DUE" }, { id: "x", order: 1, status: "NOT_DUE" }])).toBe("x");
     expect(upcomingMilestoneId([])).toBeNull();
   });
 });

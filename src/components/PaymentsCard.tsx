@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, formatTerms, highlightLabel, milestoneAmount, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
+import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, formatTerms, highlightLabel, milestoneAmount, milestoneDueDate, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
 import type { PaymentData } from "@/server/services/payments";
 import { ChoicePill } from "@/components/ColorSelect";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib/theme";
@@ -30,7 +30,7 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
 
   const detail = (m: PaymentData["milestones"][number]) =>
     [
-      `Due: ${fmt(m.dueDate)}`,
+      `Due: ${fmt(milestoneDueDate(m))}`,
       `Invoice sent: ${fmt(m.invoiceSentDate)}`,
       `Paid: ${fmt(m.paidDate)}`,
       m.linkedName ? `Triggered by: ${m.linkedName}${m.linkedStatus === "DONE" ? " (done)" : ""}` : "",
@@ -95,7 +95,7 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
             <div role="region" aria-label={`Dates for ${selected.label}`} style={{ background: "#F6F7FB", borderRadius: 8, padding: "10px 14px", fontSize: 14, display: "flex", gap: 24, flexWrap: "wrap" }}>
               <span>
                 <span style={{ color: TEXT_MUTED }}>Due </span>
-                {fmt(selected.dueDate)}
+                {fmt(milestoneDueDate(selected))}
               </span>
               <span>
                 <span style={{ color: TEXT_MUTED }}>Invoice sent </span>

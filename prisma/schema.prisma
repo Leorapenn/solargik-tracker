@@ -279,6 +279,9 @@ model Milestone {
   status           String    @default("NOT_DUE")
   invoiceSentDate  DateTime? @db.Date
   paidDate         DateTime? @db.Date
+  // Days after the invoice date the invoice is due (Net 30 = 30, immediate = 0). Empty = the default of 30.
+  // The due date is calculated from invoiceSentDate + this, never stored.
+  paymentTermsDays Int?
   // Links (SharePoint etc.) to the invoice and to the payslip / proof of payment; links only, no file storage.
   invoiceLink      String?
   payslipLink      String?

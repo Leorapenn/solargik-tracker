@@ -1,4 +1,3 @@
-import type { StageStatus } from "@prisma/client";
 import type { Choice } from "@/lib/projectProfile";
 import { cleanFileLink } from "@/lib/uploads";
 
@@ -98,8 +97,27 @@ export type MilestoneCore = {
   percent: number | null;
   amountOverride: number | null;
   status: string;
-  dueDate: string | null; // YYYY-MM-DD
+  dueDate: string | null; // YYYY-MM-DD, typed by hand (overrides the calculated one)
+  invoiceSentDate?: string | null; // YYYY-MM-DD
+  paymentTermsDays?: number | null; // days after the invoice date; null = the default (30)
 };
+
+// Invoices are Net 30 unless the contract or the invoice says otherwise ("Net 10", "immediate" = 0).
+export const DEFAULT_MILESTONE_TERMS_DAYS = 30;
+
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// When a milestone's invoice is due: a typed due date wins; otherwise, once the invoice is sent (and not yet paid),
+// the invoice date plus the payment terms. Calculated, never stored.
+export function milestoneDueDate(m: Pick<MilestoneCore, "status" | "dueDate" | "invoiceSentDate" | "paymentTermsDays">): string | null {
+  if (m.dueDate) return m.dueDate;
+  if (m.status !== "INVOICE_SENT" || !m.invoiceSentDate || !validDate(m.invoiceSentDate)) return null;
+  return addDays(m.invoiceSentDate, m.paymentTermsDays ?? DEFAULT_MILESTONE_TERMS_DAYS);
+}
 
 // A typed amount wins; otherwise percent of the contract value (to the cent).
 export function milestoneAmount(m: Pick<MilestoneCore, "percent" | "amountOverride">, contractValue: number | null): number | null {
@@ -108,20 +126,17 @@ export function milestoneAmount(m: Pick<MilestoneCore, "percent" | "amountOverri
   return Math.round(((contractValue * m.percent) / 100) * 100) / 100;
 }
 
-export function effectiveStatus(m: Pick<MilestoneCore, "status" | "dueDate">, todayIso: string): MilestoneStatus {
+export function effectiveStatus(m: Pick<MilestoneCore, "status" | "dueDate" | "invoiceSentDate" | "paymentTermsDays">, todayIso: string): MilestoneStatus {
   if (m.status === "PAYMENT_RECEIVED") return "PAYMENT_RECEIVED";
   const stored: MilestoneStatus = m.status === "INVOICE_SENT" ? "INVOICE_SENT" : "NOT_DUE";
-  return m.dueDate && m.dueDate < todayIso ? "OVERDUE" : stored;
+  const due = milestoneDueDate(m);
+  return due && due < todayIso ? "OVERDUE" : stored;
 }
 
-// The milestone to highlight: the first one (in order) that has not been paid and is "active", meaning it has
-// no linked item or its linked item is Done (e.g. the products have shipped).
-export function upcomingMilestoneId(
-  milestones: { id: string; status: string; order: number; linkedStatus: StageStatus | null }[],
-): string | null {
-  const next = [...milestones]
-    .sort((a, b) => a.order - b.order)
-    .find((m) => m.status !== "PAYMENT_RECEIVED" && (m.linkedStatus === null || m.linkedStatus === "DONE"));
+// The milestone to highlight, and the "next milestone" everywhere (the Payments tab, the Milestone column, the
+// project page): the first one (in order) that has not been paid, whether or not its linked item is done yet.
+export function upcomingMilestoneId(milestones: { id: string; status: string; order: number }[]): string | null {
+  const next = [...milestones].sort((a, b) => a.order - b.order).find((m) => m.status !== "PAYMENT_RECEIVED");
   return next?.id ?? null;
 }
 
@@ -136,12 +151,15 @@ export type MilestoneProgress =
   | { kind: "all-paid"; count: number; sortKey: number }
   | { kind: "current"; label: string; status: MilestoneStatus; dueDate: string | null; count: number; sortKey: number };
 
-export function milestoneProgress(milestones: { label: string; order: number; status: string; dueDate: string | null }[], todayIso: string): MilestoneProgress {
+export function milestoneProgress(
+  milestones: { label: string; order: number; status: string; dueDate: string | null; invoiceSentDate?: string | null; paymentTermsDays?: number | null }[],
+  todayIso: string,
+): MilestoneProgress {
   if (milestones.length === 0) return { kind: "none", sortKey: null };
   const ordered = [...milestones].sort((a, b) => a.order - b.order);
   const current = ordered.find((m) => m.status !== "PAYMENT_RECEIVED");
   if (!current) return { kind: "all-paid", count: ordered.length, sortKey: 1000 };
-  return { kind: "current", label: current.label, status: effectiveStatus(current, todayIso), dueDate: current.dueDate, count: ordered.length, sortKey: ordered.indexOf(current) + 1 };
+  return { kind: "current", label: current.label, status: effectiveStatus(current, todayIso), dueDate: milestoneDueDate(current), count: ordered.length, sortKey: ordered.indexOf(current) + 1 };
 }
 
 export type Totals = { contract: number | null; invoiced: number; paid: number; percentTotal: number | null };
@@ -232,6 +250,7 @@ export type MilestoneInput = {
   status: string;
   invoiceSentDate: string;
   paidDate: string;
+  paymentTermsDays: string; // days after the invoice date, "" = the default (30)
   invoiceLink: string; // link to the invoice file
   payslipLink: string; // link to the payslip / proof of payment
 };
@@ -259,6 +278,7 @@ export type CleanMilestone = {
   status: "NOT_DUE" | "INVOICE_SENT" | "PAYMENT_RECEIVED";
   invoiceSentDate: string | null;
   paidDate: string | null;
+  paymentTermsDays: number | null;
   invoiceLink: string | null;
   payslipLink: string | null;
 };
@@ -312,6 +332,9 @@ export function cleanMilestone(input: Partial<Record<keyof MilestoneInput, unkno
   if (!sent.ok) return sent;
   const paid = date(input.paidDate, `Paid date of "${label}"`);
   if (!paid.ok) return paid;
+  const terms = number(input.paymentTermsDays, `Payment terms of "${label}"`, 365);
+  if (!terms.ok) return terms;
+  if (terms.value !== null && !Number.isInteger(terms.value)) return { ok: false, error: `Payment terms of "${label}" must be a whole number of days.` };
   const invoiceLink = link(input.invoiceLink);
   if (!invoiceLink.ok) return invoiceLink;
   const payslipLink = link(input.payslipLink);
@@ -334,6 +357,7 @@ export function cleanMilestone(input: Partial<Record<keyof MilestoneInput, unkno
       status: status as CleanMilestone["status"],
       invoiceSentDate: invoiced ? sent.value : null,
       paidDate: status === "PAYMENT_RECEIVED" ? paid.value : null,
+      paymentTermsDays: terms.value,
       invoiceLink: invoiceLink.value,
       payslipLink: payslipLink.value,
     },

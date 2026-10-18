@@ -64,7 +64,7 @@ export default async function CustomerDetailPage({
           orderBy: { name: "asc" },
           include: {
             phases: { select: { name: true, status: true } },
-            milestones: { orderBy: { order: "asc" }, select: { label: true, order: true, status: true, dueDate: true } },
+            milestones: { orderBy: { order: "asc" }, select: { label: true, order: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true } },
           },
         },
         contacts: { include: { project: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" } },
@@ -84,7 +84,7 @@ export default async function CustomerDetailPage({
   const todayIso = toDateInputValue(todayInAppTz());
   const progressOf = (p: Project) =>
     milestoneProgress(
-      p.milestones.map((m) => ({ label: m.label, order: m.order, status: m.status, dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null })),
+      p.milestones.map((m) => ({ label: m.label, order: m.order, status: m.status, dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null, invoiceSentDate: m.invoiceSentDate ? toDateInputValue(m.invoiceSentDate) : null, paymentTermsDays: m.paymentTermsDays })),
       todayIso,
     );
   const accessors = {

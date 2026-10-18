@@ -204,6 +204,7 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
       status: payload.status ?? m.status,
       invoiceSentDate: payload.invoiceSentDate ?? (m.invoiceSentDate ? toDateInputValue(m.invoiceSentDate) : ""),
       paidDate: payload.paidDate ?? (m.paidDate ? toDateInputValue(m.paidDate) : ""),
+      paymentTermsDays: payload.paymentTermsDays !== null ? String(payload.paymentTermsDays) : m.paymentTermsDays === null ? "" : String(m.paymentTermsDays),
       invoiceLink: payload.invoiceLink ?? m.invoiceLink ?? "",
       payslipLink: payload.payslipLink ?? m.payslipLink ?? "",
     };
@@ -215,6 +216,7 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
         status: cleaned.value.status,
         invoiceSentDate: day(cleaned.value.invoiceSentDate),
         paidDate: day(cleaned.value.paidDate),
+        paymentTermsDays: cleaned.value.paymentTermsDays,
         invoiceLink: cleaned.value.invoiceLink,
         payslipLink: cleaned.value.payslipLink,
       },

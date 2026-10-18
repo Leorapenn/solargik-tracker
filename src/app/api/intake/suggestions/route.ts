@@ -66,7 +66,7 @@ export async function GET(request: Request) {
       CONTRACT_DOCUMENT: { description: "what the document is, e.g. 'Signed Framework Supply Agreement' (required)", fileLink: "the SharePoint link of the saved contract file (required, not an email link)", signedDate: "YYYY-MM-DD, only if the document states it. Approving sets the project's contract link only when none is set yet." },
       ACTION_ITEM: { text: "the request or commitment, saying whether it is the customer's or Solargik's", who: "optional", by: "optional, when it is due as written, e.g. '2026-10-20' or 'end of next week'" },
       CORRESPONDENCE_NOTE: { text: "other meaningful project communication, one plain line or two", fileLink: "optional: the SharePoint link of a saved document that belongs with the note (e.g. an amendment)" },
-      MILESTONE_UPDATE: { milestone: "e.g. 'Milestone 2'", status: "INVOICE_SENT | PAYMENT_RECEIVED (optional)", invoiceSentDate: "YYYY-MM-DD (optional)", paidDate: "YYYY-MM-DD (optional)", invoiceLink: "https link (optional)", payslipLink: "link to the saved proof of payment (optional)" },
+      MILESTONE_UPDATE: { milestone: "e.g. 'Milestone 2'", status: "INVOICE_SENT | PAYMENT_RECEIVED (optional)", invoiceSentDate: "YYYY-MM-DD (optional)", paidDate: "YYYY-MM-DD (optional)", paymentTermsDays: "whole days after the invoice date, only if the invoice states it: Net 30 = 30, immediate = 0 (optional; the tracker assumes 30)", invoiceLink: "https link (optional)", payslipLink: "link to the saved proof of payment (optional)" },
       CONTACT: { name: "required", email: "optional", phone: "optional", role: "optional" },
       NOTE: { text: "anything worth a person's attention that doesn't fit the kinds above" },
     },
