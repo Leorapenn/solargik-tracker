@@ -56,7 +56,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
       include: {
         customer: true,
         phases: true,
-        milestones: { orderBy: { order: "asc" }, select: { label: true, order: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true } },
+        milestones: { orderBy: { order: "asc" }, select: { label: true, order: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true, linkedSubStage: { select: { status: true } } } },
       },
       orderBy: { name: "asc" },
     }),
@@ -70,7 +70,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
   const todayIso = toDateInputValue(todayInAppTz());
   const progressOf = (p: (typeof all)[number]) =>
     milestoneProgress(
-      p.milestones.map((m) => ({ label: m.label, order: m.order, status: m.status, dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null, invoiceSentDate: m.invoiceSentDate ? toDateInputValue(m.invoiceSentDate) : null, paymentTermsDays: m.paymentTermsDays })),
+      p.milestones.map((m) => ({ label: m.label, order: m.order, status: m.status, dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null, invoiceSentDate: m.invoiceSentDate ? toDateInputValue(m.invoiceSentDate) : null, paymentTermsDays: m.paymentTermsDays, linkedStatus: m.linkedSubStage?.status ?? null })),
       todayIso,
     );
 

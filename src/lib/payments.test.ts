@@ -22,6 +22,7 @@ import {
   milestoneTotals,
   money,
   highlightLabel,
+  SETTABLE_MILESTONE_STATUSES,
   upcomingMilestoneId,
 } from "./payments";
 
@@ -83,6 +84,29 @@ describe("effectiveStatus", () => {
     expect(effectiveStatus({ status: "INVOICE_SENT", dueDate: "2026-12-01" }, TODAY)).toBe("INVOICE_SENT");
     expect(effectiveStatus({ status: "NOT_DUE", dueDate: null }, TODAY)).toBe("NOT_DUE");
   });
+  it("shows Ready to invoice once the item that triggers the milestone is Done and no invoice is sent yet", () => {
+    expect(effectiveStatus({ status: "NOT_DUE", dueDate: null, linkedStatus: "DONE" }, TODAY)).toBe("READY_TO_INVOICE");
+    expect(effectiveStatus({ status: "NOT_DUE", dueDate: null, linkedStatus: "IN_PROGRESS" }, TODAY)).toBe("NOT_DUE");
+    expect(effectiveStatus({ status: "NOT_DUE", dueDate: null, linkedStatus: "NOT_STARTED" }, TODAY)).toBe("NOT_DUE");
+    expect(effectiveStatus({ status: "NOT_DUE", dueDate: null, linkedStatus: null }, TODAY)).toBe("NOT_DUE"); // no trigger item: nothing to derive
+    expect(effectiveStatus({ status: "NOT_DUE", dueDate: null }, TODAY)).toBe("NOT_DUE");
+  });
+  it("shows Ready to invoice when it was set by hand, even if the trigger item is not done", () => {
+    expect(effectiveStatus({ status: "READY_TO_INVOICE", dueDate: null, linkedStatus: "IN_PROGRESS" }, TODAY)).toBe("READY_TO_INVOICE");
+    expect(effectiveStatus({ status: "READY_TO_INVOICE", dueDate: null, linkedStatus: null }, TODAY)).toBe("READY_TO_INVOICE");
+    expect(effectiveStatus({ status: "READY_TO_INVOICE", dueDate: "2026-10-01" }, TODAY)).toBe("OVERDUE"); // a typed due date still passes
+  });
+  it("lets a person set Ready to invoice (and nothing invented) on a milestone", () => {
+    expect(cleanMilestone({ label: "M1", status: "READY_TO_INVOICE", invoiceSentDate: "2026-10-01", paidDate: "2026-10-02" })).toMatchObject({ ok: true, value: { status: "READY_TO_INVOICE", invoiceSentDate: null, paidDate: null } });
+    expect(cleanMilestone({ label: "M1", status: "OVERDUE" }).ok).toBe(false); // Overdue stays derived
+    expect(SETTABLE_MILESTONE_STATUSES).toEqual(["NOT_DUE", "READY_TO_INVOICE", "INVOICE_SENT", "PAYMENT_RECEIVED"]);
+  });
+  it("lets Invoice sent, Overdue and Paid win over Ready to invoice", () => {
+    expect(effectiveStatus({ status: "INVOICE_SENT", dueDate: null, invoiceSentDate: "2026-10-01", linkedStatus: "DONE" }, TODAY)).toBe("INVOICE_SENT");
+    expect(effectiveStatus({ status: "INVOICE_SENT", dueDate: null, invoiceSentDate: "2026-08-01", linkedStatus: "DONE" }, TODAY)).toBe("OVERDUE");
+    expect(effectiveStatus({ status: "NOT_DUE", dueDate: "2026-10-01", linkedStatus: "DONE" }, TODAY)).toBe("OVERDUE");
+    expect(effectiveStatus({ status: "PAYMENT_RECEIVED", dueDate: null, linkedStatus: "DONE" }, TODAY)).toBe("PAYMENT_RECEIVED");
+  });
   it("never shows a paid milestone as overdue", () => {
     expect(effectiveStatus({ status: "PAYMENT_RECEIVED", dueDate: "2025-01-01" }, TODAY)).toBe("PAYMENT_RECEIVED");
   });
@@ -143,10 +167,15 @@ describe("upcomingMilestoneId", () => {
 });
 
 describe("highlightLabel", () => {
-  it("says Upcoming until the invoice is sent or the due date has passed, then Open", () => {
+  it("says Upcoming, then Ready to invoice once its item is done, then Open once invoiced or overdue", () => {
     expect(highlightLabel("NOT_DUE")).toBe("Upcoming");
+    expect(highlightLabel("READY_TO_INVOICE")).toBe("Ready to invoice");
     expect(highlightLabel("INVOICE_SENT")).toBe("Open");
     expect(highlightLabel("OVERDUE")).toBe("Open");
+  });
+  it("shows the Ready to invoice state in a project's milestone progress", () => {
+    const p = milestoneProgress([{ label: "Pylon", order: 1, status: "NOT_DUE", dueDate: null, linkedStatus: "DONE" }], TODAY);
+    expect(p).toMatchObject({ kind: "current", status: "READY_TO_INVOICE" });
   });
 });
 

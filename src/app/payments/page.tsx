@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 type Params = Record<string, string | string[] | undefined>;
 
-const STATUS_RANK: Record<MilestoneStatus, number> = { OVERDUE: 0, NOT_DUE: 1, INVOICE_SENT: 2, PAYMENT_RECEIVED: 3 };
+const STATUS_RANK: Record<MilestoneStatus, number> = { OVERDUE: 0, READY_TO_INVOICE: 1, NOT_DUE: 2, INVOICE_SENT: 3, PAYMENT_RECEIVED: 4 };
 const ORDER_RANK = { OVERDUE: 0, SENT: 1, COMPLETE: 2 } as const;
 const SORT_LABELS = { project: "Project", customer: "Customer", contract: "Contract value", paid: "Paid", next: "Next milestone", due: "Milestone due date", status: "Milestone status", orders: "Change order status" };
 
@@ -32,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       paymentCurrency: true,
       paymentBase: true,
       customer: { select: { name: true } },
-      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true } },
+      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true, linkedSubStage: { select: { status: true } } } },
       changeOrders: { select: { status: true, invoiceStatus: true, invoicedDate: true, paymentTermsDays: true } },
     },
   });
@@ -51,6 +51,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       dueDate: m.dueDate ? toDateInputValue(m.dueDate) : null,
       invoiceSentDate: m.invoiceSentDate ? toDateInputValue(m.invoiceSentDate) : null,
       paymentTermsDays: m.paymentTermsDays,
+      linkedStatus: m.linkedSubStage?.status ?? null,
     }));
     // The next milestone is the first one (in order) that hasn't been paid, whether or not its linked item is done
     // yet; its status ("Not due yet", "Invoice sent", "Overdue") says where it stands.

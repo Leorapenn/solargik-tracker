@@ -6,17 +6,20 @@ import { cleanFileLink } from "@/lib/uploads";
 
 const choice = (value: string, label: string, bg: string, text: string): Choice => ({ value, label, bg, text });
 
-export type MilestoneStatus = "NOT_DUE" | "INVOICE_SENT" | "OVERDUE" | "PAYMENT_RECEIVED";
+export type MilestoneStatus = "NOT_DUE" | "READY_TO_INVOICE" | "INVOICE_SENT" | "OVERDUE" | "PAYMENT_RECEIVED";
 
-// OVERDUE is never stored: it is what a NOT_DUE or INVOICE_SENT milestone becomes once its due date has passed.
+// OVERDUE is never stored: it is what a NOT_DUE, READY_TO_INVOICE or INVOICE_SENT milestone becomes once its due date has
+// passed. READY_TO_INVOICE can be set by hand (an invoice is due but accounting has not sent it yet) and also shows by
+// itself for a NOT_DUE milestone once the item that triggers it is Done.
 export const MILESTONE_STATUS: Record<MilestoneStatus, Choice> = {
   NOT_DUE: choice("NOT_DUE", "Not due yet", "#E4E6EC", "#4A4F5C"),
+  READY_TO_INVOICE: choice("READY_TO_INVOICE", "Ready to invoice", "#FEF0D6", "#8A5300"),
   INVOICE_SENT: choice("INVOICE_SENT", "Invoice sent", "#DCE8FB", "#1D4F9F"),
   OVERDUE: choice("OVERDUE", "Overdue", "#FCE0DD", "#8C1D18"),
   PAYMENT_RECEIVED: choice("PAYMENT_RECEIVED", "Payment received", "#D8F5E3", "#047857"),
 };
 // What a person can set by hand (Overdue happens by itself).
-export const SETTABLE_MILESTONE_STATUSES: MilestoneStatus[] = ["NOT_DUE", "INVOICE_SENT", "PAYMENT_RECEIVED"];
+export const SETTABLE_MILESTONE_STATUSES: MilestoneStatus[] = ["NOT_DUE", "READY_TO_INVOICE", "INVOICE_SENT", "PAYMENT_RECEIVED"];
 
 export const CHANGE_ORDER_STATUS: Choice[] = [
   choice("SENT", "Sent", "#DCE8FB", "#1D4F9F"),
@@ -100,6 +103,7 @@ export type MilestoneCore = {
   dueDate: string | null; // YYYY-MM-DD, typed by hand (overrides the calculated one)
   invoiceSentDate?: string | null; // YYYY-MM-DD
   paymentTermsDays?: number | null; // days after the invoice date; null = the default (30)
+  linkedStatus?: string | null; // status of the item that triggers the milestone (DONE = it has happened)
 };
 
 // Invoices are Net 30 unless the contract or the invoice says otherwise ("Net 10", "immediate" = 0).
@@ -126,11 +130,15 @@ export function milestoneAmount(m: Pick<MilestoneCore, "percent" | "amountOverri
   return Math.round(((contractValue * m.percent) / 100) * 100) / 100;
 }
 
-export function effectiveStatus(m: Pick<MilestoneCore, "status" | "dueDate" | "invoiceSentDate" | "paymentTermsDays">, todayIso: string): MilestoneStatus {
+// What a milestone is shown as: Paid; Overdue once its due date has passed; Invoice sent; Ready to invoice when it was
+// set by hand or when it is not invoiced yet but the item that triggers it is Done (e.g. the products have been
+// delivered); otherwise Not due yet.
+export function effectiveStatus(m: Pick<MilestoneCore, "status" | "dueDate" | "invoiceSentDate" | "paymentTermsDays" | "linkedStatus">, todayIso: string): MilestoneStatus {
   if (m.status === "PAYMENT_RECEIVED") return "PAYMENT_RECEIVED";
-  const stored: MilestoneStatus = m.status === "INVOICE_SENT" ? "INVOICE_SENT" : "NOT_DUE";
   const due = milestoneDueDate(m);
-  return due && due < todayIso ? "OVERDUE" : stored;
+  if (due && due < todayIso) return "OVERDUE";
+  if (m.status === "INVOICE_SENT") return "INVOICE_SENT";
+  return m.status === "READY_TO_INVOICE" || m.linkedStatus === "DONE" ? "READY_TO_INVOICE" : "NOT_DUE";
 }
 
 // The milestone to highlight, and the "next milestone" everywhere (the Payments tab, the Milestone column, the
@@ -140,9 +148,10 @@ export function upcomingMilestoneId(milestones: { id: string; status: string; or
   return next?.id ?? null;
 }
 
-// The tag on the highlighted milestone, from its EFFECTIVE status (see effectiveStatus): "Upcoming" until its
-// invoice is sent or its due date has passed, then "Open" (invoiced or overdue, not yet paid).
-export const highlightLabel = (effective: string) => (effective === "INVOICE_SENT" || effective === "OVERDUE" ? "Open" : "Upcoming");
+// The tag on the highlighted milestone, from its EFFECTIVE status (see effectiveStatus): "Upcoming" until the item
+// that triggers it is done, "Ready to invoice" then, and "Open" once the invoice is sent or its due date has passed.
+export const highlightLabel = (effective: string) =>
+  effective === "INVOICE_SENT" || effective === "OVERDUE" ? "Open" : effective === "READY_TO_INVOICE" ? "Ready to invoice" : "Upcoming";
 
 // Which milestone a project is "up to": the first one (in order) that has not been paid, with its status;
 // "all-paid" once every milestone is paid, "none" when the project has no milestones.
@@ -152,7 +161,7 @@ export type MilestoneProgress =
   | { kind: "current"; label: string; status: MilestoneStatus; dueDate: string | null; count: number; sortKey: number };
 
 export function milestoneProgress(
-  milestones: { label: string; order: number; status: string; dueDate: string | null; invoiceSentDate?: string | null; paymentTermsDays?: number | null }[],
+  milestones: { label: string; order: number; status: string; dueDate: string | null; invoiceSentDate?: string | null; paymentTermsDays?: number | null; linkedStatus?: string | null }[],
   todayIso: string,
 ): MilestoneProgress {
   if (milestones.length === 0) return { kind: "none", sortKey: null };
