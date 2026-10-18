@@ -19,9 +19,11 @@ import {
   changeOrderStatusFor,
   effectiveStatus,
   DEFAULT_MILESTONE_TERMS_DAYS,
+  coverageNote,
   formatTerms,
   highlightLabel,
   milestoneAmount,
+  milestoneCoverage,
   milestoneDueDate,
   milestoneTotals,
   money,
@@ -205,6 +207,14 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
   const viewMilestones = saved.milestones.map((m) => ({ ...m, effective: effectiveStatus(m, todayIso), amount: milestoneAmount(m, saved.contractValue) }));
   const upcoming = upcomingMilestoneId(saved.milestones);
   const totals = milestoneTotals(saved.milestones, saved.contractValue);
+  // do the milestones add up to the contract? (live while editing, from what is typed)
+  const coverage = editing
+    ? milestoneCoverage(
+        milestones.map(({ data: m }) => ({ percent: num(m.percent), amountOverride: num(m.amountOverride), optional: m.optional })),
+        num(base) ?? saved.mondayValue,
+      )
+    : milestoneCoverage(saved.milestones, saved.contractValue);
+  const coverageText = coverageNote(coverage, editing ? currency : saved.currency);
 
   const th = { padding: "10px 12px", textAlign: "left" as const, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase" as const, whiteSpace: "nowrap" as const };
   const td = { padding: "10px 12px", fontSize: 14, verticalAlign: "middle" as const };
@@ -223,10 +233,10 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
           Contract value <strong style={{ color: NAVY }}>{money(saved.contractValue, saved.currency)}</strong>
           {" · "}Invoiced <strong style={{ color: NAVY }}>{money(totals.invoiced, saved.currency)}</strong>
           {" · "}Paid <strong style={{ color: NAVY }}>{money(totals.paid, saved.currency)}</strong>
-          {totals.percentTotal !== null && (
+          {coverage.percent !== null && (
             <>
               {" · "}Milestones cover{" "}
-              <strong style={{ color: totals.percentTotal === 100 ? NAVY : "#9A4B00" }}>{totals.percentTotal}%</strong> of the contract
+              <strong style={{ color: coverage.state === "complete" ? NAVY : "#9A4B00" }}>{coverage.state === "complete" ? "100" : coverage.percent}%</strong> of the contract
             </>
           )}
         </span>
@@ -246,6 +256,12 @@ export function PaymentsEditor({ projectId, projectName, initial, todayIso, uplo
           </button>
         )}
       </div>
+
+      {coverageText && (
+        <div role="status" style={{ padding: "10px 14px", borderRadius: 8, fontSize: 14, background: "#FEF6E7", color: "#7A4E00", border: "1px solid #F0C069" }}>
+          {coverageText} Check the percentages and amounts, or the contract amount.
+        </div>
+      )}
 
       {message && (
         <div role={message.kind === "error" ? "alert" : "status"} style={{ padding: "10px 14px", borderRadius: 8, fontSize: 14, background: message.kind === "ok" ? "#D8F5E3" : "#FCE9E7", color: message.kind === "ok" ? "#047857" : "#8C1D18" }}>

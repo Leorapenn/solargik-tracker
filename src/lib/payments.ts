@@ -193,6 +193,36 @@ export function milestoneTotals(
   return { contract: contractValue, invoiced, paid, percentTotal: anyPercent ? Math.round(percent * 1000) / 1000 : null };
 }
 
+// Do a project's milestones add up to its contract? Compared by AMOUNT (a milestone can be a percent or a typed amount,
+// like "20% + EUR 5,000"), leaving out optional milestones (e.g. a notice-to-design payment that is deducted from the
+// advance payment). Within 1 currency unit counts as complete (percent rounding).
+export type MilestoneCoverage = {
+  state: "none" | "unknown" | "complete" | "short" | "over";
+  planned: number; // what the milestones add up to
+  contract: number | null;
+  difference: number; // contract - planned (positive = not covered, negative = more than the contract)
+  percent: number | null; // planned as a percent of the contract, one decimal
+};
+export function milestoneCoverage(
+  milestones: { percent: number | null; amountOverride: number | null; optional?: boolean }[],
+  contract: number | null,
+): MilestoneCoverage {
+  const counted = milestones.filter((m) => !m.optional);
+  if (counted.length === 0) return { state: "none", planned: 0, contract, difference: 0, percent: null };
+  if (contract === null || contract <= 0) return { state: "unknown", planned: 0, contract, difference: 0, percent: null };
+  const planned = Math.round(counted.reduce((sum, m) => sum + (milestoneAmount(m, contract) ?? 0), 0) * 100) / 100;
+  const difference = Math.round((contract - planned) * 100) / 100;
+  const state = Math.abs(difference) <= 1 ? "complete" : difference > 0 ? "short" : "over";
+  return { state, planned, contract, difference, percent: Math.round((planned / contract) * 1000) / 10 };
+}
+
+// A short sentence for a mismatch ("" when the milestones cover the contract, or when there is nothing to compare).
+export function coverageNote(c: MilestoneCoverage, currency: string): string {
+  if (c.state === "short") return `Milestones add up to ${c.percent}% of the contract: ${money(c.difference, currency)} is not covered by any milestone.`;
+  if (c.state === "over") return `Milestones add up to ${c.percent}% of the contract: ${money(-c.difference, currency)} more than the contract.`;
+  return "";
+}
+
 // ---- change orders ----
 
 // Once the invoice is paid the change order is complete.

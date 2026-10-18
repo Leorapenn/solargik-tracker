@@ -14,7 +14,9 @@ import {
   effectiveStatus,
   formatTotals,
   isCurrency,
+  coverageNote,
   milestoneAmount,
+  milestoneCoverage,
   milestoneDueDate,
   milestoneProgress,
   projectContract,
@@ -109,6 +111,44 @@ describe("effectiveStatus", () => {
   });
   it("never shows a paid milestone as overdue", () => {
     expect(effectiveStatus({ status: "PAYMENT_RECEIVED", dueDate: "2025-01-01" }, TODAY)).toBe("PAYMENT_RECEIVED");
+  });
+});
+
+describe("milestoneCoverage (do the milestones add up to the contract?)", () => {
+  const pct = (p: number, optional = false) => ({ percent: p, amountOverride: null as number | null, optional });
+  const amt = (a: number, optional = false) => ({ percent: null as number | null, amountOverride: a, optional });
+  it("is complete when the percentages add up to 100", () => {
+    const c = milestoneCoverage([pct(30), pct(40), pct(15), pct(10), pct(5)], 796500);
+    expect(c).toMatchObject({ state: "complete", planned: 796500, difference: 0, percent: 100 });
+    expect(coverageNote(c, "EUR")).toBe("");
+  });
+  it("works with typed amounts too, such as 20% + 5,000 and a completion-to-30% top-up", () => {
+    const base = 395399.16;
+    const m1 = Math.round((0.2 * base + 5000) * 100) / 100;
+    const m2 = Math.round((0.3 * base - m1) * 100) / 100;
+    expect(milestoneCoverage([amt(m1), amt(m2), pct(50), pct(20)], base).state).toBe("complete");
+  });
+  it("leaves out optional milestones (a notice-to-design payment is deducted from the advance payment)", () => {
+    expect(milestoneCoverage([amt(10000, true), pct(30), pct(40), pct(15), pct(10), pct(5)], 142000).state).toBe("complete");
+  });
+  it("says how much is not covered, or how much is over", () => {
+    const short = milestoneCoverage([pct(30), pct(40), pct(15)], 100000);
+    expect(short).toMatchObject({ state: "short", planned: 85000, difference: 15000, percent: 85 });
+    expect(coverageNote(short, "EUR")).toBe("Milestones add up to 85% of the contract: €15,000 is not covered by any milestone.");
+    const over = milestoneCoverage([pct(60), pct(50)], 100000);
+    expect(over).toMatchObject({ state: "over", difference: -10000, percent: 110 });
+    expect(coverageNote(over, "EUR")).toBe("Milestones add up to 110% of the contract: €10,000 more than the contract.");
+  });
+  it("tolerates rounding of up to one currency unit", () => {
+    expect(milestoneCoverage([pct(33.333), pct(33.333), pct(33.334)], 1000).state).toBe("complete");
+    expect(milestoneCoverage([pct(99.9)], 10000).state).toBe("short"); // 10 short
+  });
+  it("has nothing to say without milestones or without a contract amount", () => {
+    expect(milestoneCoverage([], 1000).state).toBe("none");
+    expect(milestoneCoverage([amt(10000, true)], 1000).state).toBe("none"); // only optional ones
+    expect(milestoneCoverage([pct(100)], null).state).toBe("unknown");
+    expect(milestoneCoverage([pct(100)], 0).state).toBe("unknown");
+    expect(coverageNote(milestoneCoverage([pct(50)], null), "EUR")).toBe("");
   });
 });
 

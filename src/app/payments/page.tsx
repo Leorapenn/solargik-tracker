@@ -3,7 +3,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { toDateInputValue, todayInAppTz, formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderStatusTitle, changeOrdersRollup, effectiveStatus, milestoneAmount, milestoneDueDate, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
+import { CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderStatusTitle, changeOrdersRollup, coverageNote, effectiveStatus, milestoneAmount, milestoneCoverage, milestoneDueDate, milestoneTotals, money, type MilestoneStatus } from "@/lib/payments";
 import { parseSort, sortRows } from "@/lib/sort";
 import { ChoicePill } from "@/components/ColorSelect";
 import { SortSummary } from "@/components/SortSummary";
@@ -32,7 +32,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       paymentCurrency: true,
       paymentBase: true,
       customer: { select: { name: true } },
-      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, percent: true, amountOverride: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true, linkedSubStage: { select: { status: true } } } },
+      milestones: { orderBy: { order: "asc" }, select: { id: true, label: true, order: true, optional: true, percent: true, amountOverride: true, status: true, dueDate: true, invoiceSentDate: true, paymentTermsDays: true, linkedSubStage: { select: { status: true } } } },
       changeOrders: { select: { status: true, invoiceStatus: true, invoicedDate: true, paymentTermsDays: true } },
     },
   });
@@ -45,6 +45,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       id: m.id,
       label: m.label,
       order: m.order,
+      optional: m.optional,
       percent: m.percent === null ? null : Number(m.percent.toString()),
       amountOverride: m.amountOverride === null ? null : Number(m.amountOverride.toString()),
       status: m.status,
@@ -63,6 +64,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       currency: p.paymentCurrency,
       contract,
       paid: milestoneTotals(milestones, contract).paid,
+      coverage: milestoneCoverage(milestones, contract),
       hasMilestones: milestones.length > 0,
       next,
       nextAmount: next ? milestoneAmount(next, contract) : null,
@@ -122,7 +124,14 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
                     </Link>
                   </td>
                   <td style={{ ...bodyCell, color: TEXT_MUTED }}>{r.customer}</td>
-                  <td style={bodyCell}>{money(r.contract, r.currency)}</td>
+                  <td style={bodyCell}>
+                    {money(r.contract, r.currency)}
+                    {(r.coverage.state === "short" || r.coverage.state === "over") && (
+                      <span title={coverageNote(r.coverage, r.currency)} style={{ marginLeft: 8, color: "#9A4B00", fontSize: 12.5, fontWeight: 700 }}>
+                        ⚠ {r.coverage.percent}%
+                      </span>
+                    )}
+                  </td>
                   <td style={bodyCell}>{r.hasMilestones ? money(r.paid, r.currency) : <span style={{ color: TEXT_MUTED }}>—</span>}</td>
                   <td style={bodyCell}>
                     {r.next ? (

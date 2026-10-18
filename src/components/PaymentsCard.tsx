@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, formatTerms, highlightLabel, milestoneAmount, milestoneDueDate, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
+import { CHANGE_ORDER_INVOICE_STATUS, CHANGE_ORDER_LINK_TITLES, CHANGE_ORDER_STATUS, MILESTONE_STATUS, changeOrderDisplay, changeOrderInvoiceStatusTitle, changeOrderStatusTitle, effectiveStatus, coverageNote, formatTerms, highlightLabel, milestoneAmount, milestoneCoverage, milestoneDueDate, milestoneTotals, money, upcomingMilestoneId } from "@/lib/payments";
 import type { PaymentData } from "@/server/services/payments";
 import { ChoicePill } from "@/components/ColorSelect";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib/theme";
@@ -26,6 +26,8 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
   const [open, setOpen] = useState<string | null>(null);
   const upcoming = upcomingMilestoneId(data.milestones);
   const totals = milestoneTotals(data.milestones, data.contractValue);
+  const coverage = milestoneCoverage(data.milestones, data.contractValue);
+  const coverageText = coverageNote(coverage, data.currency);
   const selected = data.milestones.find((m) => m.id === open) ?? null;
 
   const detail = (m: PaymentData["milestones"][number]) =>
@@ -45,6 +47,11 @@ export function PaymentsCard({ projectId, data, todayIso }: { projectId: string;
         <span style={{ color: TEXT_MUTED, fontSize: 13.5, flex: 1 }}>
           Paid <strong style={{ color: NAVY }}>{money(totals.paid, data.currency)}</strong> of {money(data.contractValue, data.currency)}
           {data.changeOrders.length > 0 && ` · ${data.changeOrders.length} change order${data.changeOrders.length === 1 ? "" : "s"}`}
+          {coverageText && (
+            <span title={coverageText} style={{ marginLeft: 10, color: "#9A4B00", fontWeight: 600 }}>
+              ⚠ Milestones cover {coverage.percent}%
+            </span>
+          )}
         </span>
         <Link href={`/payments/${projectId}`} style={{ ...secondaryButton, textDecoration: "none", display: "inline-block" }}>
           Open in Payments
