@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 import { logout } from "@/server/actions/auth";
 import { NAVY, ORANGE } from "@/lib/theme";
 
@@ -11,12 +12,14 @@ const LINKS = [
   { href: "/phases", label: "Phases" },
   { href: "/payments", label: "Payments" },
   { href: "/updates", label: "Updates" },
+  { href: "/tasks", label: "Tasks" },
   { href: "/actions", label: "Actions" },
   { href: "/inbox", label: "Inbox" },
   { href: "/people", label: "People" },
 ];
 
-export function NavBar() {
+// `bell` is the notifications bell (a server component passed in from the layout).
+export function NavBar({ bell }: { bell?: ReactNode }) {
   const pathname = usePathname();
   const onLogin = pathname === "/login";
 
@@ -70,6 +73,7 @@ export function NavBar() {
 
       {!onLogin && (
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {bell}
           <form action="/search" method="get" role="search">
             <label
               htmlFor="q"

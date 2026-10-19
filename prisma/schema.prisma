@@ -58,6 +58,7 @@ model Customer {
   projects     Project[]
   contacts     Contact[]
   suggestions  Suggestion[]
+  tasks        Task[]
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 }
@@ -150,6 +151,7 @@ model Project {
   milestones              Milestone[]
   changeOrders            ChangeOrder[]
   suggestions             Suggestion[]
+  tasks                   Task[]
   // Payments (milestones, change orders) are in this currency (USD, EUR, ILS...). paymentBase is the
   // contract amount in that currency that milestone percentages apply to; when empty, contractValue
   // (imported from monday.com) is used.
@@ -389,7 +391,47 @@ model Person {
   ownedPhases        Phase[]             @relation("PhaseOwner")
   defaultForPhases   PhaseDefaultOwner[]
   engineeredProfiles ProjectProfile[]
+  tasks              Task[]
   createdAt          DateTime            @default(now())
+}
+
+// An ongoing matter to chase and keep track of (e.g. a customer disputing charges): per customer, optionally about one
+// of its projects, with a status, the last correspondence, a follow-up date (the reminder) and a dated log.
+// Typed by hand; the Tasks tab and the bell in the top bar read from it. Only the text of notes is stored, never emails.
+model Task {
+  id              String       @id @default(cuid())
+  customerId      String
+  customer        Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  topic           String // the issue, one line
+  details         String? // longer description
+  status          String       @default("OPEN") // OPEN | WAITING_CUSTOMER | WAITING_US | CALL_SCHEDULED | RESOLVED
+  ownerId         String?
+  owner           Person?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  lastContactAt   DateTime?    @db.Date // the day of the last correspondence
+  lastContactNote String? // one line about it, e.g. "They replied, trying to set a call"
+  nextFollowUp    DateTime?    @db.Date // when to chase again (the reminder)
+  resolvedAt      DateTime?    @db.Date
+  updates         TaskUpdate[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([customerId])
+  @@index([projectId])
+  @@index([status])
+}
+
+// One dated entry in a task's log ("Call set for Thursday", "They disputed the invoice again").
+model TaskUpdate {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  date      DateTime @db.Date
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([taskId, date])
 }
 
 // The person who owns new items of a department by default (used when projects are created).

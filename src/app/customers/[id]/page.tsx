@@ -16,6 +16,9 @@ import { SortTh } from "@/components/SortTh";
 import { ContactsCard } from "@/components/ContactsCard";
 import { CorrespondenceCard } from "@/components/CorrespondenceCard";
 import { listCustomerCorrespondence } from "@/server/services/correspondence";
+import { listOpenTasksForCustomer } from "@/server/services/tasks";
+import { agoText, taskAttention, taskStatusChoice } from "@/lib/tasks";
+import { ChoicePill } from "@/components/ColorSelect";
 import { CustomerEditor } from "@/components/CustomerEditor";
 import { CustomerTypeSelect } from "@/components/CustomerTypeSelect";
 import { FlagsEditor } from "@/components/FlagsEditor";
@@ -55,7 +58,7 @@ export default async function CustomerDetailPage({
   const query = await searchParams;
   const filter = parseLifecycle(typeof query.lifecycle === "string" ? query.lifecycle : undefined);
 
-  const [customer, flagSuggestions, correspondence] = await Promise.all([
+  const [customer, flagSuggestions, correspondence, openTasks] = await Promise.all([
     prisma.customer.findUnique({
       where: { id },
       include: {
@@ -72,6 +75,7 @@ export default async function CustomerDetailPage({
     }),
     knownFlags(),
     listCustomerCorrespondence(id),
+    listOpenTasksForCustomer(id).catch(() => []),
   ]);
   if (!customer) notFound();
 
@@ -292,6 +296,39 @@ export default async function CustomerDetailPage({
 
         <ContactsCard customerId={customer.id} people={people} />
       </div>
+
+      {/* open tasks (matters being chased) for this customer, most urgent first */}
+      <details open style={{ marginTop: 4 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
+          Tasks{openTasks.length > 0 ? ` (${openTasks.length} open)` : ""}
+        </summary>
+        <div style={{ ...cardStyle, padding: "4px 20px" }}>
+          {openTasks.length === 0 && <div style={{ padding: "14px 0", color: TEXT_MUTED, fontSize: 14 }}>No open tasks for {customer.name}.</div>}
+          {openTasks.map((t, i) => {
+            const attention = taskAttention({ status: t.status, nextFollowUp: t.nextFollowUp, lastContactAt: t.lastContactAt, createdOn: t.createdOn }, todayIso);
+            return (
+              <div key={t.id} style={{ padding: "12px 0", borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+                  <Link href={`/tasks#${t.id}`} style={{ color: NAVY, fontWeight: 700, overflowWrap: "anywhere" }}>
+                    {t.topic}
+                  </Link>
+                  <div style={{ fontSize: 13, color: TEXT_MUTED }}>
+                    {t.projectName ?? "The customer in general"}
+                    {t.lastContactAt ? ` · last correspondence ${agoText(t.lastContactAt, todayIso)}` : ""}
+                    {attention ? ` · ${attention.text}` : ""}
+                  </div>
+                </div>
+                <ChoicePill choice={taskStatusChoice(t.status)} />
+              </div>
+            );
+          })}
+          <div style={{ padding: "10px 0", borderTop: `1px solid ${ROW_DIVIDER}`, fontSize: 13.5 }}>
+            <Link href={`/tasks?customer=${customer.id}`} style={{ color: NAVY, fontWeight: 700 }}>
+              Open in Tasks (add or update)
+            </Link>
+          </div>
+        </div>
+      </details>
 
       {/* general questions, requests and commitments with this customer that aren't about one project (approved from the Inbox) */}
       <details open style={{ marginTop: 4 }}>
