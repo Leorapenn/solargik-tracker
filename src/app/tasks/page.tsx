@@ -103,6 +103,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       {groups.map((g) => (
         <CollapsibleGroup
           key={g.customerId}
+          id={g.customerId}
           label={g.name}
           title={
             <h2 style={{ margin: 0, fontSize: 17, color: NAVY }}>

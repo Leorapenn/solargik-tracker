@@ -8,6 +8,7 @@ import { formatDate, parseDateInput } from "@/lib/dates";
 import type { TaskView } from "@/server/services/tasks";
 import { ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
+import { useFolded } from "@/components/useFolded";
 import { TaskForm, type CustomerOption, type PersonOption, type ProjectOption } from "@/components/TaskForm";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
@@ -39,7 +40,8 @@ export function TaskCard({
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const [open, setOpen] = useState(true); // the arrow folds the task to its title and status
+  const [folded, setFolded] = useFolded(`task:${task.id}`); // the arrow folds the task to its title and status (remembered per browser)
+  const open = !folded;
   const [text, setText] = useState("");
   const [contact, setContact] = useState(true);
   const [next, setNext] = useState("");
@@ -65,7 +67,7 @@ export function TaskCard({
           aria-expanded={open}
           aria-label={`${open ? "Collapse" : "Expand"} the task: ${task.topic}`}
           title={open ? "Hide the details" : "Show the details"}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => setFolded(open)}
           style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #E4E6EC", background: "#fff", color: NAVY, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flex: "none" }}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s" }}>
