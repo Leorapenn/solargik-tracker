@@ -19,7 +19,7 @@ export const NEW_PROJECT_PROFILE_FIELDS = [
   { key: "ntpDate", label: "NTP date", type: "date" },
   { key: "supplyObligations", label: "Supply obligations (what, by when, warranties, penalties)", type: "long" },
   { key: "contractType", label: "Contract type", type: "choice" },
-  { key: "soilTest", label: "SPT or GPT", type: "choice" },
+  { key: "soilTest", label: "SPT or GPT (Self- / Grid-Powered Tracker)", type: "choice" },
   { key: "soma", label: "SOMA", type: "short" },
   { key: "projectType", label: "Type of project / system", type: "short" },
   { key: "deliveryAddress", label: "Delivery address (site)", type: "long" },

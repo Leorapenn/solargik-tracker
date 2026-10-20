@@ -32,7 +32,7 @@ export const EXTRACTION_TOOL = {
     properties: {
       supplyTerms: { type: ["string", "null"], description: "The contractual supply TERMS (payment and delivery conditions; the Incoterms go in their own field), summarised in a few short sentences." },
       supplyObligations: { type: ["string", "null"], description: "The supplier's contractual OBLIGATIONS regarding supply (what Solargik must deliver, by when, warranties/penalties), summarised in a few short sentences." },
-      soilTest: { type: ["string", "null"], enum: ["SPT", "GPT", null], description: "Whether the contract calls for SPT or GPT." },
+      soilTest: { type: ["string", "null"], enum: ["SPT", "GPT", null], description: "SPT (Self-Powered Tracker) or GPT (Grid-Powered Tracker): the one the contract specifies, e.g. 'Grid Powered' means GPT. An option to upgrade to the other one is not the choice." },
       incoterms: { type: ["string", "null"], description: "The Incoterms the contract states (e.g. DDP, DAP, FOB, with the version such as 2020), briefly." },
       soma: { type: ["string", "null"], description: "What the contract says about SOMA, briefly." },
       projectType: { type: ["string", "null"], description: "The type of project or system as described in the contract, briefly." },

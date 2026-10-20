@@ -13,7 +13,7 @@ export const CONTRACT_PROMPT = [
   "",
   "SUPPLY TERMS: (payment and delivery conditions; the Incoterms go on their own line below)",
   "SUPPLY OBLIGATIONS: (what the supplier must deliver, by when, warranties and penalties)",
-  "SPT OR GPT: (write SPT or GPT)",
+  "SPT OR GPT: (SPT = Self-Powered Tracker, GPT = Grid-Powered Tracker; write GPT when the contract says Grid Powered, SPT when it says Self Powered. An option to upgrade to the other one is not the choice)",
   "INCOTERMS: (the Incoterms the contract states, e.g. DDP, DAP, FOB, with the version such as 2020)",
   "SOMA: (what the contract says about SOMA)",
   "TYPE: (the type of project or system)",
