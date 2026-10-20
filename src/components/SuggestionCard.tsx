@@ -16,7 +16,8 @@ type ChangeOrderFields = { reason: string; amount: string; dateSent: string; inv
 const fieldLabel = { fontSize: 12.5, fontWeight: 700, color: NAVY, display: "flex", flexDirection: "column" as const, gap: 4 };
 
 const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
-// these only record that someone looked at them, so approving needs no project (but one can still be picked)
+// a note only records that someone looked at it, and an action item becomes a task: neither needs a project (one can
+// still be picked), but an action item needs a customer or a project (the task is for a customer)
 const REVIEW_ONLY = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
 // a new project is not about an existing one: it needs a customer, not a project
 const CURRENCY_CODES = ["USD", "EUR", "ILS", "GBP", "CHF", "CAD"];
@@ -317,7 +318,7 @@ export function SuggestionCard({
           )}
           {!needsProject && !isNewProject && !projectId && (
             <select aria-label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ ...inputStyle, maxWidth: 260, borderColor: customerId ? undefined : "#F0C069" }}>
-              <option value="">General item: pick the customer</option>
+              <option value="">{s.kind === "ACTION_ITEM" ? "Pick the customer for the task" : "General item: pick the customer"}</option>
               {customers.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name} (general)
@@ -333,7 +334,7 @@ export function SuggestionCard({
           <button
             type="button"
             style={primaryButton}
-            disabled={busy || (needsProject && !projectId) || (isNewProject && (!customerId || !np.number.trim() || !np.name.trim()))}
+            disabled={busy || (needsProject && !projectId) || (isNewProject && (!customerId || !np.number.trim() || !np.name.trim())) || (s.kind === "ACTION_ITEM" && !projectId && !customerId)}
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
@@ -342,7 +343,7 @@ export function SuggestionCard({
               })
             }
           >
-            {busy ? "Working…" : "Approve"}
+            {busy ? "Working…" : s.kind === "ACTION_ITEM" ? "Approve (creates a task)" : "Approve"}
           </button>
           <button
             type="button"
@@ -358,9 +359,11 @@ export function SuggestionCard({
           >
             Reject
           </button>
-          <button type="button" style={secondaryButton} disabled={busy} title="Start a task from this proposal. It does not approve or reject it." onClick={() => setCreatingTask((o) => !o)}>
-            {creatingTask ? "Cancel task" : "Create task"}
-          </button>
+          {s.kind !== "ACTION_ITEM" && (
+            <button type="button" style={secondaryButton} disabled={busy} title="Start a task from this proposal. It does not approve or reject it." onClick={() => setCreatingTask((o) => !o)}>
+              {creatingTask ? "Cancel task" : "Create task"}
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ fontSize: 13, color: TEXT_MUTED, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>

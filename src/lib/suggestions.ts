@@ -23,14 +23,19 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   CHANGE_ORDER_UPDATE: "Change order update",
   CONTRACT_DOCUMENT: "Signed contract (sets the project's contract link when approved)",
   NEW_PROJECT: "New project (created in 360 when approved)",
-  ACTION_ITEM: "Action item (nothing to apply)",
+  ACTION_ITEM: "Task (created when approved)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
   NOTE: "Note (nothing to apply)",
 };
 
 // Kinds that change nothing when approved: approving only marks them as reviewed.
-export const REVIEW_ONLY_KINDS: readonly SuggestionKind[] = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+export const REVIEW_ONLY_KINDS: readonly SuggestionKind[] = ["NOTE", "CORRESPONDENCE_NOTE"];
+
+// An approved ACTION_ITEM creates a TASK (an action item and a task are one concept: something someone has to do or
+// chase). Its result note starts with this, which is how the Correspondence cards know to leave it out: it lives on the
+// Tasks tab now.
+export const TASK_RESULT_PREFIX = "Task created";
 
 // The only item statuses 360 has. A status change must be one of these.
 export const ITEM_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"] as const;
@@ -258,7 +263,8 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const details = cleanNewProjectProfile(raw.profile, raw.sources);
     if (!details.ok) return details;
     payload = { kind, number, name: projectNamePart(name) || name, country: oneLine(raw.country, 80), capacityKwp: kwp.value, contractAmount: amount.value, currency, signedDate: signed.value, profile: details.profile, sources: details.sources };
-  } else if (kind === "ACTION_ITEM") {    const t = text("text", true);
+  } else if (kind === "ACTION_ITEM") {
+    const t = text("text", true);
     if (!t.ok) return t;
     payload = { kind, text: t.value!, who: oneLine(raw.who, 120), by: oneLine(raw.by, 100) };
   } else if (kind === "CONTRACT_DOCUMENT") {
@@ -404,7 +410,7 @@ export function agentInstructions(endpoint: string): string {
     "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
     "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
     "- NEW_PROJECT when a customer's SIGNED order, offer or contract is for a project that is NOT in the projects list (check the number and the name first): number (the project number as named in its SharePoint folder under EXECUTION, e.g. \"370\": look the folder up, never invent or count a number yourself; if there is no folder yet, send a NOTE instead and say so), name (without the number, e.g. \"Blumberg\"), customer (as written), and only what the document states: country, capacityKwp (kWp, a plain number), contractAmount (a plain number) with its currency (Solargik's contracts are normally in EUR; send currency only when the document states one, and a missing currency is taken as EUR). Leave out anything the document does not say. Also read the signed document and add ONLY what it explicitly states, each with the sentence it comes from: signedDate (YYYY-MM-DD, the contract signing date), and inside \"profile\": incoterms (the Incoterms the document states, e.g. DDP, DAP, FOB, with the version such as 2020), supplyTerms (payment and delivery conditions, without repeating the Incoterms), deliveryExpectations (the delivery schedule or dates, and the project timeline: completion or commissioning dates), pileDrivingStart and ntpDate (YYYY-MM-DD), supplyObligations (what Solargik must deliver, by when, warranties, penalties), contractType (EPC, Tracker Supply or Pilot), soilTest (SPT or GPT), incoterms, soma, projectType (type of project or system), deliveryAddress, shippingAddress. Put the supporting sentence of each in \"sources\" under the same key (max 300 characters, original language). Keep each value short and factual, in English; if a detail is not stated, leave it OUT (never write \"not stated\", never guess, never infer a date). A scanned document with no readable text gives you nothing to add: send only what the email states. Approving CREATES the project in 360, so send it only for a real, signed order, once per project.",
-    "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM (who, by when) is for a clear request or commitment; CORRESPONDENCE_NOTE for other meaningful communication. Say in the text whether it was the customer or Solargik staff.",
+    "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM is for a clear request or commitment; approving it CREATES A TASK for a person to do or chase (who = the person's full name if the email names one, by = a date as YYYY-MM-DD ONLY when the email states a date, else leave it out or write it as the email does). CORRESPONDENCE_NOTE is for other meaningful communication, and never for something an ACTION_ITEM from the same email already says. Say in the text whether it was the customer or Solargik staff.",
     "- Give each suggestion a unique 'id' (the email's id plus a number) so a retry doesn't create duplicates. Without an id the tracker still skips an identical proposal from the same email, but an id is more reliable.",
     "- Always send 'customer' too (the customer's name as written, e.g. 'Revalue'). A general question, request or commitment for the customer that is NOT about one project (for example a question about a framework agreement or an invoice process) is a CORRESPONDENCE_NOTE or ACTION_ITEM with 'customer' set and NO 'project': a person files it on the customer's page.",
     "- If an email is clearly about one of our customers but you can't tell which project, still send a suggestion (a NOTE if nothing else fits) and leave the project out: it will show under Unmatched for a person to assign. If an email is irrelevant (newsletters, unrelated senders), send nothing.",
@@ -453,7 +459,7 @@ export function describePayload(p: Payload): string {
       return `Create project ${p.number}-${p.name} in 360 with the standard phases and items${facts.length ? ` (${facts.join(", ")})` : ""}${details ? `, and fill ${details} contract detail${details === 1 ? "" : "s"} in its profile` : ""}`;
     }
     case "ACTION_ITEM":
-      return `Action item${p.who ? ` for ${p.who}` : ""}${p.by ? `, by ${p.by}` : ""}: ${p.text}`;
+      return `Create a task${p.who ? ` for ${p.who}` : ""}${p.by ? `, due ${p.by}` : ""}: ${p.text}`;
     case "CORRESPONDENCE_NOTE":
       return p.text;
     case "MILESTONE_UPDATE": {

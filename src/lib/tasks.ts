@@ -182,6 +182,46 @@ export function taskPrefillFromSuggestion(s: PrefillSource, customerId: string, 
   };
 }
 
+// ---- an approved action item becomes a task (the two are one concept: a thing someone has to do or chase) ----
+
+// The one active person whose full name appears in `who` ("Leora Penn", "leora penn (Solargik)"). Nobody when none or
+// several match, or when `who` is empty: a first name alone is never matched, so "Leora / Amit" picks no one.
+export function matchOwner(who: string | null | undefined, people: { id: string; name: string }[]): string | null {
+  const w = oneLine(who).toLowerCase();
+  if (!w) return null;
+  const hits = people.filter((p) => {
+    const n = oneLine(p.name).toLowerCase();
+    return n.length >= 3 && (w === n || w.includes(n));
+  });
+  return hits.length === 1 ? hits[0].id : null;
+}
+
+export type ActionItemSource = PrefillSource & {
+  text: string; // the request or commitment, as written in the proposal
+  who: string | null;
+  by: string | null; // when it is due, as the email says ("2026-10-20", "end of next week")
+};
+
+// What the task made from an action item holds. `by` becomes the follow-up date only when it is a real date
+// (YYYY-MM-DD); anything else ("asap", "end of next week") stays in the details as written, never guessed into a date.
+export function taskFromActionItem(a: ActionItemSource, customerId: string, projectId: string, people: { id: string; name: string }[]): Partial<TaskInput> {
+  const base = taskPrefillFromSuggestion(a, customerId, projectId);
+  const by = oneLine(a.by);
+  const isDate = validDate(by);
+  const lines = [
+    block(a.text),
+    oneLine(a.who) ? `For: ${oneLine(a.who)}` : "",
+    by && !isDate ? `Due: ${by}` : "",
+    base.lastContactNote ? `From the email: ${base.lastContactNote.replace(/^Email /, "")}.` : "",
+  ].filter(Boolean);
+  return {
+    ...base,
+    details: lines.join("\n").slice(0, MAX_DETAILS),
+    status: "OPEN",
+    ownerId: matchOwner(a.who, people) ?? "",
+    nextFollowUp: isDate ? by : "",
+  };
+}
 // A log entry: what happened, and on which day (today when not given).
 export function cleanTaskUpdate(input: { date?: unknown; text?: unknown }, todayIso: string): Result<{ date: string; text: string }> {
   const text = block(input.text);

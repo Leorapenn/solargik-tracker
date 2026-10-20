@@ -13,7 +13,6 @@ const LINKS = [
   { href: "/payments", label: "Payments" },
   { href: "/updates", label: "Updates" },
   { href: "/tasks", label: "Tasks" },
-  { href: "/actions", label: "Actions" },
   { href: "/inbox", label: "Inbox" },
   { href: "/people", label: "People" },
 ];

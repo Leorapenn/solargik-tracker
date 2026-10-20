@@ -13,6 +13,8 @@ import {
   parseTaskFilter,
   taskAttention,
   taskPrefillFromSuggestion,
+  matchOwner,
+  taskFromActionItem,
   type TaskTimes,
 } from "./tasks";
 
@@ -161,5 +163,49 @@ describe("cleanTaskUpdate", () => {
     expect(cleanTaskUpdate({ text: "  " }, TODAY).ok).toBe(false);
     expect(cleanTaskUpdate({ text: "x", date: "15/10/2026" }, TODAY).ok).toBe(false);
     expect(cleanTaskUpdate({ text: "x".repeat(1001) }, TODAY).ok).toBe(false);
+  });
+});
+
+describe("matchOwner", () => {
+  const people = [{ id: "p1", name: "Leora Penn" }, { id: "p2", name: "Amit Puterkovsky" }, { id: "p3", name: "Dan Cohen" }];
+  it("matches the one person whose full name is in 'who'", () => {
+    expect(matchOwner("Leora Penn", people)).toBe("p1");
+    expect(matchOwner("leora penn (Solargik)", people)).toBe("p1");
+  });
+  it("matches nobody for a first name, several people, empty or unknown", () => {
+    expect(matchOwner("Leora", people)).toBeNull();
+    expect(matchOwner("Leora Penn / Amit Puterkovsky", people)).toBeNull();
+    expect(matchOwner("", people)).toBeNull();
+    expect(matchOwner(null, people)).toBeNull();
+    expect(matchOwner("the customer", people)).toBeNull();
+  });
+});
+
+describe("taskFromActionItem (an approved action item becomes a task)", () => {
+  const a = {
+    summary: "iAccess Blumberg: Solargik to schedule the kickoff asap",
+    kindText: "Task",
+    sourceFrom: "tamirp@solargik.com",
+    sourceSubject: "FW: Initial layout for BLUMBERG",
+    sourceReceivedAt: "2026-10-20T07:56:27.000Z",
+    sourceLink: "https://outlook.office365.com/owa/?ItemID=abc",
+    text: "Solargik to schedule the kickoff meeting for the new iAccess Blumberg project as soon as possible.",
+    who: "Leora Penn",
+    by: "as soon as possible",
+  };
+  const people = [{ id: "p1", name: "Leora Penn" }];
+  it("fills the topic, owner, email day, link and keeps a non-date 'by' in the details", () => {
+    const p = taskFromActionItem(a, "c1", "pr1", people);
+    expect(p).toMatchObject({ customerId: "c1", projectId: "pr1", topic: a.summary, status: "OPEN", ownerId: "p1", nextFollowUp: "", lastContactAt: "2026-10-20", sourceLink: a.sourceLink });
+    expect(p.details).toContain(a.text);
+    expect(p.details).toContain("For: Leora Penn");
+    expect(p.details).toContain("Due: as soon as possible");
+    expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
+  });
+  it("turns a real date into the follow-up date, and does not guess one from words", () => {
+    expect(taskFromActionItem({ ...a, by: "2026-10-27" }, "c1", "", people)).toMatchObject({ nextFollowUp: "2026-10-27", projectId: "" });
+    expect(taskFromActionItem({ ...a, by: "2026-02-31" }, "c1", "", people).nextFollowUp).toBe("");
+    expect(taskFromActionItem({ ...a, by: "end of next week" }, "c1", "", people).nextFollowUp).toBe("");
+    expect(taskFromActionItem({ ...a, who: "the customer", by: null }, "c1", "", people)).toMatchObject({ ownerId: "", nextFollowUp: "" });
   });
 });

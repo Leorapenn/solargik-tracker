@@ -117,7 +117,7 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
 
   it("says in plain words what approving a status change or an action item does", () => {
     expect(describePayload(ok({ kind: "STATUS_CHANGE", item: "Layout Approval", phase: "DESIGN", status: "DONE" }).payload)).toBe('Set "Layout Approval" (Design) to Done');
-    expect(describePayload(ok({ kind: "ACTION_ITEM", text: "Send the layout", who: "Dan", by: "Friday" }).payload)).toBe("Action item for Dan, by Friday: Send the layout");
+    expect(describePayload(ok({ kind: "ACTION_ITEM", text: "Send the layout", who: "Dan", by: "Friday" }).payload)).toBe("Create a task for Dan, due Friday: Send the layout");
   });
 });
 

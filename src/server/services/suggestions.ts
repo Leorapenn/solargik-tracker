@@ -6,10 +6,12 @@ import { cleanWebLink } from "@/lib/links";
 import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
-import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
+import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, TASK_RESULT_PREFIX, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 import { patchSubStages } from "@/server/services/subStages";
 import { createProject } from "@/server/services/createProject";
+import { createTask } from "@/server/services/tasks";
+import { taskFromActionItem } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS, newProjectName, projectClash, type NewProjectEdits } from "@/lib/newProject";
 import { saveProfile } from "@/server/services/projectProfile";
 
@@ -158,8 +160,9 @@ const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
 async function applyPayload(payload: Payload, projectId: string | null, sourceLink: string | null = null, customerName: string | null = null): Promise<string> {
   // these only record that a person looked at them; they change nothing
   // (= REVIEW_ONLY_KINDS) With a project they are listed on its page, with only a customer on the customer's page,
-  // under "Correspondence and actions".
-  if (payload.kind === "NOTE" || payload.kind === "ACTION_ITEM" || payload.kind === "CORRESPONDENCE_NOTE") {
+  // under "Correspondence and actions". (An action item is not one of them: approving it creates a task.)
+  if (payload.kind === "ACTION_ITEM") throw new UserError("An action item becomes a task when its card is approved.");
+  if (payload.kind === "NOTE" || payload.kind === "CORRESPONDENCE_NOTE") {
     if (projectId) return "Saved on the project page under Correspondence and actions.";
     if (customerName) return `Saved on ${customerName}'s page under Correspondence and actions.`;
     return "Noted. It has no project or customer, so no page shows it.";
@@ -355,6 +358,25 @@ async function createFromProposal(payload: Extract<Payload, { kind: "NEW_PROJECT
   }
   return { id: created.id, note: `Project ${name} created for ${customer.name}, with the standard phases and items.${detailsNote}` };
 }
+// An approved ACTION_ITEM becomes a task (see taskFromActionItem): the person to do it is matched from "who" by full
+// name only, and "by" becomes the follow-up date only when it is a real date. Returns the task's topic.
+async function createTaskFromAction(
+  row: { summary: string; sourceFrom: string | null; sourceSubject: string | null; sourceReceivedAt: Date | null; sourceLink: string | null },
+  payload: Extract<Payload, { kind: "ACTION_ITEM" }>,
+  customerId: string,
+  projectId: string | null,
+): Promise<string> {
+  const people = await prisma.person.findMany({ where: { active: true }, select: { id: true, name: true } });
+  const input = taskFromActionItem(
+    { summary: row.summary, kindText: "Action item", sourceFrom: row.sourceFrom, sourceSubject: row.sourceSubject, sourceReceivedAt: row.sourceReceivedAt ? row.sourceReceivedAt.toISOString() : null, sourceLink: row.sourceLink, text: payload.text, who: payload.who, by: payload.by },
+    customerId,
+    projectId ?? "",
+    people,
+  );
+  await createTask(input);
+  return input.topic ?? row.summary;
+}
+
 // Approves a pending suggestion: applies it, and marks it approved. `overrides` lets the reviewer pick the project
 // and reword the text first. If applying fails (an unknown item, say) it stays pending and the reason is returned.
 // What the reviewer can correct on a change-order card before approving (empty text clears a value).
@@ -431,8 +453,24 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
   const customer = customerId ? await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true } }) : null;
   if (customerId && !customer) throw new UserError("That customer no longer exists.");
 
-  const note = await applyPayload(payload, projectId, row.sourceLink, projectId ? null : (customer?.name ?? null));
-  // claim it only if it is still pending, so a double click can't apply it twice
+  // An action item creates a TASK. Claim the proposal first (so a double click can't create it twice), then create the
+  // task, and put the proposal back to pending if that fails. It needs a customer (that of the project, or the one picked).
+  if (payload.kind === "ACTION_ITEM") {
+    if (!customer) throw new UserError("Pick the customer (or a project) this task is for first.");
+    const first = await prisma.suggestion.updateMany({ where: { id, status: "PENDING" }, data: { status: "APPROVED", reviewedAt: new Date() } });
+    if (first.count === 0) throw new UserError("That suggestion was already handled.");
+    try {
+      const topic = await createTaskFromAction(row, payload, customer.id, projectId ?? null);
+      const made = `${TASK_RESULT_PREFIX}: "${topic}". Open it on the Tasks tab.`;
+      await prisma.suggestion.update({ where: { id }, data: { resultNote: made, projectId: projectId ?? null, customerId: customer.id, payload: payload as unknown as Prisma.InputJsonObject } });
+      return made;
+    } catch (error) {
+      await prisma.suggestion.updateMany({ where: { id, status: "APPROVED", resultNote: null }, data: { status: "PENDING", reviewedAt: null } });
+      throw error;
+    }
+  }
+
+  const note = await applyPayload(payload, projectId, row.sourceLink, projectId ? null : (customer?.name ?? null));  // claim it only if it is still pending, so a double click can't apply it twice
   const claimed = await prisma.suggestion.updateMany({
     where: { id, status: "PENDING" },
     data: { status: "APPROVED", reviewedAt: new Date(), resultNote: note, projectId: projectId ?? null, customerId: customer?.id ?? null, payload: payload as unknown as Prisma.InputJsonObject },

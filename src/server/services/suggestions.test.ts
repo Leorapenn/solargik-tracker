@@ -4,7 +4,7 @@ import { seedSubStageTemplates } from "../../../prisma/seedData";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
 import { approveSuggestion, createSuggestions, listSuggestions, rejectSuggestion } from "./suggestions";
-import { listCustomerCorrespondence } from "./correspondence";
+import { listCustomerCorrespondence, listProjectCorrespondence } from "./correspondence";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -32,6 +32,7 @@ describe("suggestions", () => {
 
   afterAll(async () => {
     await prisma.suggestion.deleteMany({ where: { id: { in: ids } } });
+    if (customerId) await prisma.task.deleteMany({ where: { customerId } });
     if (customerId) await prisma.project.deleteMany({ where: { customerId } });
     await prisma.customer.delete({ where: { id: customerId } });
     await prisma.$disconnect();
@@ -204,7 +205,7 @@ describe("suggestions", () => {
       expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: general.row!.id } })).toMatchObject({ status: "APPROVED", projectId: null, customerId });
 
       // an item about a project belongs to the project page, not the customer's general list
-      const aboutProject = await send({ kind: "ACTION_ITEM", text: "Send the layout", summary: `project item ${RUN}`, id: `${RUN}-g2`, project: projectName });
+      const aboutProject = await send({ kind: "CORRESPONDENCE_NOTE", text: "Send the layout", summary: `project item ${RUN}`, id: `${RUN}-g2`, project: projectName });
       expect(aboutProject.row?.customerId).toBe(customerId); // the project's customer
       await approveSuggestion(aboutProject.row!.id);
       // pending and rejected ones stay out too
@@ -218,7 +219,7 @@ describe("suggestions", () => {
     });
 
     it("lets the reviewer pick the customer, or none, and refuses a customer that doesn't exist", async () => {
-      const a = await send({ kind: "ACTION_ITEM", text: "Revalue asks for the price list", who: "Solargik", summary: `picked ${RUN}`, id: `${RUN}-g5` });
+      const a = await send({ kind: "CORRESPONDENCE_NOTE", text: "Revalue asks for the price list", who: "Solargik", summary: `picked ${RUN}`, id: `${RUN}-g5` });
       expect(a.row?.customerId).toBeNull();
       await expect(approveSuggestion(a.row!.id, { customerId: "no-such-customer" })).rejects.toThrow(/customer no longer exists/);
       expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: a.row!.id } })).status).toBe("PENDING");
@@ -243,13 +244,46 @@ describe("suggestions", () => {
     });
   });
 
-  it("approving an action item or a correspondence note only marks it reviewed, with or without a project", async () => {
+  it("approving an action item CREATES A TASK (customer, project, owner, follow-up date, email link) and nothing else", async () => {
     const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
+    const owner = await prisma.person.create({ data: { name: `Owner Person ${RUN}` } });
+    try {
+      // with neither a project nor a customer there is nobody to make the task for: refused, and it stays pending
+      const lost = await send({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan", by: "end of next week", id: `${RUN}-ai0`, customer: "Nobody Corp" });
+      await expect(approveSuggestion(lost.row!.id)).rejects.toThrow(/Pick the customer/);
+      expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: lost.row!.id } })).status).toBe("PENDING");
 
-    const action = await send({ kind: "ACTION_ITEM", text: "Revalue to send the signed layout", who: "Dan", by: "end of next week", id: `${RUN}-ai` });
-    expect(action.row?.projectId).toBeNull(); // no project: it would be listed as Unmatched
-    expect(await approveSuggestion(action.row!.id)).toBe("Noted. It has no project or customer, so no page shows it.");
-    expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: action.row!.id } })).toMatchObject({ status: "APPROVED", projectId: null });
+      const action = await send({ kind: "ACTION_ITEM", text: "Send the signed layout to Revalue", who: `Owner Person ${RUN}`, by: "2030-01-15", summary: `task from action ${RUN}`, id: `${RUN}-ai`, project: projectName, source: { from: "dan@revalue.com", subject: "Layout", receivedAt: "2026-10-12T08:00:00Z", link: "https://outlook.office365.com/owa/?ItemID=xyz" } });
+      const note = await approveSuggestion(action.row!.id);
+      expect(note).toMatch(/^Task created: "task from action/);
+      expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: action.row!.id } })).toMatchObject({ status: "APPROVED", projectId, customerId });
+      await expect(approveSuggestion(action.row!.id)).rejects.toBeInstanceOf(UserError); // a second click makes no second task
+
+      const tasks = await prisma.task.findMany({ where: { customerId, topic: `task from action ${RUN}` } });
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({ projectId, ownerId: owner.id, status: "OPEN", sourceLink: "https://outlook.office365.com/owa/?ItemID=xyz" });
+      expect(tasks[0].nextFollowUp?.toISOString().slice(0, 10)).toBe("2030-01-15");
+      expect(tasks[0].lastContactAt?.toISOString().slice(0, 10)).toBe("2026-10-12");
+      expect(tasks[0].details).toContain("Send the signed layout to Revalue");
+
+      // a task-backed action item is not listed again on the project's Correspondence card
+      expect((await listProjectCorrespondence(projectId)).map((i) => i.summary)).not.toContain(`task from action ${RUN}`);
+
+      // only a task is created: no project data changed
+      expect(await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } })).toEqual(before);
+
+      // a date in words is kept in the details, not guessed into a follow-up date; no owner when the name matches nobody
+      const words = await send({ kind: "ACTION_ITEM", text: "Confirm the delivery", who: "someone", by: "end of next week", summary: `words ${RUN}`, id: `${RUN}-ai2`, customer: `Test Customer ${RUN}` });
+      await approveSuggestion(words.row!.id);
+      const t = await prisma.task.findFirstOrThrow({ where: { customerId, topic: `words ${RUN}` } });
+      expect(t).toMatchObject({ projectId: null, ownerId: null, nextFollowUp: null });
+      expect(t.details).toContain("Due: end of next week");
+    } finally {
+      await prisma.person.deleteMany({ where: { id: owner.id } });
+    }
+  });
+
+  it("approving a correspondence note only marks it reviewed, with or without a project", async () => {    const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
 
     const note = await send({ kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed the site access dates", id: `${RUN}-cn`, project: projectName });
     expect(await approveSuggestion(note.row!.id)).toBe("Saved on the project page under Correspondence and actions.");
