@@ -1,9 +1,11 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { agentInstructions } from "@/lib/suggestions";
 import { baseUrl } from "@/server/services/weeklyEmail";
-import { listSuggestions, pendingCount } from "@/server/services/suggestions";
+import { listSuggestions, pendingCount, type SuggestionView } from "@/server/services/suggestions";
+import { groupThreads } from "@/lib/threads";
+import { ThreadBlock } from "@/components/ThreadBlock";
 import { getLastImport } from "@/server/services/importRuns";
 import { formatRunTime } from "@/lib/importRun";
 import { SuggestionCard } from "@/components/SuggestionCard";
@@ -38,6 +40,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const matched = items.filter((s) => s.projectId);
   const connected = Boolean(process.env.INTAKE_TOKEN && process.env.INTAKE_TOKEN.length >= 16);
   const endpoint = `${baseUrl().replace(/\/$/, "")}/api/intake/suggestions`;
+
+  // proposals from the same email chain are shown together; a chain of one proposal is just its card
+  const card = (s: SuggestionView) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} />;
+  const threads = (list: SuggestionView[]) =>
+    groupThreads(list).map((th) => (th.rows.length > 1 ? <ThreadBlock key={th.key} thread={th}>{th.rows.map(card)}</ThreadBlock> : card(th.rows[0])));
 
   const chip = (active: boolean) => ({
     padding: "7px 14px",
@@ -98,13 +105,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
           Unmatched ({unmatched.length}) <span style={{ fontWeight: 400, color: TEXT_MUTED, fontSize: 13.5 }}>about a customer, but no project yet: pick one on each card</span>
         </h2>
       )}
-      {(status === "PENDING" ? unmatched : items).map((s) => (
-        <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} />
-      ))}
+      {threads(status === "PENDING" ? unmatched : items)}
       {status === "PENDING" && unmatched.length > 0 && matched.length > 0 && (
         <h2 style={{ margin: "12px 0 0", fontSize: 16, color: NAVY }}>Matched to a project ({matched.length})</h2>
       )}
-      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} />)}
+      {status === "PENDING" && threads(matched)}
 
       <details style={{ ...cardStyle, padding: "14px 20px" }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700 }}>

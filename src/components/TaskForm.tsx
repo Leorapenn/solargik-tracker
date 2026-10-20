@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { saveNewTask, saveTask } from "@/server/actions/tasks";
+import type { ActionResult } from "@/lib/errors";
 import { MAX_CONTACT_NOTE, MAX_DETAILS, MAX_TOPIC, TASK_STATUSES, type TaskInput } from "@/lib/tasks";
 import type { TaskView } from "@/server/services/tasks";
 import { DateField } from "@/components/DateField";
@@ -37,6 +38,8 @@ export function TaskForm({
   people,
   onDone,
   onSaved,
+  submit: submitOverride,
+  submitLabel,
 }: {
   task?: TaskView;
   presetCustomerId?: string;
@@ -49,6 +52,9 @@ export function TaskForm({
   onDone: () => void;
   // called instead of onDone after a successful save
   onSaved?: () => void;
+  // replaces saving a plain new task (e.g. creating the task AND approving an Inbox proposal in one step), and the label of the button
+  submit?: (data: TaskInput) => Promise<ActionResult<object>>;
+  submitLabel?: string;
 }) {
   const [data, setData] = useState<TaskInput>(task ? fromTask(task) : { ...blank(presetCustomerId), ...prefill });
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +75,7 @@ export function TaskForm({
   function submit() {
     setError(null);
     startTransition(async () => {
-      const result = task ? await saveTask(task.id, data) : await saveNewTask(data);
+      const result = task ? await saveTask(task.id, data) : submitOverride ? await submitOverride(data) : await saveNewTask(data);
       if (result.ok) (onSaved ?? onDone)();
       else setError(result.error);
     });
@@ -162,7 +168,7 @@ export function TaskForm({
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="submit" disabled={pending} style={primaryButton}>
-          {pending ? "Saving…" : task ? "Save" : "Add task"}
+          {pending ? "Saving…" : task ? "Save" : (submitLabel ?? "Add task")}
         </button>
         <button type="button" disabled={pending} style={secondaryButton} onClick={onDone}>
           Cancel

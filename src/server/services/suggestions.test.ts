@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { seedSubStageTemplates } from "../../../prisma/seedData";
 import { UserError } from "@/lib/errors";
 import { createProject } from "./createProject";
-import { approveSuggestion, createSuggestions, listSuggestions, rejectSuggestion } from "./suggestions";
+import { approveSuggestion, approveSuggestionAsTask, createSuggestions, listSuggestions, rejectSuggestion } from "./suggestions";
 import { listCustomerCorrespondence, listProjectCorrespondence } from "./correspondence";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -283,7 +283,39 @@ describe("suggestions", () => {
     }
   });
 
-  it("approving a correspondence note only marks it reviewed, with or without a project", async () => {    const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
+  it("confirming the task form of an action item creates the task from the EDITED form and approves the proposal; a failure puts it back to pending", async () => {
+    const owner = await prisma.person.create({ data: { name: `Form Owner ${RUN}` } });
+    const other = await prisma.customer.create({ data: { name: `Test Form Other ${RUN}` } });
+    try {
+      const a = await send({ kind: "ACTION_ITEM", text: "Send the plan", summary: `form task ${RUN}`, id: `${RUN}-ft1`, customer: `Test Customer ${RUN}` });
+      const note = await send({ kind: "CORRESPONDENCE_NOTE", text: "x", summary: `form note ${RUN}`, id: `${RUN}-ft0`, customer: `Test Customer ${RUN}` });
+      const status = async (id: string) => (await prisma.suggestion.findUniqueOrThrow({ where: { id } })).status;
+      const form = { customerId, projectId, topic: "Edited topic", details: "My details", status: "WAITING_CUSTOMER", ownerId: owner.id, lastContactAt: "", lastContactNote: "", nextFollowUp: "2030-02-01", sourceLink: "" };
+
+      // only an action item goes this way; an incomplete form and a project of another customer are refused and leave it pending
+      await expect(approveSuggestionAsTask(note.row!.id, form)).rejects.toThrow(/Only an action item/);
+      await expect(approveSuggestionAsTask(a.row!.id, { ...form, topic: "" })).rejects.toBeInstanceOf(UserError);
+      await expect(approveSuggestionAsTask(a.row!.id, { ...form, customerId: other.id })).rejects.toBeInstanceOf(UserError); // the project belongs to another customer
+      expect(await status(a.row!.id)).toBe("PENDING");
+      expect(await prisma.task.count({ where: { topic: "Edited topic", customerId: { in: [customerId, other.id] } } })).toBe(0);
+
+      const made = await approveSuggestionAsTask(a.row!.id, form);
+      expect(made).toMatch(/^Task created: "Edited topic"/);
+      expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: a.row!.id } })).toMatchObject({ status: "APPROVED", projectId, customerId, resultNote: made });
+      const tasks = await prisma.task.findMany({ where: { customerId, topic: "Edited topic" } });
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({ projectId, ownerId: owner.id, status: "WAITING_CUSTOMER", details: "My details" });
+      expect(tasks[0].nextFollowUp?.toISOString().slice(0, 10)).toBe("2030-02-01");
+      await expect(approveSuggestionAsTask(a.row!.id, form)).rejects.toBeInstanceOf(UserError); // a second click makes no second task
+      expect(await prisma.task.count({ where: { customerId, topic: "Edited topic" } })).toBe(1);
+    } finally {
+      await prisma.person.deleteMany({ where: { id: owner.id } });
+      await prisma.customer.deleteMany({ where: { id: other.id } });
+    }
+  });
+
+  it("approving a correspondence note only marks it reviewed, with or without a project", async () => {
+    const before = await prisma.phase.findMany({ where: { projectId }, select: { id: true, status: true, statusUpdate: true }, orderBy: { id: "asc" } });
 
     const note = await send({ kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed the site access dates", id: `${RUN}-cn`, project: projectName });
     expect(await approveSuggestion(note.row!.id)).toBe("Saved on the project page under Correspondence and actions.");

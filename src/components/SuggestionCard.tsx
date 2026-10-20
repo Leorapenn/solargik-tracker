@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { approve, reject } from "@/server/actions/suggestions";
+import { approve, approveAsTask, reject } from "@/server/actions/suggestions";
 import type { SuggestionView } from "@/server/services/suggestions";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { TaskForm, type PersonOption } from "@/components/TaskForm";
-import { taskPrefillFromSuggestion } from "@/lib/tasks";
+import { taskFromActionItem, taskPrefillFromSuggestion } from "@/lib/tasks";
 import { NEW_PROJECT_PROFILE_FIELDS } from "@/lib/newProject";
 import { CHOICES, type ChoiceField } from "@/lib/projectProfile";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
@@ -68,6 +68,9 @@ export function SuggestionCard({
     paymentTermsDays: (p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE") && p.paymentTermsDays !== null ? String(p.paymentTermsDays) : "",
   });
   const isNewProject = p.kind === "NEW_PROJECT";
+  // a proposal to create a task: "Create task" opens the task form (owner, follow-up date, details, project...) and confirming it
+  // creates the task and approves the proposal in one step
+  const isTaskProposal = p.kind === "ACTION_ITEM";
   const [np, setNp] = useState({
     number: p.kind === "NEW_PROJECT" ? p.number : "",
     name: p.kind === "NEW_PROJECT" ? p.name : "",
@@ -298,7 +301,7 @@ export function SuggestionCard({
 
       {pending ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          {!isNewProject && <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
+          {!isNewProject && !isTaskProposal && <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
             <option value="">{s.projectRef ? `Pick the project (email says “${s.projectRef}”)` : needsProject ? "Pick the project" : "No project (optional)"}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -316,7 +319,7 @@ export function SuggestionCard({
               ))}
             </select>
           )}
-          {!needsProject && !isNewProject && !projectId && (
+          {!needsProject && !isNewProject && !isTaskProposal && !projectId && (
             <select aria-label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ ...inputStyle, maxWidth: 260, borderColor: customerId ? undefined : "#F0C069" }}>
               <option value="">{s.kind === "ACTION_ITEM" ? "Pick the customer for the task" : "General item: pick the customer"}</option>
               {customers.map((c) => (
@@ -326,15 +329,21 @@ export function SuggestionCard({
               ))}
             </select>
           )}
-          {TEXT_KINDS.includes(s.kind) && (
+          {TEXT_KINDS.includes(s.kind) && !isTaskProposal && (
             <button type="button" style={secondaryButton} onClick={() => setEditing(!editing)}>
               {editing ? "Done editing" : "Edit text"}
             </button>
           )}
+          {isTaskProposal && (
+            <button type="button" style={primaryButton} disabled={busy} title="Opens the task so you can edit it and fill in the details. Confirming creates the task and approves this proposal." onClick={() => setCreatingTask((o) => !o)}>
+              {creatingTask ? "Cancel task" : "Create task"}
+            </button>
+          )}
+          {!isTaskProposal && (
           <button
             type="button"
             style={primaryButton}
-            disabled={busy || (needsProject && !projectId) || (isNewProject && (!customerId || !np.number.trim() || !np.name.trim())) || (s.kind === "ACTION_ITEM" && !projectId && !customerId)}
+            disabled={busy || (needsProject && !projectId) || (isNewProject && (!customerId || !np.number.trim() || !np.name.trim()))}
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
@@ -343,8 +352,9 @@ export function SuggestionCard({
               })
             }
           >
-            {busy ? "Working…" : s.kind === "ACTION_ITEM" ? "Approve (creates a task)" : "Approve"}
+            {busy ? "Working…" : "Approve"}
           </button>
+          )}
           <button
             type="button"
             style={secondaryButton}
@@ -372,9 +382,11 @@ export function SuggestionCard({
             {s.projectName ? ` · ${s.projectName}` : s.customerName ? ` · ${s.customerName} (general)` : ""}
             {s.resultNote ? ` · ${s.resultNote}` : ""}
           </span>
-          <button type="button" style={{ ...secondaryButton, padding: "4px 12px", fontSize: 13 }} title="Start a task from this proposal" onClick={() => setCreatingTask((o) => !o)}>
-            {creatingTask ? "Cancel task" : "Create task"}
-          </button>
+          {!(isTaskProposal && s.status === "APPROVED") && (
+            <button type="button" style={{ ...secondaryButton, padding: "4px 12px", fontSize: 13 }} title="Start a task from this proposal" onClick={() => setCreatingTask((o) => !o)}>
+              {creatingTask ? "Cancel task" : "Create task"}
+            </button>
+          )}
         </div>
       )}
 
@@ -383,7 +395,18 @@ export function SuggestionCard({
           customers={customers}
           projects={projects.map((x) => ({ id: x.id, name: x.name, customerId: x.customerId }))}
           people={people}
-          prefill={taskPrefillFromSuggestion(s, projects.find((x) => x.id === projectId)?.customerId ?? (customerId || s.customerId || ""), projectId)}
+          prefill={
+            p.kind === "ACTION_ITEM"
+              ? taskFromActionItem(
+                  { summary: s.summary, kindText: s.kindText, sourceFrom: s.sourceFrom, sourceSubject: s.sourceSubject, sourceReceivedAt: s.sourceReceivedAt, sourceLink: s.sourceLink, text: p.text, who: p.who, by: p.by },
+                  projects.find((x) => x.id === s.projectId)?.customerId ?? s.customerId ?? "",
+                  s.projectId ?? "",
+                  people,
+                )
+              : taskPrefillFromSuggestion(s, projects.find((x) => x.id === projectId)?.customerId ?? (customerId || s.customerId || ""), projectId)
+          }
+          submit={isTaskProposal && pending ? (data) => approveAsTask(s.id, data) : undefined}
+          submitLabel={isTaskProposal && pending ? "Create task" : undefined}
           onDone={() => setCreatingTask(false)}
           onSaved={() => {
             setCreatingTask(false);

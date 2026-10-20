@@ -1,5 +1,26 @@
 import { prisma } from "@/lib/prisma";
-import { MAX_PENDING_PER_PROJECT, shapeCustomer, shapeProject, type CustomerView, type ProjectView } from "@/lib/intakeDirectory";
+import { MAX_PENDING_PER_PROJECT, MAX_RECENT_PER_PROJECT, RECENT_DAYS, shapeCustomer, shapeProject, type CustomerView, type ProjectView } from "@/lib/intakeDirectory";
+
+// Everything proposed in the last RECENT_DAYS days, newest first, grouped by project and, for proposals with no project, by
+// customer. One query for all of them (the relation can't be selected twice with different filters).
+async function recentByOwner() {
+  const rows = await prisma.suggestion.findMany({
+    where: { createdAt: { gte: new Date(Date.now() - RECENT_DAYS * 86_400_000) } },
+    orderBy: { createdAt: "desc" },
+    take: 2000,
+    select: { status: true, kind: true, summary: true, sourceSubject: true, sourceReceivedAt: true, createdAt: true, projectId: true, customerId: true },
+  });
+  const byProject = new Map<string, typeof rows>();
+  const byCustomer = new Map<string, typeof rows>();
+  for (const r of rows) {
+    const [map, key] = r.projectId ? ([byProject, r.projectId] as const) : r.customerId ? ([byCustomer, r.customerId] as const) : [null, null];
+    if (!map || !key) continue;
+    const list = map.get(key) ?? [];
+    if (list.length < MAX_RECENT_PER_PROJECT) list.push(r);
+    map.set(key, list);
+  }
+  return { byProject, byCustomer };
+}
 
 // Read-only lists for the email agent's matching (see src/lib/intakeDirectory.ts for what is and isn't included).
 // Only the columns named in `select` are ever loaded.
@@ -14,7 +35,8 @@ export async function listCustomersForMatching(): Promise<CustomerView[]> {
       contacts: { select: { id: true, name: true, email: true, role: true } },
     },
   });
-  return rows.map(shapeCustomer);
+  const { byCustomer } = await recentByOwner();
+  return rows.map((c) => shapeCustomer({ ...c, recentSuggestions: byCustomer.get(c.id) }));
 }
 
 // The names of the items every project has, by phase ("DESIGN": ["Layout Approval", ...]), so a status change can
@@ -41,5 +63,6 @@ export async function listProjectsForMatching(): Promise<ProjectView[]> {
       changeOrders: { orderBy: { createdAt: "asc" }, select: { reason: true, status: true, invoiceStatus: true } }, // names and state only: never the amounts
     },
   });
-  return rows.map(shapeProject).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const { byProject } = await recentByOwner();
+  return rows.map((p) => shapeProject({ ...p, recentSuggestions: byProject.get(p.id) })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }

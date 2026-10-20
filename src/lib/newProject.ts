@@ -22,7 +22,7 @@ export const NEW_PROJECT_PROFILE_FIELDS = [
   { key: "soilTest", label: "SPT or GPT", type: "choice" },
   { key: "soma", label: "SOMA", type: "short" },
   { key: "projectType", label: "Type of project / system", type: "short" },
-  { key: "deliveryAddress", label: "Delivery address", type: "long" },
+  { key: "deliveryAddress", label: "Delivery address (site)", type: "long" },
   { key: "shippingAddress", label: "Shipping address", type: "long" },
 ] as const;
 export type NewProjectProfileKey = (typeof NEW_PROJECT_PROFILE_FIELDS)[number]["key"];

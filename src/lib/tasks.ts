@@ -249,18 +249,37 @@ export const TASK_SORTS = [
   { key: "urgent", label: "Most urgent" },
   { key: "upcoming", label: "Upcoming" },
   { key: "newest", label: "Newest first" },
+  { key: "customer", label: "Customer A–Z" },
+  { key: "project", label: "Project" },
 ] as const;
 export type TaskSort = (typeof TASK_SORTS)[number]["key"];
 export const parseTaskSort = (v: unknown): TaskSort => (TASK_SORTS.some((s) => s.key === v) ? (v as TaskSort) : "urgent");
 
+// The number at the start of a project name ("259-Rignano Flaminio 1" -> 259); a task with no project (or a name with no
+// number) sorts after every numbered project.
+function projectSortKey(name: string | null | undefined): number {
+  const n = Number(/^(\d{1,6})/.exec((name ?? "").trim())?.[1]);
+  return Number.isFinite(n) ? n : Number.MAX_SAFE_INTEGER;
+}
 // Most urgent: overdue, due today, quiet, then the rest (compareTasks). Upcoming: the soonest follow-up date first, so an
 // overdue one leads and a task with no follow-up date comes last (ties: most urgent first). Newest first: the day each
-// task was created, latest first (ties: most urgent first). Resolved tasks always come last.
-export function compareForSort<T extends TaskTimes>(sort: TaskSort, a: T, b: T, todayIso: string): number {
+// task was created, latest first. Customer A-Z: by the customer's name. Project: by project number. All of them fall back
+// to most urgent first for ties. Resolved tasks always come last.
+export function compareForSort<T extends TaskTimes & { customerName?: string; projectName?: string | null }>(sort: TaskSort, a: T, b: T, todayIso: string): number {
   if (sort === "urgent") return compareTasks(a, b, todayIso);
   const resolved = Number(a.status === "RESOLVED") - Number(b.status === "RESOLVED");
   if (resolved !== 0) return resolved;
-  if (sort === "upcoming") {
+  if (sort === "customer") {
+    const byName = (a.customerName ?? "").localeCompare(b.customerName ?? "", undefined, { sensitivity: "base" });
+    if (byName !== 0) return byName;
+  } else if (sort === "project") {
+    // by project number (a name like "259-Rignano Flaminio 1"), a customer's general tasks (no project) after its projects
+    const na = projectSortKey(a.projectName);
+    const nb = projectSortKey(b.projectName);
+    if (na !== nb) return na < nb ? -1 : 1;
+    const byName = (a.customerName ?? "").localeCompare(b.customerName ?? "", undefined, { sensitivity: "base" });
+    if (byName !== 0) return byName;
+  } else if (sort === "upcoming") {
     const fa = a.nextFollowUp ?? "9999-12-31";
     const fb = b.nextFollowUp ?? "9999-12-31";
     if (fa !== fb) return fa < fb ? -1 : 1;

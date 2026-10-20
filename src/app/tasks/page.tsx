@@ -35,7 +35,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const inCustomer = customerId ? everything.filter((t) => t.customerId === customerId) : everything;
   const count = (f: TaskFilter) => inCustomer.filter((t) => matchesFilter(times(t), f, todayIso)).length;
   // the chosen order (a stable sort of the most-urgent-first list), so the groups below come out in the same order
-  const shown = inCustomer.filter((t) => matchesFilter(times(t), filter, todayIso)).sort((a, b) => compareForSort(sort, times(a), times(b), todayIso));
+  const shown = inCustomer.filter((t) => matchesFilter(times(t), filter, todayIso)).sort((a, b) => compareForSort(sort, a, b, todayIso));
 
   // grouped by customer; the customer with the most urgent task comes first (the list is already most urgent first)
   const groups: { customerId: string; name: string; tasks: TaskView[] }[] = [];

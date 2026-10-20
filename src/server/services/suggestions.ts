@@ -11,7 +11,7 @@ import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdat
 import { patchSubStages } from "@/server/services/subStages";
 import { createProject } from "@/server/services/createProject";
 import { createTask } from "@/server/services/tasks";
-import { taskFromActionItem } from "@/lib/tasks";
+import { cleanTask, taskFromActionItem, type TaskInput } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS, newProjectName, projectClash, type NewProjectEdits } from "@/lib/newProject";
 import { saveProfile } from "@/server/services/projectProfile";
 
@@ -58,6 +58,7 @@ export async function createSuggestions(list: unknown[]): Promise<IntakeResult> 
           sourceReceivedAt: c.sourceReceivedAt,
           sourceLink: c.sourceLink,
           sourceMessageId: c.sourceMessageId,
+          conversationId: c.conversationId,
           confidence: c.confidence,
           externalId,
         },
@@ -92,6 +93,7 @@ export type SuggestionView = {
   sourceReceivedAt: string | null;
   sourceLink: string | null;
   sourceMessageId: string | null;
+  conversationId: string | null;
   confidence: Confidence | null;
   status: string;
   resultNote: string | null;
@@ -125,6 +127,7 @@ export async function listSuggestions(status: "PENDING" | "APPROVED" | "REJECTED
       sourceReceivedAt: r.sourceReceivedAt ? r.sourceReceivedAt.toISOString() : null,
       sourceLink: r.sourceLink,
       sourceMessageId: r.sourceMessageId,
+      conversationId: r.conversationId,
       confidence: (r.confidence as Confidence | null) ?? null,
       status: r.status,
       resultNote: r.resultNote,
@@ -477,6 +480,30 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
   });
   if (claimed.count === 0) throw new UserError("That suggestion was already handled.");
   return note;
+}
+
+// Confirming the task form of an action item: the task is created from what the person typed (topic, details, owner,
+// follow-up date, project...), through the same validation as any new task, and the proposal is marked approved in the
+// same step. The proposal is claimed first so a double click can't make two tasks, and goes back to pending if the task
+// can't be created (a missing customer, a project of another customer...).
+export async function approveSuggestionAsTask(id: string, input: Partial<Record<keyof TaskInput, unknown>>): Promise<string> {
+  const row = await prisma.suggestion.findUnique({ where: { id }, select: { status: true, kind: true } });
+  if (!row) throw new UserError("That suggestion no longer exists.");
+  if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
+  if (row.kind !== "ACTION_ITEM") throw new UserError("Only an action item is turned into a task this way.");
+  const cleaned = cleanTask(input);
+  if (!cleaned.ok) throw new UserError(cleaned.error);
+  const first = await prisma.suggestion.updateMany({ where: { id, status: "PENDING" }, data: { status: "APPROVED", reviewedAt: new Date() } });
+  if (first.count === 0) throw new UserError("That suggestion was already handled.");
+  try {
+    await createTask(input);
+    const made = `${TASK_RESULT_PREFIX}: "${cleaned.value.topic}". Open it on the Tasks tab.`;
+    await prisma.suggestion.update({ where: { id }, data: { resultNote: made, projectId: cleaned.value.projectId, customerId: cleaned.value.customerId } });
+    return made;
+  } catch (error) {
+    await prisma.suggestion.updateMany({ where: { id, status: "APPROVED", resultNote: null }, data: { status: "PENDING", reviewedAt: null } });
+    throw error;
+  }
 }
 
 export async function rejectSuggestion(id: string): Promise<void> {

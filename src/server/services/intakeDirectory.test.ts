@@ -94,8 +94,30 @@ describe("the agent's matching lists and proposal duplicates", () => {
     expect(mine.pendingProposals).toEqual([{ kind: "NOTE", summary: `Waiting one ${RUN}` }]); // not the rejected one, nor the one with no project
   });
 
-  it("queues a proposal sent without an id once, however often the same email is read again", async () => {
-    const proposal = { kind: "NOTE", text: "Customer asked about delivery timing", summary: `Delivery question ${RUN}`, project: projectName.split("-")[0], source: { from: "dan@x.com", subject: `Delivery ${RUN}`, link: `https://outlook.office.com/mail/${RUN}` } };
+  it("shows the agent everything proposed in the last two weeks (any status) per project and a customer's general proposals, and stores the email chain id", async () => {
+    await createSuggestions([
+      { kind: "NOTE", text: "General for the customer", summary: `General one ${RUN}`, customer: `Test Customer ${RUN}`, id: `${RUN}-r1`, source: { subject: `Re: General question ${RUN}`, conversationId: `conv-${RUN}` } },
+    ]);
+    const mine = (await listProjectsForMatching()).find((p) => p.id === projectId)!;
+    const status = Object.fromEntries(mine.recentProposals.map((r) => [r.summary, r.status]));
+    expect(status[`Waiting one ${RUN}`]).toBe("PENDING");
+    expect(status[`Rejected one ${RUN}`]).toBe("REJECTED"); // a turned-down proposal is shown too, so it is not proposed again
+    expect(status[`Unmatched ${RUN}`]).toBeUndefined(); // no project, no customer: not in anyone's list
+    expect(status[`General one ${RUN}`]).toBeUndefined(); // a customer's general proposal is in the customer's list
+
+    const customer = (await listCustomersForMatching()).find((c) => c.id === customerId)!;
+    expect(customer.recentProposals.map((r) => r.summary)).toEqual([`General one ${RUN}`]);
+    expect(customer.recentProposals[0]).toMatchObject({ status: "PENDING", kind: "NOTE", thread: `General question ${RUN}` });
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { externalId: `${RUN}-r1` } })).conversationId).toBe(`conv-${RUN}`);
+
+    // older than two weeks: left out
+    await prisma.suggestion.updateMany({ where: { externalId: `${RUN}-w2` }, data: { createdAt: new Date(Date.now() - 20 * 86_400_000) } });
+    const later = (await listProjectsForMatching()).find((p) => p.id === projectId)!;
+    expect(later.recentProposals.map((r) => r.summary)).not.toContain(`Rejected one ${RUN}`);
+    expect(later.recentProposals.map((r) => r.summary)).toContain(`Waiting one ${RUN}`);
+  });
+
+  it("queues a proposal sent without an id once, however often the same email is read again", async () => {    const proposal = { kind: "NOTE", text: "Customer asked about delivery timing", summary: `Delivery question ${RUN}`, project: projectName.split("-")[0], source: { from: "dan@x.com", subject: `Delivery ${RUN}`, link: `https://outlook.office.com/mail/${RUN}` } };
     const first = await createSuggestions([proposal]);
     expect(first).toMatchObject({ created: 1, duplicates: 0 });
     expect(await createSuggestions([proposal])).toMatchObject({ created: 0, duplicates: 1 });

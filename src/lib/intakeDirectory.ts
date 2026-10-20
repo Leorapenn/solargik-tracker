@@ -1,4 +1,5 @@
 import { groupContacts, type ContactRow } from "@/lib/contacts";
+import { stripSubject } from "@/lib/threads";
 
 // What the email agent may READ, to tell which customer and project an email is about. Each view is built field by
 // field from this explicit list, so a column added to the database later (contract values, file links, prices...)
@@ -42,12 +43,32 @@ export function folderNameFromLink(link: string | null | undefined): string | nu
   }
 }
 
+// What was already proposed from emails in the last RECENT_DAYS days (any status, rejected ones included so they are not
+// proposed again), so the agent proposes only what is NEW in an email and not what an earlier email of the chain already
+// gave. Our own one-line summaries and the email's subject only: nothing else from the proposal.
+export const RECENT_DAYS = 14;
+export const MAX_RECENT_PER_PROJECT = 30;
+export type RecentProposal = { status: string; kind: string; summary: string; thread: string | null; day: string };
+export type RecentSource = { status: string; kind: string; summary: string; sourceSubject: string | null; sourceReceivedAt: Date | null; createdAt: Date };
+
+export function shapeRecent(list: RecentSource[] | undefined): RecentProposal[] {
+  return (list ?? []).slice(0, MAX_RECENT_PER_PROJECT).map((s) => ({
+    status: s.status,
+    kind: s.kind,
+    summary: s.summary.slice(0, 200),
+    thread: stripSubject(s.sourceSubject).slice(0, 120) || null,
+    day: (s.sourceReceivedAt ?? s.createdAt).toISOString().slice(0, 10),
+  }));
+}
+
 export type CustomerView = {
   id: string;
   name: string;
   aliases: string[];
   emailDomains: string[];
   contacts: { name: string; email: string | null; role: string | null }[];
+  // proposals about this customer in general (no project) in the last two weeks
+  recentProposals: RecentProposal[];
 };
 
 export type CustomerSource = {
@@ -55,6 +76,7 @@ export type CustomerSource = {
   name: string;
   aliases: { alias: string }[];
   contacts: { id: string; name: string; email: string | null; role: string | null }[];
+  recentSuggestions?: RecentSource[]; // newest first
 };
 
 export function shapeCustomer(c: CustomerSource): CustomerView {
@@ -71,6 +93,7 @@ export function shapeCustomer(c: CustomerSource): CustomerView {
     emailDomains: [...domains].sort(),
     // the same person on several projects is listed once
     contacts: groupContacts(rows).map((p) => ({ name: p.name, email: p.email, role: p.role })),
+    recentProposals: shapeRecent(c.recentSuggestions),
   };
 }
 
@@ -87,6 +110,8 @@ export type ProjectView = {
   phases: { phase: string; status: string; update: { text: string; date: string } | null }[];
   // proposals already waiting for a person's review (newest first), so the agent doesn't propose the same again
   pendingProposals: { kind: string; summary: string }[];
+  // everything proposed for this project in the last two weeks, whatever its status (newest first): see RecentProposal
+  recentProposals: RecentProposal[];
   // the project's change orders (their names and state only, no amounts), so an invoice can update the right one
   changeOrders: { name: string; status: string; invoiceStatus: string | null }[];
 };
@@ -104,6 +129,7 @@ export type ProjectSource = {
   customer: { id: string; name: string };
   phases: { name: string; status: string; order: number; statusUpdate: string | null; statusUpdateAt: Date | null }[];
   suggestions: { kind: string; summary: string }[]; // PENDING ones, newest first
+  recentSuggestions?: RecentSource[]; // the last two weeks, any status, newest first
   changeOrders: { reason: string; status: string; invoiceStatus: string | null }[];
 };
 
@@ -134,6 +160,7 @@ export function shapeProject(p: ProjectSource): ProjectView {
         update: ph.statusUpdate?.trim() && ph.statusUpdateAt ? { text: ph.statusUpdate.trim().slice(0, MAX_UPDATE_TEXT), date: ph.statusUpdateAt.toISOString().slice(0, 10) } : null,
       })),
     pendingProposals: p.suggestions.slice(0, MAX_PENDING_PER_PROJECT).map((s) => ({ kind: s.kind, summary: s.summary })),
+    recentProposals: shapeRecent(p.recentSuggestions),
     changeOrders: p.changeOrders.map((c) => ({ name: c.reason.replace(/\s+/g, " ").trim().slice(0, 150), status: c.status, invoiceStatus: c.invoiceStatus })),
   };
 }

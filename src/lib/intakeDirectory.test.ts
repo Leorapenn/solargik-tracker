@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { emailDomain, folderNameFromLink, projectNamePart, projectNumber, shapeCustomer, shapeProject } from "./intakeDirectory";
 
 describe("emailDomain / projectNumber / projectNamePart", () => {
@@ -53,7 +53,7 @@ describe("shapeCustomer", () => {
 
   it("contains exactly the agreed fields (no phone numbers or anything else)", () => {
     const v = shapeCustomer(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "contacts", "emailDomains", "id", "name"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "contacts", "emailDomains", "id", "name", "recentProposals"]);
     for (const c of v.contacts) expect(Object.keys(c).sort()).toEqual(["email", "name", "role"]);
   });
 });
@@ -99,6 +99,21 @@ describe("shapeProject", () => {
     expect(shapeProject({ ...source, suggestions: many }).pendingProposals).toHaveLength(15);
   });
 
+  it("lists what was proposed in the last two weeks, whatever the status, with the email chain and day (our summaries only)", () => {
+    const recent = [
+      { status: "PENDING", kind: "NOTE", summary: "n1", sourceSubject: "RE: FW: 318 PRJ Full package design", sourceReceivedAt: new Date("2026-10-19T08:00:00Z"), createdAt: new Date("2026-10-19T09:00:00Z") },
+      { status: "REJECTED", kind: "ACTION_ITEM", summary: "x".repeat(300), sourceSubject: null, sourceReceivedAt: null, createdAt: new Date("2026-10-18T09:00:00Z") },
+    ];
+    const v = shapeProject({ ...source, recentSuggestions: recent });
+    expect(v.recentProposals).toEqual([
+      { status: "PENDING", kind: "NOTE", summary: "n1", thread: "318 PRJ Full package design", day: "2026-10-19" },
+      { status: "REJECTED", kind: "ACTION_ITEM", summary: "x".repeat(200), thread: null, day: "2026-10-18" }, // no email day: the day it arrived
+    ]);
+    expect(Object.keys(v.recentProposals[0]).sort()).toEqual(["day", "kind", "status", "summary", "thread"]);
+    expect(shapeProject(source).recentProposals).toEqual([]);
+    const many = Array.from({ length: 50 }, (_, i) => ({ ...recent[0], summary: `n${i}` }));
+    expect(shapeProject({ ...source, recentSuggestions: many }).recentProposals).toHaveLength(30);
+  });
   it("lists each change order by name and state only: never an amount", () => {
     const v = shapeProject(source);
     expect(v.changeOrders).toEqual([{ name: "Change Order 02: additional PDUs", status: "SENT", invoiceStatus: null }]);
@@ -112,7 +127,7 @@ describe("shapeProject", () => {
 
   it("contains exactly the agreed fields and never the SharePoint link", () => {
     const v = shapeProject(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "name", "number", "pendingProposals", "phases", "stage", "status"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "name", "number", "pendingProposals", "phases", "recentProposals", "stage", "status"]);
     for (const ph of v.phases) expect(Object.keys(ph).sort()).toEqual(["phase", "status", "update"]);
     expect(JSON.stringify(v)).not.toMatch(/https?:|sharepoint\.com/i);
   });

@@ -10,7 +10,7 @@ export default defineConfig({
   test: {
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],
-    testTimeout: 30000, // queries hit a remote Neon DB, not local
+    testTimeout: 90000, // queries hit a remote Neon DB, not local; creating a project (all phases and items) takes a while, and slower still when two test files run at once
     hookTimeout: 90000, // beforeAll/afterAll create and delete whole projects over the network
   },
 });

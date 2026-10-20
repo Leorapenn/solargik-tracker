@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
-import { CHANGE_ORDER_EDIT_KEYS, approveSuggestion, rejectSuggestion, type CardEdits } from "@/server/services/suggestions";
+import { CHANGE_ORDER_EDIT_KEYS, approveSuggestion, approveSuggestionAsTask, rejectSuggestion, type CardEdits } from "@/server/services/suggestions";
+import type { TaskInput } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS } from "@/lib/newProject";
 
 function refresh() {
@@ -30,6 +31,17 @@ export async function approve(id: string, overrides: { projectId?: string | null
     const customerId = typeof overrides.customerId === "string" ? overrides.customerId : overrides.customerId === null ? null : undefined;
     const note = await approveSuggestion(id, { projectId: overrides.projectId, customerId, text: overrides.text, ...(overrides.fields ? { fields } : {}) });
     refresh();
+    return { note };
+  });
+}
+
+// Confirming the task form of an action item: creates the task from the edited form and approves the proposal.
+export async function approveAsTask(id: string, input: TaskInput): Promise<ActionResult<{ note: string }>> {
+  await requireActionAuth();
+  return run(async () => {
+    const note = await approveSuggestionAsTask(id, input);
+    refresh();
+    revalidatePath("/tasks");
     return { note };
   });
 }

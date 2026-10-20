@@ -108,6 +108,11 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
     expect(error({ kind: "CORRESPONDENCE_NOTE" })).toMatch(/text/);
   });
 
+  it("keeps the id of the email chain (conversation) the email belongs to", () => {
+    expect(ok({ kind: "NOTE", text: "x", source: { ...base.source, conversationId: "AAQkAGIw-chain=" } })).toMatchObject({ conversationId: "AAQkAGIw-chain=" });
+    expect(ok({ kind: "NOTE", text: "x" })).toMatchObject({ conversationId: null });
+  });
+
   it("keeps the confidence (any case) and the email's own message id; refuses another confidence", () => {
     const c = ok({ kind: "NOTE", text: "x", confidence: "Medium", source: { ...base.source, messageId: "AAMkAD-123=" } });
     expect(c).toMatchObject({ confidence: "MEDIUM", sourceMessageId: "AAMkAD-123=" });

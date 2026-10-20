@@ -225,7 +225,7 @@ describe("sorting the tasks (?sort=)", () => {
   ];
   const order = (s: "urgent" | "upcoming" | "newest") => [...list].sort((a, b) => compareForSort(s, a, b, TODAY)).map((x) => x.id);
   it("has Most urgent (the default), Upcoming and Newest first, and falls back to the default for anything else", () => {
-    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest"]);
+    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest", "customer", "project"]);
     expect(parseTaskSort("upcoming")).toBe("upcoming");
     expect(parseTaskSort("nope")).toBe("urgent");
     expect(parseTaskSort(undefined)).toBe("urgent");
@@ -238,5 +238,28 @@ describe("sorting the tasks (?sort=)", () => {
   });
   it("Most urgent is the usual order", () => {
     expect(order("urgent")).toEqual([...list].sort((a, b) => compareTasks(a, b, TODAY)).map((x) => x.id));
+  });
+});
+
+describe("sorting the tasks by customer or project", () => {
+  const w = (id: string, customerName: string, projectName: string | null, over: Partial<TaskTimes> = {}) => ({ id, customerName, projectName, ...t(over) });
+  const list = [
+    { ...w("resolved", "Aaa", "100-First", { status: "RESOLVED" }) },
+    w("rev-259", "Revalue", "259-Rignano Flaminio 1"),
+    w("rev-none", "Revalue", null),
+    w("far-361", "Farmdo", "361-Gulistan"),
+    w("rev-87", "Revalue", "87-Early"),
+    w("dp-236a", "DPower", "236-Valenza", { nextFollowUp: "2026-10-30" }),
+    w("dp-236b", "DPower", "236-Valenza", { nextFollowUp: TODAY }),
+    w("dp-354", "DPower", "354-Lattaruli"),
+  ];
+  const order = (s: "customer" | "project") => [...list].sort((a, b) => compareForSort(s, a, b, TODAY)).map((x) => x.id);
+  it("Customer A–Z: by the customer's name, most urgent first inside a customer, resolved last", () => {
+    expect(order("customer")).toEqual(["dp-236b", "dp-236a", "dp-354", "far-361", "rev-259", "rev-none", "rev-87", "resolved"].map((id) => id));
+  });
+  it("Project: by project number (87 before 259, not as text), a customer's general tasks after its projects' numbers, resolved last", () => {
+    const o = order("project");
+    expect(o.slice(0, 3)).toEqual(["rev-87", "dp-236b", "dp-236a"]);
+    expect(o.slice(3)).toEqual(["rev-259", "dp-354", "far-361", "rev-none", "resolved"].map((id) => id));
   });
 });
