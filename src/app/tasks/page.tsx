@@ -7,6 +7,7 @@ import { listTasks, type TaskView } from "@/server/services/tasks";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskButton } from "@/components/NewTaskButton";
 import { CloseCustomerTasksButton } from "@/components/CloseCustomerTasksButton";
+import { CollapsibleGroup } from "@/components/CollapsibleGroup";
 import { NAVY, TEXT_MUTED, cardStyle, inputStyle, pageStyle, pageSubtitleStyle, pageTitleStyle, secondaryButton } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -100,18 +101,23 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       )}
 
       {groups.map((g) => (
-        <section key={g.customerId} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <h2 style={{ margin: 0, fontSize: 17, color: NAVY }}>
-            <Link href={`/customers/${g.customerId}`} style={{ color: NAVY }}>
-              {g.name}
-            </Link>{" "}
-            <span style={{ fontWeight: 400, fontSize: 13.5, color: TEXT_MUTED }}>({g.tasks.length})</span>{" "}
-            <CloseCustomerTasksButton customerId={g.customerId} customerName={g.name} openCount={g.tasks.filter((t) => t.status !== "RESOLVED").length} />
-          </h2>
+        <CollapsibleGroup
+          key={g.customerId}
+          label={g.name}
+          title={
+            <h2 style={{ margin: 0, fontSize: 17, color: NAVY }}>
+              <Link href={`/customers/${g.customerId}`} style={{ color: NAVY }}>
+                {g.name}
+              </Link>{" "}
+              <span style={{ fontWeight: 400, fontSize: 13.5, color: TEXT_MUTED }}>({g.tasks.length})</span>{" "}
+              <CloseCustomerTasksButton customerId={g.customerId} customerName={g.name} openCount={g.tasks.filter((t) => t.status !== "RESOLVED").length} />
+            </h2>
+          }
+        >
           {g.tasks.map((t) => (
             <TaskCard key={t.id} task={t} todayIso={todayIso} customers={customers} projects={projects} people={people} />
           ))}
-        </section>
+        </CollapsibleGroup>
       ))}
     </main>
   );

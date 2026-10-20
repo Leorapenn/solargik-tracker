@@ -39,6 +39,7 @@ export function TaskCard({
   const [editing, setEditing] = useState(false);
   const [logging, setLogging] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [open, setOpen] = useState(true); // the arrow folds the task to its title and status
   const [text, setText] = useState("");
   const [contact, setContact] = useState(true);
   const [next, setNext] = useState("");
@@ -59,9 +60,27 @@ export function TaskCard({
   return (
     <div id={task.id} style={{ ...cardStyle, padding: "14px 20px", display: "flex", flexDirection: "column", gap: 10, opacity: resolved ? 0.8 : 1 }}>
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, overflowWrap: "anywhere", flex: "1 1 280px", textDecoration: resolved ? "line-through" : "none" }}>{task.topic}</div>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-label={`${open ? "Collapse" : "Expand"} the task: ${task.topic}`}
+          title={open ? "Hide the details" : "Show the details"}
+          onClick={() => setOpen((o) => !o)}
+          style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid #E4E6EC", background: "#fff", color: NAVY, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flex: "none" }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: open ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.15s" }}>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        <div style={{ fontSize: 16, fontWeight: 700, color: NAVY, overflowWrap: "anywhere", flex: "1 1 260px", textDecoration: resolved ? "line-through" : "none" }}>{task.topic}</div>
+        {!open && attention && (
+          <span style={{ background: ATTENTION[attention.level].bg, color: ATTENTION[attention.level].text, borderRadius: 999, padding: "1px 10px", fontSize: 12.5, fontWeight: 700 }}>{attention.text}</span>
+        )}
         <ColorSelect ariaLabel={`Status of ${task.topic}`} value={task.status} options={TASK_STATUSES} disabled={pending} onChange={(v) => v && go(() => changeTaskStatus(task.id, v))} />
       </div>
+
+      {open && (
+        <>
 
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 13.5, color: TEXT_MUTED }}>
         <span>
@@ -177,6 +196,8 @@ export function TaskCard({
           </span>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
