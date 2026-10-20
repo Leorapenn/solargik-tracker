@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
-import { addTaskUpdate, createTask, deleteTask, listOpenTasksForCustomer, listReminders, listTasks, markContactedToday, setTaskStatus, updateTask } from "./tasks";
+import { addTaskUpdate, closeCustomerTasks, createTask, deleteTask, listOpenTasksForCustomer, listReminders, listTasks, markContactedToday, setTaskStatus, updateTask } from "./tasks";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const today = () => toDateInputValue(todayInAppTz());
@@ -157,6 +157,29 @@ describe("tasks", () => {
     await expect(deleteTask(id)).rejects.toBeInstanceOf(UserError);
   });
 
+  it("closes every open task of ONE customer (log line, follow-up cleared) and nothing of another customer; refuses an empty id", async () => {
+    const mineOpen = await createTask({ customerId, topic: "Close A", nextFollowUp: daysFromToday(2) });
+    const mineWaiting = await createTask({ customerId, topic: "Close B", status: "WAITING_CUSTOMER" });
+    const mineDone = await createTask({ customerId, topic: "Already resolved" });
+    await setTaskStatus(mineDone, "RESOLVED");
+    const otherOpen = await createTask({ customerId: otherCustomerId, topic: "Other customer keeps this", nextFollowUp: daysFromToday(3) });
+
+    await expect(closeCustomerTasks("")).rejects.toBeInstanceOf(UserError);
+    expect(await closeCustomerTasks("no-such-customer")).toBe(0);
+    expect((await listTasks()).find((t) => t.id === otherOpen)!.status).toBe("OPEN");
+
+    const stillOpenBefore = (await mine()).filter((t) => t.status !== "RESOLVED").length;
+    expect(stillOpenBefore).toBeGreaterThanOrEqual(2);
+    expect(await closeCustomerTasks(customerId)).toBe(stillOpenBefore);
+    const after = await mine();
+    expect(after.every((t) => t.status === "RESOLVED")).toBe(true);
+    const a = after.find((t) => t.id === mineOpen)!;
+    expect(a).toMatchObject({ status: "RESOLVED", resolvedAt: today(), nextFollowUp: null });
+    expect(a.updates[0].text).toBe("Status changed to Resolved");
+    expect(after.find((t) => t.id === mineWaiting)!.status).toBe("RESOLVED");
+    expect((await listTasks()).find((t) => t.id === otherOpen)).toMatchObject({ status: "OPEN", nextFollowUp: daysFromToday(3) });
+    expect(await closeCustomerTasks(customerId)).toBe(0); // nothing left to close
+  });
   it("keeps the task but drops the project link when the project is deleted", async () => {
     const tempProject = await prisma.project.create({ data: { name: `Test Temp ${RUN}`, mondayItemId: `monday-temp-${RUN}`, customerId } });
     const id = await createTask({ customerId, projectId: tempProject.id, topic: "Project goes away" });

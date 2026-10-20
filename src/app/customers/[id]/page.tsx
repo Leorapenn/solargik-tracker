@@ -57,7 +57,7 @@ export default async function CustomerDetailPage({
   const query = await searchParams;
   const filter = parseLifecycle(typeof query.lifecycle === "string" ? query.lifecycle : undefined);
 
-  const [customer, flagSuggestions, correspondence, openTasks] = await Promise.all([
+  const [customer, flagSuggestions, correspondence, openTasks, staff] = await Promise.all([
     prisma.customer.findUnique({
       where: { id },
       include: {
@@ -75,6 +75,7 @@ export default async function CustomerDetailPage({
     knownFlags(),
     listCustomerCorrespondence(id),
     listOpenTasksForCustomer(id).catch(() => []),
+    prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   if (!customer) notFound();
 
@@ -297,7 +298,19 @@ export default async function CustomerDetailPage({
           <ContactsCard customerId={customer.id} people={people} />
 
           {/* open tasks (matters being chased) for this customer, most urgent first */}
-          <TasksCard tasks={openTasks} todayIso={todayIso} empty={`No open tasks for ${customer.name}.`} moreHref={`/tasks?customer=${customer.id}`} showProject />
+          <TasksCard
+            tasks={openTasks}
+            todayIso={todayIso}
+            empty={`No open tasks for ${customer.name}.`}
+            moreHref={`/tasks?customer=${customer.id}`}
+            showProject
+            customerId={customer.id}
+            customerName={customer.name}
+            customers={[{ id: customer.id, name: customer.name }]}
+            projects={all.map((p) => ({ id: p.id, name: p.name, customerId: customer.id }))}
+            people={staff}
+            allowCloseAll
+          />
         </div>
       </div>
 

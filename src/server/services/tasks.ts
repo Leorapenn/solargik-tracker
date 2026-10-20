@@ -188,6 +188,16 @@ export async function setTaskStatus(id: string, status: string): Promise<void> {
   );
 }
 
+// Marks every open task of ONE customer as resolved (each gets its log line and loses its follow-up date, exactly as
+// resolving it by hand). Returns how many were closed. An empty or unknown customer closes nothing: the filter is never
+// built from an undefined value, so it can't reach every customer's tasks.
+export async function closeCustomerTasks(customerId: string): Promise<number> {
+  if (typeof customerId !== "string" || !customerId.trim()) throw new UserError("Choose a customer.");
+  const open = await prisma.task.findMany({ where: { customerId, NOT: { status: "RESOLVED" } }, select: { id: true } });
+  for (const t of open) await setTaskStatus(t.id, "RESOLVED");
+  return open.length;
+}
+
 // Adds a dated entry to the log. When it is a correspondence with the customer (the default) it also becomes the
 // "last correspondence" (only if it is newer than the one recorded), and a new follow-up date can be set with it.
 export async function addTaskUpdate(id: string, input: { date?: unknown; text?: unknown; contact?: boolean; nextFollowUp?: unknown }): Promise<void> {

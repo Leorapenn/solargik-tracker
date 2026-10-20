@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { changeTaskStatus } from "@/server/actions/tasks";
 import type { TaskReminder } from "@/server/services/tasks";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED } from "@/lib/theme";
 
@@ -16,6 +17,8 @@ export function NotificationsBell({ items }: { items: TaskReminder[] }) {
   const [openPath, setOpenPath] = useState<string | null>(null);
   const open = openPath === pathname;
   const ref = useRef<HTMLDivElement>(null);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -58,15 +61,38 @@ export function NotificationsBell({ items }: { items: TaskReminder[] }) {
           <div style={{ padding: "12px 16px", fontWeight: 700, color: NAVY, borderBottom: `1px solid ${ROW_DIVIDER}` }}>{count === 0 ? "Nothing needs attention" : `${count} task${count === 1 ? " needs" : "s need"} attention`}</div>
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {items.map((r) => (
-              <Link key={r.id} href={`/tasks#${r.id}`} style={{ display: "block", padding: "10px 16px", borderBottom: `1px solid ${ROW_DIVIDER}`, color: "#1A1A1A" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, overflowWrap: "anywhere" }}>{r.topic}</div>
-                <div style={{ fontSize: 12.5, color: TEXT_MUTED }}>
-                  {r.customerName}
-                  {r.projectName ? ` · ${r.projectName}` : ""}
-                </div>
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS[r.attention.level] }}>{r.attention.text}</div>
-              </Link>
+              <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 16px", borderBottom: `1px solid ${ROW_DIVIDER}` }}>
+                <Link href={`/tasks#${r.id}`} style={{ display: "block", flex: 1, minWidth: 0, color: "#1A1A1A" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, overflowWrap: "anywhere" }}>{r.topic}</div>
+                  <div style={{ fontSize: 12.5, color: TEXT_MUTED }}>
+                    {r.customerName}
+                    {r.projectName ? ` · ${r.projectName}` : ""}
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS[r.attention.level] }}>{r.attention.text}</div>
+                </Link>
+                <button
+                  type="button"
+                  disabled={pending}
+                  title="Mark this task as resolved"
+                  aria-label={`Mark done: ${r.topic}`}
+                  onClick={() => {
+                    setError(null);
+                    startTransition(async () => {
+                      const result = await changeTaskStatus(r.id, "RESOLVED");
+                      if (!result.ok) setError(result.error);
+                    });
+                  }}
+                  style={{ border: "1px solid #E4E6EC", background: "#fff", color: NAVY, borderRadius: 8, padding: "4px 10px", fontSize: 12.5, fontWeight: 700, cursor: pending ? "default" : "pointer", whiteSpace: "nowrap" }}
+                >
+                  Mark done
+                </button>
+              </div>
             ))}
+            {error && (
+              <div role="alert" style={{ padding: "8px 16px", fontSize: 12.5, color: "#8C1D18" }}>
+                {error}
+              </div>
+            )}
           </div>
           <Link href="/tasks" style={{ display: "block", padding: "10px 16px", fontSize: 13.5, fontWeight: 700, color: NAVY, background: "#F6F7FB" }}>
             Open Tasks

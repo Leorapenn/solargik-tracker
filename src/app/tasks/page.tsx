@@ -6,6 +6,7 @@ import { TASK_FILTERS, matchesFilter, parseTaskFilter, type TaskFilter } from "@
 import { listTasks, type TaskView } from "@/server/services/tasks";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskButton } from "@/components/NewTaskButton";
+import { CloseCustomerTasksButton } from "@/components/CloseCustomerTasksButton";
 import { NAVY, TEXT_MUTED, cardStyle, inputStyle, pageStyle, pageSubtitleStyle, pageTitleStyle, secondaryButton } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -104,7 +105,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             <Link href={`/customers/${g.customerId}`} style={{ color: NAVY }}>
               {g.name}
             </Link>{" "}
-            <span style={{ fontWeight: 400, fontSize: 13.5, color: TEXT_MUTED }}>({g.tasks.length})</span>
+            <span style={{ fontWeight: 400, fontSize: 13.5, color: TEXT_MUTED }}>({g.tasks.length})</span>{" "}
+            <CloseCustomerTasksButton customerId={g.customerId} customerName={g.name} openCount={g.tasks.filter((t) => t.status !== "RESOLVED").length} />
           </h2>
           {g.tasks.map((t) => (
             <TaskCard key={t.id} task={t} todayIso={todayIso} customers={customers} projects={projects} people={people} />

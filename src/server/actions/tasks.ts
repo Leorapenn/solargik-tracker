@@ -4,11 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
 import type { TaskInput } from "@/lib/tasks";
-import { addTaskUpdate, createTask, deleteTask, markContactedToday, setTaskStatus, updateTask } from "@/server/services/tasks";
+import { addTaskUpdate, closeCustomerTasks, createTask, deleteTask, markContactedToday, setTaskStatus, updateTask } from "@/server/services/tasks";
 
 function refresh() {
   revalidatePath("/tasks");
   revalidatePath("/customers", "layout");
+  revalidatePath("/projects", "layout");
   // the bell in the top bar lives in the root layout
   revalidatePath("/", "layout");
 }
@@ -37,6 +38,16 @@ export async function changeTaskStatus(id: string, status: string): Promise<Acti
     await setTaskStatus(id, status);
     refresh();
     return {};
+  });
+}
+
+// Closes (resolves) every open task of one customer.
+export async function closeAllCustomerTasks(customerId: string): Promise<ActionResult<{ closed: number }>> {
+  await requireActionAuth();
+  return run(async () => {
+    const closed = await closeCustomerTasks(customerId);
+    refresh();
+    return { closed };
   });
 }
 

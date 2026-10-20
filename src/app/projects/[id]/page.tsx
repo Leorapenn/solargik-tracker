@@ -83,6 +83,9 @@ export default async function ProjectDetailPage({
 
   if (!project) notFound();
 
+  // the customer's projects, for the project box of the task form on the Tasks card
+  const customerProjects = await prisma.project.findMany({ where: { customerId: project.customerId }, orderBy: { name: "asc" }, select: { id: true, name: true, customerId: true } });
+
   // the customer's people, for picking the customer-side project manager
   const customerPeople = groupContacts(
     (await prisma.contact.findMany({ where: { customerId: project.customerId } })).map((c) => ({
@@ -318,7 +321,20 @@ export default async function ProjectDetailPage({
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
           Tasks{openTasks.length > 0 ? ` (${openTasks.length} open)` : ""}
         </summary>
-        <TasksCard tasks={openTasks} todayIso={todayIso} empty={`No open tasks for this project.`} moreHref={`/tasks?customer=${project.customerId}`} showProject={false} heading={false} />
+        <TasksCard
+          tasks={openTasks}
+          todayIso={todayIso}
+          empty={`No open tasks for this project.`}
+          moreHref={`/tasks?customer=${project.customerId}`}
+          showProject={false}
+          heading={false}
+          customerId={project.customerId}
+          customerName={project.customer.name}
+          projectId={project.id}
+          customers={[{ id: project.customerId, name: project.customer.name }]}
+          projects={customerProjects}
+          people={people}
+        />
       </details>
       </div>
       <details open style={{ marginTop: 4 }}>
