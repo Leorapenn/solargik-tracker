@@ -294,21 +294,20 @@ export default async function CustomerDetailPage({
           </div>
         </div>
 
-        <ContactsCard customerId={customer.id} people={people} />
-      </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+          <ContactsCard customerId={customer.id} people={people} />
 
-      {/* open tasks (matters being chased) for this customer, most urgent first */}
-      <details open style={{ marginTop: 4 }}>
-        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
-          Tasks{openTasks.length > 0 ? ` (${openTasks.length} open)` : ""}
-        </summary>
-        <div style={{ ...cardStyle, padding: "4px 20px" }}>
-          {openTasks.length === 0 && <div style={{ padding: "14px 0", color: TEXT_MUTED, fontSize: 14 }}>No open tasks for {customer.name}.</div>}
-          {openTasks.map((t, i) => {
-            const attention = taskAttention({ status: t.status, nextFollowUp: t.nextFollowUp, lastContactAt: t.lastContactAt, createdOn: t.createdOn }, todayIso);
-            return (
-              <div key={t.id} style={{ padding: "12px 0", borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+          {/* open tasks (matters being chased) for this customer, most urgent first */}
+          <div style={{ ...cardStyle, padding: 20 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: NAVY }}>
+              Tasks{openTasks.length > 0 ? ` (${openTasks.length} open)` : ""}
+            </div>
+            <div style={{ width: 28, height: 3, borderRadius: 2, background: ORANGE, margin: "8px 0 6px" }} />
+            {openTasks.length === 0 && <div style={{ padding: "8px 0", color: TEXT_MUTED, fontSize: 14 }}>No open tasks for {customer.name}.</div>}
+            {openTasks.map((t, i) => {
+              const attention = taskAttention({ status: t.status, nextFollowUp: t.nextFollowUp, lastContactAt: t.lastContactAt, createdOn: t.createdOn }, todayIso);
+              return (
+                <div key={t.id} style={{ padding: "10px 0", borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
                   <Link href={`/tasks#${t.id}`} style={{ color: NAVY, fontWeight: 700, overflowWrap: "anywhere" }}>
                     {t.topic}
                   </Link>
@@ -317,18 +316,18 @@ export default async function CustomerDetailPage({
                     {t.lastContactAt ? ` · last correspondence ${agoText(t.lastContactAt, todayIso)}` : ""}
                     {attention ? ` · ${attention.text}` : ""}
                   </div>
+                  <ChoicePill choice={taskStatusChoice(t.status)} />
                 </div>
-                <ChoicePill choice={taskStatusChoice(t.status)} />
-              </div>
-            );
-          })}
-          <div style={{ padding: "10px 0", borderTop: `1px solid ${ROW_DIVIDER}`, fontSize: 13.5 }}>
-            <Link href={`/tasks?customer=${customer.id}`} style={{ color: NAVY, fontWeight: 700 }}>
-              Open in Tasks (add or update)
-            </Link>
+              );
+            })}
+            <div style={{ paddingTop: 10, borderTop: `1px solid ${ROW_DIVIDER}`, fontSize: 13.5 }}>
+              <Link href={`/tasks?customer=${customer.id}`} style={{ color: NAVY, fontWeight: 700 }}>
+                Open in Tasks (add or update)
+              </Link>
+            </div>
           </div>
         </div>
-      </details>
+      </div>
 
       {/* general questions, requests and commitments with this customer that aren't about one project (approved from the Inbox) */}
       <details open style={{ marginTop: 4 }}>
