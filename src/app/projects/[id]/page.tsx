@@ -36,6 +36,8 @@ import { PhaseUpdate } from "@/components/PhaseUpdate";
 import { ProjectSummary } from "@/components/ProjectSummary";
 import { CorrespondenceCard } from "@/components/CorrespondenceCard";
 import { listProjectCorrespondence } from "@/server/services/correspondence";
+import { listOpenTasksForProject } from "@/server/services/tasks";
+import { TasksCard } from "@/components/TasksCard";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +58,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence] = await Promise.all([
+  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence, openTasks] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -76,6 +78,7 @@ export default async function ProjectDetailPage({
     getPaymentData(id),
     getContractSigningDate(id),
     listProjectCorrespondence(id),
+    listOpenTasksForProject(id).catch(() => []),
   ]);
 
   if (!project) notFound();
@@ -310,6 +313,12 @@ export default async function ProjectDetailPage({
           Correspondence and actions{correspondence.length > 0 ? ` (${correspondence.length})` : ""}
         </summary>
         <CorrespondenceCard items={correspondence} />
+      </details>
+      <details open style={{ flex: "1 1 280px", minWidth: 0 }}>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
+          Tasks{openTasks.length > 0 ? ` (${openTasks.length} open)` : ""}
+        </summary>
+        <TasksCard tasks={openTasks} todayIso={todayIso} empty={`No open tasks for this project.`} moreHref={`/tasks?customer=${project.customerId}`} showProject={false} heading={false} />
       </details>
       </div>
       <details open style={{ marginTop: 4 }}>

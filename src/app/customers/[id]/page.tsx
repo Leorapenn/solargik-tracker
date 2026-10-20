@@ -17,8 +17,7 @@ import { ContactsCard } from "@/components/ContactsCard";
 import { CorrespondenceCard } from "@/components/CorrespondenceCard";
 import { listCustomerCorrespondence } from "@/server/services/correspondence";
 import { listOpenTasksForCustomer } from "@/server/services/tasks";
-import { agoText, taskAttention, taskStatusChoice } from "@/lib/tasks";
-import { ChoicePill } from "@/components/ColorSelect";
+import { TasksCard } from "@/components/TasksCard";
 import { CustomerEditor } from "@/components/CustomerEditor";
 import { CustomerTypeSelect } from "@/components/CustomerTypeSelect";
 import { FlagsEditor } from "@/components/FlagsEditor";
@@ -298,34 +297,7 @@ export default async function CustomerDetailPage({
           <ContactsCard customerId={customer.id} people={people} />
 
           {/* open tasks (matters being chased) for this customer, most urgent first */}
-          <div style={{ ...cardStyle, padding: 20 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: NAVY }}>
-              Tasks{openTasks.length > 0 ? ` (${openTasks.length} open)` : ""}
-            </div>
-            <div style={{ width: 28, height: 3, borderRadius: 2, background: ORANGE, margin: "8px 0 6px" }} />
-            {openTasks.length === 0 && <div style={{ padding: "8px 0", color: TEXT_MUTED, fontSize: 14 }}>No open tasks for {customer.name}.</div>}
-            {openTasks.map((t, i) => {
-              const attention = taskAttention({ status: t.status, nextFollowUp: t.nextFollowUp, lastContactAt: t.lastContactAt, createdOn: t.createdOn }, todayIso);
-              return (
-                <div key={t.id} style={{ padding: "10px 0", borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-                  <Link href={`/tasks#${t.id}`} style={{ color: NAVY, fontWeight: 700, overflowWrap: "anywhere" }}>
-                    {t.topic}
-                  </Link>
-                  <div style={{ fontSize: 13, color: TEXT_MUTED }}>
-                    {t.projectName ?? "The customer in general"}
-                    {t.lastContactAt ? ` · last correspondence ${agoText(t.lastContactAt, todayIso)}` : ""}
-                    {attention ? ` · ${attention.text}` : ""}
-                  </div>
-                  <ChoicePill choice={taskStatusChoice(t.status)} />
-                </div>
-              );
-            })}
-            <div style={{ paddingTop: 10, borderTop: `1px solid ${ROW_DIVIDER}`, fontSize: 13.5 }}>
-              <Link href={`/tasks?customer=${customer.id}`} style={{ color: NAVY, fontWeight: 700 }}>
-                Open in Tasks (add or update)
-              </Link>
-            </div>
-          </div>
+          <TasksCard tasks={openTasks} todayIso={todayIso} empty={`No open tasks for ${customer.name}.`} moreHref={`/tasks?customer=${customer.id}`} showProject />
         </div>
       </div>
 

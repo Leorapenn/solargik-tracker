@@ -72,6 +72,14 @@ export async function listOpenTasksForCustomer(customerId: string): Promise<Task
   return rows.map(toView).sort((a, b) => compareTasks(a, b, today));
 }
 
+// The open tasks tied to one project (for the project page), most urgent first. Tasks about the customer in general are not included.
+export async function listOpenTasksForProject(projectId: string): Promise<TaskView[]> {
+  if (!projectId) return [];
+  const rows = await prisma.task.findMany({ where: { projectId, NOT: { status: "RESOLVED" } }, include });
+  const today = todayIso();
+  return rows.map(toView).sort((a, b) => compareTasks(a, b, today));
+}
+
 // Everything that needs attention now (for the bell): overdue, due today, or quiet. Most urgent first.
 export type TaskReminder = { id: string; customerId: string; customerName: string; projectName: string | null; topic: string; status: string; attention: Attention };
 export async function listReminders(): Promise<TaskReminder[]> {
