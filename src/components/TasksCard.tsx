@@ -8,6 +8,7 @@ import { changeTaskStatus } from "@/server/actions/tasks";
 import { ChoicePill } from "@/components/ColorSelect";
 import { CloseCustomerTasksButton } from "@/components/CloseCustomerTasksButton";
 import { TaskForm, type CustomerOption, type PersonOption, type ProjectOption } from "@/components/TaskForm";
+import { revealTask } from "@/components/useFolded";
 import { NAVY, ORANGE, ROW_DIVIDER, TEXT_MUTED, cardStyle, secondaryButton } from "@/lib/theme";
 
 const small = { ...secondaryButton, padding: "3px 12px", fontSize: 13 } as const;
@@ -84,7 +85,7 @@ export function TasksCard({
         const attention = taskAttention({ status: t.status, nextFollowUp: t.nextFollowUp, lastContactAt: t.lastContactAt, createdOn: t.createdOn }, todayIso);
         return (
           <div key={t.id} style={{ padding: "10px 0", borderTop: i === 0 ? "none" : `1px solid ${ROW_DIVIDER}`, display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-            <Link href={`/tasks#${t.id}`} style={{ color: NAVY, fontWeight: 700, overflowWrap: "anywhere" }}>
+            <Link href={`/tasks#${t.id}`} onClick={() => revealTask(t.customerId, t.id)} style={{ color: NAVY, fontWeight: 700, overflowWrap: "anywhere" }}>
               {t.topic}
             </Link>
             <div style={{ fontSize: 13, color: TEXT_MUTED }}>

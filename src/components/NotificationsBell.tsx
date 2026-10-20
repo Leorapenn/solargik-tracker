@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { changeTaskStatus } from "@/server/actions/tasks";
+import { revealTask } from "@/components/useFolded";
 import type { TaskReminder } from "@/server/services/tasks";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED } from "@/lib/theme";
 
@@ -62,7 +63,7 @@ export function NotificationsBell({ items }: { items: TaskReminder[] }) {
           <div style={{ maxHeight: 360, overflowY: "auto" }}>
             {items.map((r) => (
               <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 16px", borderBottom: `1px solid ${ROW_DIVIDER}` }}>
-                <Link href={`/tasks#${r.id}`} style={{ display: "block", flex: 1, minWidth: 0, color: "#1A1A1A" }}>
+                <Link href={`/tasks#${r.id}`} onClick={() => revealTask(r.customerId, r.id)} style={{ display: "block", flex: 1, minWidth: 0, color: "#1A1A1A" }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, overflowWrap: "anywhere" }}>{r.topic}</div>
                   <div style={{ fontSize: 12.5, color: TEXT_MUTED }}>
                     {r.customerName}

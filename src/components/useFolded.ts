@@ -28,18 +28,28 @@ function subscribe(onChange: () => void) {
   };
 }
 
+function write(id: string, folded: boolean) {
+  const value = withFolded(snapshot(), id, folded);
+  memory = value;
+  try {
+    window.localStorage.setItem(FOLD_STORAGE_KEY, value);
+  } catch {
+    storageFailed = true;
+  }
+  listeners.forEach((l) => l());
+}
+
 export function useFolded(id: string): [boolean, (folded: boolean) => void] {
   const raw = useSyncExternalStore(subscribe, snapshot, () => "[]");
   const folded = parseFolded(raw).includes(id);
-  const setFolded = (next: boolean) => {
-    const value = withFolded(snapshot(), id, next);
-    memory = value;
-    try {
-      window.localStorage.setItem(FOLD_STORAGE_KEY, value);
-    } catch {
-      storageFailed = true;
-    }
-    listeners.forEach((l) => l());
-  };
-  return [folded, setFolded];
+  return [folded, (next) => write(id, next)];
+}
+
+// Opens a task and its customer's group on the Tasks tab and scrolls to the task: used by links that jump to one task (the
+// bell, the Tasks cards), so the task is never hidden inside something folded. Safe to call from any page.
+export function revealTask(customerId: string, taskId: string) {
+  write(`group:${customerId}`, false);
+  write(`task:${taskId}`, false);
+  // on the Tasks page itself the card appears a moment after it is unfolded; elsewhere the browser scrolls by the link's #
+  window.setTimeout(() => document.getElementById(taskId)?.scrollIntoView({ block: "start" }), 200);
 }
