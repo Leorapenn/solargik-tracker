@@ -7,6 +7,8 @@ import { formatDate, parseDateInput } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { TaskForm, type PersonOption } from "@/components/TaskForm";
 import { taskPrefillFromSuggestion } from "@/lib/tasks";
+import { NEW_PROJECT_PROFILE_FIELDS } from "@/lib/newProject";
+import { CHOICES, type ChoiceField } from "@/lib/projectProfile";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 // The fields of a change-order proposal a reviewer can correct before approving (text, as typed).
@@ -16,6 +18,8 @@ const fieldLabel = { fontSize: 12.5, fontWeight: 700, color: NAVY, display: "fle
 const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
 // these only record that someone looked at them, so approving needs no project (but one can still be picked)
 const REVIEW_ONLY = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+// a new project is not about an existing one: it needs a customer, not a project
+const CURRENCY_CODES = ["USD", "EUR", "ILS", "GBP", "CHF", "CAD"];
 const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string }> = {
   HIGH: { bg: "#D8F5E3", text: "#047857", label: "High confidence" },
   MEDIUM: { bg: "#FFF1D0", text: "#8A5A00", label: "Medium confidence" },
@@ -62,6 +66,19 @@ export function SuggestionCard({
     invoiceStatus: p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE" ? (p.invoiceStatus ?? "") : "",
     paymentTermsDays: (p.kind === "CHANGE_ORDER" || p.kind === "CHANGE_ORDER_UPDATE") && p.paymentTermsDays !== null ? String(p.paymentTermsDays) : "",
   });
+  const isNewProject = p.kind === "NEW_PROJECT";
+  const [np, setNp] = useState({
+    number: p.kind === "NEW_PROJECT" ? p.number : "",
+    name: p.kind === "NEW_PROJECT" ? p.name : "",
+    country: p.kind === "NEW_PROJECT" ? (p.country ?? "") : "",
+    capacityKwp: p.kind === "NEW_PROJECT" ? (p.capacityKwp ?? "") : "",
+    contractAmount: p.kind === "NEW_PROJECT" ? (p.contractAmount ?? "") : "",
+    currency: p.kind === "NEW_PROJECT" ? (p.currency ?? "") : "",
+    signedDate: p.kind === "NEW_PROJECT" ? (p.signedDate ?? "") : "",
+  });
+  // the contract details the proposal carries into the profile (each can be corrected or cleared before approving)
+  const [prof, setProf] = useState<Record<string, string>>(p.kind === "NEW_PROJECT" ? { ...p.profile } : {});
+  const sources: Record<string, string> = p.kind === "NEW_PROJECT" ? p.sources : {};
   const projectCurrency = projects.find((x) => x.id === projectId)?.currency ?? null;
   const emailCurrency = p.kind === "CHANGE_ORDER" ? p.currency : null;
   const currencyClash = Boolean(emailCurrency && projectCurrency && emailCurrency !== projectCurrency);
@@ -70,7 +87,7 @@ export function SuggestionCard({
   const [text, setText] = useState(textPayload);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, startTransition] = useTransition();
-  const needsProject = !REVIEW_ONLY.includes(s.kind);
+  const needsProject = !REVIEW_ONLY.includes(s.kind) && !isNewProject;
   const confidence = s.confidence ? CONFIDENCE_STYLE[s.confidence] : null;
 
   const received = s.sourceReceivedAt ? formatDate(parseDateInput(s.sourceReceivedAt.slice(0, 10))) : null;
@@ -190,8 +207,85 @@ export function SuggestionCard({
         </div>
       )}
 
-      {extraLinks.length > 0 && (
-        <div style={{ fontSize: 13, display: "flex", gap: 14, flexWrap: "wrap" }}>
+      {pending && isNewProject && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px", border: `1px solid ${ROW_DIVIDER}`, borderRadius: 10, background: "#FAFBFC" }}>
+          <div style={{ fontSize: 12.5, color: TEXT_MUTED }}>
+            Check these before approving: approving creates the project <strong>{np.number || "?"}-{np.name || "?"}</strong> in 360 with the standard phases and items, for the customer picked below. Empty means not stated.
+          </div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label style={fieldLabel}>
+              Project number
+              <input value={np.number} inputMode="numeric" maxLength={4} onChange={(e) => setNp({ ...np, number: e.target.value })} style={{ ...inputStyle, width: 100 }} />
+            </label>
+            <label style={{ ...fieldLabel, flex: "1 1 220px" }}>
+              Name (without the number)
+              <input value={np.name} maxLength={120} onChange={(e) => setNp({ ...np, name: e.target.value })} style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }} />
+            </label>
+            <label style={fieldLabel}>
+              Country
+              <input value={np.country} maxLength={80} onChange={(e) => setNp({ ...np, country: e.target.value })} style={{ ...inputStyle, width: 140 }} />
+            </label>
+            <label style={fieldLabel}>
+              Capacity (kWp)
+              <input value={np.capacityKwp} inputMode="decimal" onChange={(e) => setNp({ ...np, capacityKwp: e.target.value })} placeholder="e.g. 996.84" style={{ ...inputStyle, width: 120 }} />
+            </label>
+            <label style={fieldLabel}>
+              Contract amount
+              <input value={np.contractAmount} inputMode="decimal" onChange={(e) => setNp({ ...np, contractAmount: e.target.value })} placeholder="e.g. 275000" style={{ ...inputStyle, width: 130 }} />
+            </label>
+            <label style={fieldLabel}>
+              Currency
+              <select value={np.currency} onChange={(e) => setNp({ ...np, currency: e.target.value })} style={{ ...inputStyle, width: 100 }}>
+                <option value="">EUR (default)</option>
+                {CURRENCY_CODES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <details open={Object.keys(prof).length > 0 || Boolean(np.signedDate)} style={{ marginTop: 2 }}>
+            <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 700, color: NAVY }}>
+              Contract details for the project profile ({Object.values(prof).filter((v) => v.trim()).length + (np.signedDate ? 1 : 0)})
+            </summary>
+            <div style={{ fontSize: 12.5, color: TEXT_MUTED, margin: "6px 0 8px" }}>
+              Read from the signed document; the sentence it came from is shown under each one. Empty means not stated. Approving fills these in the profile; you can change any of them later.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={fieldLabel}>
+                Contract signing date
+                <DateField ariaLabel="Contract signing date" value={np.signedDate || null} onCommit={(c) => setNp({ ...np, signedDate: c.date ?? "" })} />
+                {sources.signedDate && <span style={{ fontWeight: 400, color: TEXT_MUTED }}>“{sources.signedDate}”</span>}
+              </div>
+              {NEW_PROJECT_PROFILE_FIELDS.map((f) => (
+                <div key={f.key} style={fieldLabel}>
+                  <span id={`np-${s.id}-${f.key}`}>{f.label}</span>
+                  {f.type === "date" ? (
+                    <DateField ariaLabel={f.label} value={prof[f.key] || null} onCommit={(c) => setProf({ ...prof, [f.key]: c.date ?? "" })} />
+                  ) : f.type === "choice" ? (
+                    <select aria-labelledby={`np-${s.id}-${f.key}`} value={prof[f.key] ?? ""} onChange={(e) => setProf({ ...prof, [f.key]: e.target.value })} style={{ ...inputStyle, width: 200 }}>
+                      <option value="">Not stated</option>
+                      {CHOICES[f.key as ChoiceField].map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : f.type === "short" ? (
+                    <input aria-labelledby={`np-${s.id}-${f.key}`} value={prof[f.key] ?? ""} maxLength={200} onChange={(e) => setProf({ ...prof, [f.key]: e.target.value })} style={{ ...inputStyle, width: "100%", boxSizing: "border-box" }} />
+                  ) : (
+                    <textarea aria-labelledby={`np-${s.id}-${f.key}`} rows={2} value={prof[f.key] ?? ""} maxLength={4000} onChange={(e) => setProf({ ...prof, [f.key]: e.target.value })} style={{ ...inputStyle, width: "100%", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }} />
+                  )}
+                  {sources[f.key] && <span style={{ fontWeight: 400, color: TEXT_MUTED }}>“{sources[f.key]}”</span>}
+                </div>
+              ))}
+            </div>
+          </details>
+        </div>
+      )}
+
+      {extraLinks.length > 0 && (        <div style={{ fontSize: 13, display: "flex", gap: 14, flexWrap: "wrap" }}>
           {extraLinks.map((l) => (
             <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
               {l.label}
@@ -203,15 +297,25 @@ export function SuggestionCard({
 
       {pending ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
+          {!isNewProject && <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
             <option value="">{s.projectRef ? `Pick the project (email says “${s.projectRef}”)` : needsProject ? "Pick the project" : "No project (optional)"}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
-          {!needsProject && !projectId && (
+          </select>}
+          {isNewProject && (
+            <select aria-label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ ...inputStyle, maxWidth: 260, borderColor: customerId ? undefined : "#F0C069" }}>
+              <option value="">Pick the customer</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
+          {!needsProject && !isNewProject && !projectId && (
             <select aria-label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ ...inputStyle, maxWidth: 260, borderColor: customerId ? undefined : "#F0C069" }}>
               <option value="">General item: pick the customer</option>
               {customers.map((c) => (
@@ -229,11 +333,11 @@ export function SuggestionCard({
           <button
             type="button"
             style={primaryButton}
-            disabled={busy || (needsProject && !projectId)}
+            disabled={busy || (needsProject && !projectId) || (isNewProject && (!customerId || !np.number.trim() || !np.name.trim()))}
             onClick={() =>
               startTransition(async () => {
                 setMessage(null);
-                const result = await approve(s.id, { projectId: projectId || null, ...(!projectId ? { customerId: customerId || null } : {}), ...(editing || text !== textPayload ? { text } : {}), ...(isChangeOrder ? { fields: co } : {}) });
+                const result = await approve(s.id, { projectId: isNewProject ? null : projectId || null, ...(!projectId || isNewProject ? { customerId: customerId || null } : {}), ...(editing || text !== textPayload ? { text } : {}), ...(isChangeOrder ? { fields: co } : {}), ...(isNewProject ? { fields: { ...np, ...prof } } : {}) });
                 setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
               })
             }

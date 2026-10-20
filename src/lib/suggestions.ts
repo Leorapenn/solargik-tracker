@@ -4,12 +4,14 @@ import { PHASE_ORDER, phaseShortName } from "@/lib/phases";
 import { checkPhone } from "@/lib/contacts";
 import { cleanStatusText } from "@/lib/statusUpdate";
 import { CURRENCIES, formatTerms, isCurrency } from "@/lib/payments";
+import { PROJECT_NUMBER_RE, cleanNewProjectProfile, type NewProjectProfile, type NewProjectProfileKey } from "@/lib/newProject";
+import { projectNamePart } from "@/lib/intakeDirectory";
 
 // What an outside reader (a Dots agent reading Outlook) may PROPOSE. Nothing here changes any data: a person
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
@@ -20,6 +22,7 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   CHANGE_ORDER: "New change order (created when approved)",
   CHANGE_ORDER_UPDATE: "Change order update",
   CONTRACT_DOCUMENT: "Signed contract (sets the project's contract link when approved)",
+  NEW_PROJECT: "New project (created in 360 when approved)",
   ACTION_ITEM: "Action item (nothing to apply)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
@@ -55,6 +58,11 @@ export type Payload =
   // The signed contract of a project, saved as a file in its SharePoint folder. Approving sets the project profile's
   // contract link (links only, never files), but only when none is set yet, and the signing date when it is empty.
   | { kind: "CONTRACT_DOCUMENT"; description: string; fileLink: string; signedDate: string | null }
+  // A signed order for a project that is not in 360 yet. Approving CREATES the project in 360 (name "<number>-<name>", the standard
+  // phases and items), for the customer the reviewer confirms. "number" is the project's number as named in its SharePoint folder.
+  // `profile` = the contract details that go into the project's profile (timeline, delivery terms, ...), `signedDate`
+  // the contract signing date, `sources` = for each, the sentence of the document it was read from (shown on the card).
+  | { kind: "NEW_PROJECT"; number: string; name: string; country: string | null; capacityKwp: string | null; contractAmount: string | null; currency: string | null; signedDate: string | null; profile: NewProjectProfile; sources: Partial<Record<NewProjectProfileKey | "signedDate", string>> }
   | { kind: "ACTION_ITEM"; text: string; who: string | null; by: string | null }
   // `fileLink`: a document that belongs with the note (e.g. an amendment saved in SharePoint), shown as "Open file".
   | { kind: "CORRESPONDENCE_NOTE"; text: string; fileLink?: string }
@@ -234,8 +242,23 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
       }
       payload = { kind, changeOrder, invoicedDate: invoiced.value, invoiceStatus: invStatus.value, paymentTermsDays: terms.value, fileLink: fileLink.value, invoiceLink: invoiceLink.value, payslipLink: payslipLink.value };
     }
-  } else if (kind === "ACTION_ITEM") {
-    const t = text("text", true);
+  } else if (kind === "NEW_PROJECT") {
+    const number = oneLine(raw.number, 10)?.replace(/^0+(?=\d{2})/, "") ?? null;
+    if (!number || !PROJECT_NUMBER_RE.test(number)) return { ok: false, error: `"number" (the project number from its SharePoint folder, 2 to 4 digits, e.g. "370") is required for NEW_PROJECT.` };
+    const name = oneLine(raw.name, 120);
+    if (!name || name.length < 2) return { ok: false, error: `"name" (the project's name without its number, e.g. "Blumberg") is required for NEW_PROJECT.` };
+    const kwp = cleanAmount(raw.capacityKwp);
+    if (!kwp.ok) return { ok: false, error: `"capacityKwp": ${kwp.error}` };
+    const amount = cleanAmount(raw.contractAmount);
+    if (!amount.ok) return { ok: false, error: `"contractAmount": ${amount.error}` };
+    const currency = raw.currency === undefined || raw.currency === null || raw.currency === "" ? null : typeof raw.currency === "string" ? raw.currency.trim().toUpperCase() : "";
+    if (currency !== null && !isCurrency(currency)) return { ok: false, error: `"currency" must be one of: ${CURRENCIES.map((c) => c.code).join(", ")}.` };
+   const signed = optionalDate(raw, "signedDate");
+    if (!signed.ok) return signed;
+    const details = cleanNewProjectProfile(raw.profile, raw.sources);
+    if (!details.ok) return details;
+    payload = { kind, number, name: projectNamePart(name) || name, country: oneLine(raw.country, 80), capacityKwp: kwp.value, contractAmount: amount.value, currency, signedDate: signed.value, profile: details.profile, sources: details.sources };
+  } else if (kind === "ACTION_ITEM") {    const t = text("text", true);
     if (!t.ok) return t;
     payload = { kind, text: t.value!, who: oneLine(raw.who, 120), by: oneLine(raw.by, 100) };
   } else if (kind === "CONTRACT_DOCUMENT") {
@@ -365,7 +388,7 @@ export function agentInstructions(endpoint: string): string {
     "",
     `For every email that contains something worth recording, send a suggestion with POST ${endpoint}`,
     "Header: Authorization: Bearer <the intake token you were given>. Body: JSON {\"suggestions\": [ ... ]} (up to 20 at a time).",
-    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, ACTION_ITEM, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
+    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, CHANGE_ORDER, CHANGE_ORDER_UPDATE, CONTRACT_DOCUMENT, NEW_PROJECT, ACTION_ITEM, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
     "",
     `Two read-only lists for matching an email to a customer and project (GET, same header): ${base}/customers (name, name variants, business email domains, contacts) and ${base}/projects (number, name, other names, customer, lifecycle, stage, status, each phase's status and current update, and the proposals still waiting for review). Read both at the start of a run. They are the only data you can read from the tracker. Don't propose something that is already a phase update or already waiting for review.`,
     "",
@@ -380,6 +403,7 @@ export function agentInstructions(endpoint: string): string {
     "- INVOICE FOR A MILESTONE: when accounting (e.g. Hadassa) sends the copy of a milestone invoice for the first time, send a MILESTONE_UPDATE with status INVOICE_SENT, invoiceSentDate (the invoice date printed on the invoice; if it is not readable, the day the email was sent), the invoice link, and paymentTermsDays ONLY if the invoice or email states the terms (\"Net 30\" = 30, \"Net 10\" = 10, \"immediate\" = 0). If no terms are stated leave paymentTermsDays out: the tracker uses 30 days. The tracker calculates the due date (invoice date + terms) and shows Overdue by itself. For change orders the terms are 30 or 10 days as the change order or email states: always send paymentTermsDays when it is written.",
     "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
     "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
+    "- NEW_PROJECT when a customer's SIGNED order, offer or contract is for a project that is NOT in the projects list (check the number and the name first): number (the project number as named in its SharePoint folder under EXECUTION, e.g. \"370\": look the folder up, never invent or count a number yourself; if there is no folder yet, send a NOTE instead and say so), name (without the number, e.g. \"Blumberg\"), customer (as written), and only what the document states: country, capacityKwp (kWp, a plain number), contractAmount (a plain number) with its currency (Solargik's contracts are normally in EUR; send currency only when the document states one, and a missing currency is taken as EUR). Leave out anything the document does not say. Also read the signed document and add ONLY what it explicitly states, each with the sentence it comes from: signedDate (YYYY-MM-DD, the contract signing date), and inside \"profile\": supplyTerms (delivery terms: Incoterms, delivery and payment conditions), deliveryExpectations (the delivery schedule or dates, and the project timeline: completion or commissioning dates), pileDrivingStart and ntpDate (YYYY-MM-DD), supplyObligations (what Solargik must deliver, by when, warranties, penalties), contractType (EPC, Tracker Supply or Pilot), soilTest (SPT or GPT), intercoms, soma, projectType (type of project or system), deliveryAddress, shippingAddress. Put the supporting sentence of each in \"sources\" under the same key (max 300 characters, original language). Keep each value short and factual, in English; if a detail is not stated, leave it OUT (never write \"not stated\", never guess, never infer a date). A scanned document with no readable text gives you nothing to add: send only what the email states. Approving CREATES the project in 360, so send it only for a real, signed order, once per project.",
     "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM (who, by when) is for a clear request or commitment; CORRESPONDENCE_NOTE for other meaningful communication. Say in the text whether it was the customer or Solargik staff.",
     "- Give each suggestion a unique 'id' (the email's id plus a number) so a retry doesn't create duplicates. Without an id the tracker still skips an identical proposal from the same email, but an id is more reliable.",
     "- Always send 'customer' too (the customer's name as written, e.g. 'Revalue'). A general question, request or commitment for the customer that is NOT about one project (for example a question about a framework agreement or an invoice process) is a CORRESPONDENCE_NOTE or ACTION_ITEM with 'customer' set and NO 'project': a person files it on the customer's page.",
@@ -422,6 +446,12 @@ export function describePayload(p: Payload): string {
     }
     case "CONTRACT_DOCUMENT":
       return `Set the project's contract link to "${p.description}"${p.signedDate ? ` and its signing date to ${p.signedDate} (if empty)` : ""}`;
+    case "NEW_PROJECT":
+    {
+      const facts = [p.country, p.capacityKwp ? `${p.capacityKwp} kWp` : null, p.contractAmount ? `${p.contractAmount} ${p.currency ?? "EUR"}` : null].filter(Boolean);
+      const details = Object.keys(p.profile ?? {}).length + (p.signedDate ? 1 : 0);
+      return `Create project ${p.number}-${p.name} in 360 with the standard phases and items${facts.length ? ` (${facts.join(", ")})` : ""}${details ? `, and fill ${details} contract detail${details === 1 ? "" : "s"} in its profile` : ""}`;
+    }
     case "ACTION_ITEM":
       return `Action item${p.who ? ` for ${p.who}` : ""}${p.by ? `, by ${p.by}` : ""}: ${p.text}`;
     case "CORRESPONDENCE_NOTE":

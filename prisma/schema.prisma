@@ -110,7 +110,9 @@ enum ProjectLifecycle {
 model Project {
   id                      String           @id @default(cuid())
   name                    String
-  mondayItemId            String           @unique
+  // The monday.com item this project was imported from. Empty for a project created in 360 itself (e.g. from an
+  // Inbox "New project" proposal); a later import links it by project number. Still unique when set.
+  mondayItemId            String?          @unique
   customerId              String
   customer                Customer         @relation(fields: [customerId], references: [id])
   contractValue           Decimal?

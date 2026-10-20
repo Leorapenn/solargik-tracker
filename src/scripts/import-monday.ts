@@ -21,6 +21,7 @@ import {
 } from "@/monday/client";
 import { resolveCustomer } from "@/monday/resolveCustomer";
 import { deriveLifecycle } from "@/lib/lifecycle";
+import { findNativeProject, fieldsToLockOnLink } from "@/lib/newProject";
 import {
   deriveImportance,
   planContactSync,
@@ -275,7 +276,18 @@ async function main() {
     const mondayStatus = controlRow ? getColumnText(controlRow, CONTROL_TABLE_STATUS_COLUMN_ID) : null;
     const lifecycle = deriveLifecycle(mondayStage, mondayStatus);
 
-    const existing = await prisma.project.findUnique({ where: { mondayItemId: projectItem.id } });
+    let existing = await prisma.project.findUnique({ where: { mondayItemId: projectItem.id } });
+    // A project created in 360 first (no monday.com item yet) with this number and customer IS this item: link it, and
+    // lock what it already holds so the import only fills the empty fields.
+    if (!existing) {
+      const natives = await prisma.project.findMany({ where: { mondayItemId: null } });
+      const native = findNativeProject(natives, projectItem.name, resolution.customerId);
+      if (native) {
+        const full = natives.find((p) => p.id === native.id)!;
+        existing = await prisma.project.update({ where: { id: native.id }, data: { mondayItemId: projectItem.id, lockedFields: fieldsToLockOnLink(full) } });
+        console.log(`  [linked] ${projectItem.name} -> existing 360 project "${native.name}" (its filled fields are kept)`);
+      }
+    }
     const incomingContacts = contactsOf(projectItem);
 
     // Fields edited by hand on the site (existing.lockedFields) are never overwritten by an import.

@@ -9,6 +9,9 @@ import { cleanStatusText } from "@/lib/statusUpdate";
 import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 import { patchSubStages } from "@/server/services/subStages";
+import { createProject } from "@/server/services/createProject";
+import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS, newProjectName, projectClash, type NewProjectEdits } from "@/lib/newProject";
+import { saveProfile } from "@/server/services/projectProfile";
 
 // ---- intake: what an outside reader sends ----
 
@@ -296,6 +299,9 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
     return `Contract link saved on the project profile${signing ? " and the signing date set" : ""}.`;
   }
 
+  // a new project is created by approveSuggestion itself, never through here
+  if (payload.kind === "NEW_PROJECT") throw new UserError("A new project is created when its card is approved.");
+
   // CONTACT
   const email = payload.email?.toLowerCase() ?? null;
   if (email && (await prisma.contact.count({ where: { customerId: project.customerId, email: { equals: email, mode: "insensitive" } } })) > 0) {
@@ -307,13 +313,57 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
   return `Contact ${payload.name} added.`;
 }
 
+// A "New project" proposal creates the project in 360 itself (no monday.com item): the standard phases and items, each
+// item's department default owner, in the customer the reviewer confirmed. Refuses a number or name that already exists.
+async function createFromProposal(payload: Extract<Payload, { kind: "NEW_PROJECT" }>, customerId: string | null): Promise<{ id: string; note: string }> {
+  if (!customerId) throw new UserError("Pick the customer this project is for first.");
+  const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true } });
+  if (!customer) throw new UserError("That customer no longer exists.");
+  const name = newProjectName(payload.number, payload.name);
+  const clash = projectClash(payload.number, name, await prisma.project.findMany({ select: { name: true } }));
+  if (clash) throw new UserError(clash);
+  const kwp = payload.capacityKwp ? Number(payload.capacityKwp) : null;
+  const amount = payload.contractAmount ? Number(payload.contractAmount) : null;
+  // No currency stated means EUR (Solargik's contracts are normally in Euro). USD is the unit of the monday.com contract
+  // value; any other currency is the payment currency with its own base.
+  const currency = payload.currency ?? "EUR";
+  const inUsd = currency === "USD";
+  const created = await createProject({
+    name,
+    customerId: customer.id,
+    country: payload.country,
+    capacityKwp: kwp,
+    capacityMw: kwp === null ? null : Math.round(kwp) / 1000,
+    contractValue: inUsd ? amount : null,
+    paymentCurrency: currency,
+    ...(inUsd ? {} : { paymentBase: amount }),
+  });
+  // The contract details go into the (empty) profile through the normal profile validation. They were checked when the
+  // proposal arrived, so this should not fail; if it ever does, the project still stands and the note says so.
+  let detailsNote = "";
+  const filled = Object.keys(payload.profile ?? {}).length;
+  try {
+    if (filled > 0) await saveProfile(created.id, payload.profile);
+    if (payload.signedDate) {
+      const data = { contractSigningDate: new Date(`${payload.signedDate}T00:00:00.000Z`) };
+      await prisma.projectProfile.upsert({ where: { projectId: created.id }, create: { projectId: created.id, ...data }, update: data });
+    }
+    const n = filled + (payload.signedDate ? 1 : 0);
+    if (n > 0) detailsNote = ` ${n} contract detail${n === 1 ? "" : "s"} filled in its profile.`;
+  } catch (error) {
+    detailsNote = ` The contract details could not be saved (${error instanceof Error ? error.message : "unknown error"}): add them on the project page.`;
+  }
+  return { id: created.id, note: `Project ${name} created for ${customer.name}, with the standard phases and items.${detailsNote}` };
+}
 // Approves a pending suggestion: applies it, and marks it approved. `overrides` lets the reviewer pick the project
 // and reword the text first. If applying fails (an unknown item, say) it stays pending and the reason is returned.
 // What the reviewer can correct on a change-order card before approving (empty text clears a value).
 export const CHANGE_ORDER_EDIT_KEYS = ["reason", "amount", "dateSent", "invoicedDate", "invoiceStatus", "paymentTermsDays"] as const;
 export type ChangeOrderEdits = Partial<Record<(typeof CHANGE_ORDER_EDIT_KEYS)[number], string>>;
+// What a reviewer can correct on a card, as text: the fields of a change order, or of a new project.
+export type CardEdits = ChangeOrderEdits & NewProjectEdits;
 
-export async function approveSuggestion(id: string, overrides: { projectId?: string | null; customerId?: string | null; text?: string; fields?: ChangeOrderEdits } = {}): Promise<string> {
+export async function approveSuggestion(id: string, overrides: { projectId?: string | null; customerId?: string | null; text?: string; fields?: CardEdits } = {}): Promise<string> {
   const row = await prisma.suggestion.findUnique({ where: { id } });
   if (!row) throw new UserError("That suggestion no longer exists.");
   if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
@@ -336,7 +386,39 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
     if (!merged.ok) throw new UserError(merged.error);
     payload = merged.value.payload;
   }
+  // corrections to a new project go through the same validation as an incoming proposal
+  if (overrides.fields && payload.kind === "NEW_PROJECT") {
+    const edits: Record<string, string> = {};
+    for (const key of NEW_PROJECT_EDIT_KEYS) {
+      const value = overrides.fields[key];
+      if (typeof value === "string") edits[key] = value;
+    }
+    // the contract details: what the card shows replaces what was proposed (a cleared box clears it)
+    const profile: Record<string, string> = { ...payload.profile };
+    for (const key of NEW_PROJECT_PROFILE_KEYS) {
+      const value = overrides.fields[key];
+      if (typeof value === "string") profile[key] = value;
+    }
+    const merged = cleanIncoming({ ...payload, ...edits, profile, summary: row.summary });
+    if (!merged.ok) throw new UserError(merged.error);
+    payload = merged.value.payload;
+  }
   const projectId = overrides.projectId === undefined ? row.projectId : overrides.projectId;
+  // A new project is not about an existing one: claim the proposal FIRST (so a double click can't create it twice), then
+  // create the project, and put the proposal back to pending if that fails.
+  if (payload.kind === "NEW_PROJECT") {
+    const forCustomer = overrides.customerId === undefined ? row.customerId : overrides.customerId;
+    const first = await prisma.suggestion.updateMany({ where: { id, status: "PENDING" }, data: { status: "APPROVED", reviewedAt: new Date() } });
+    if (first.count === 0) throw new UserError("That suggestion was already handled.");
+    try {
+      const made = await createFromProposal(payload, forCustomer);
+      await prisma.suggestion.update({ where: { id }, data: { resultNote: made.note, projectId: made.id, customerId: forCustomer, payload: payload as unknown as Prisma.InputJsonObject } });
+      return made.note;
+    } catch (error) {
+      await prisma.suggestion.updateMany({ where: { id, status: "APPROVED", resultNote: null }, data: { status: "PENDING", reviewedAt: null } });
+      throw error;
+    }
+  }
 
   // The customer: that of the project when there is one; otherwise the one picked (or matched at intake). With no
   // project, a note or action item filed under a customer shows on that customer's page.

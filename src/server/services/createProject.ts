@@ -6,10 +6,14 @@ export { PHASE_ORDER };
 
 export type CreateProjectInput = {
   name: string;
-  mondayItemId: string;
+  // null/absent for a project created in 360 itself (no monday.com item)
+  mondayItemId?: string | null;
   customerId: string;
   contractValue?: number | null;
   capacityMw?: number | null;
+  capacityKwp?: number | null;
+  paymentCurrency?: string;
+  paymentBase?: number | null;
   country?: string | null;
   lifecycle?: ProjectLifecycle;
   mondayStage?: string | null;
@@ -21,10 +25,13 @@ export async function createProject(input: CreateProjectInput) {
     const project = await tx.project.create({
       data: {
         name: input.name,
-        mondayItemId: input.mondayItemId,
+        mondayItemId: input.mondayItemId ?? null,
         customerId: input.customerId,
         contractValue: input.contractValue ?? null,
         capacityMw: input.capacityMw ?? null,
+        capacityKwp: input.capacityKwp ?? null,
+        ...(input.paymentCurrency ? { paymentCurrency: input.paymentCurrency } : {}),
+        paymentBase: input.paymentBase ?? null,
         country: input.country ?? null,
         lifecycle: input.lifecycle ?? "ACTIVE",
         mondayStage: input.mondayStage ?? null,

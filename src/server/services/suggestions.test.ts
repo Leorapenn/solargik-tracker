@@ -300,4 +300,45 @@ describe("suggestions", () => {
     expect((n.row!.payload as { fileLink?: string }).fileLink).toBe(slip);
     await approveSuggestion(n.row!.id);
   });
+
+  it("creates a project in 360 when a New project proposal is approved (no monday.com item), and refuses a number already used", async () => {
+    const number = `7${Math.floor(Math.random() * 900 + 100)}`;
+    const body = { kind: "NEW_PROJECT", summary: "Signed order for a new project", number, name: `NP ${RUN}`.slice(0, 40), country: "Germany", capacityKwp: "996.84", contractAmount: "275000", currency: "EUR", signedDate: "2026-10-20", profile: { supplyTerms: "DAP Germany", pileDrivingStart: "2027-01-15", contractType: "EPC" }, sources: { supplyTerms: "Delivery DAP" } };
+    const { row } = await send({ ...body, id: `${RUN}-np1`, customer: `Test Customer ${RUN}` });
+    expect(row).toMatchObject({ status: "PENDING", customerId, projectId: null });
+    expect(await prisma.project.count({ where: { customerId, name: { startsWith: `${number}-` } } })).toBe(0); // nothing yet
+
+    await expect(approveSuggestion(row!.id, { customerId: null })).rejects.toBeInstanceOf(UserError); // a customer is required
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: row!.id } })).status).toBe("PENDING"); // put back
+
+    const note = await approveSuggestion(row!.id, { customerId, fields: { name: `Edited ${RUN}`.slice(0, 40) } });
+    expect(note).toMatch(new RegExp(`Project ${number}-Edited`));
+    const made = await prisma.project.findFirstOrThrow({ where: { customerId, name: { startsWith: `${number}-` } }, include: { phases: { include: { subStages: true } } } });
+    expect(made).toMatchObject({ mondayItemId: null, country: "Germany", paymentCurrency: "EUR", lifecycle: "ACTIVE" });
+    expect(Number(made.capacityKwp)).toBe(996.84);
+    expect(Number(made.paymentBase)).toBe(275000);
+    expect(made.contractValue).toBeNull();
+    expect(made.phases).toHaveLength(6);
+    // the contract details were filled in the (empty) profile, and the signing date set
+    const profile = await prisma.projectProfile.findUniqueOrThrow({ where: { projectId: made.id } });
+    expect(profile).toMatchObject({ supplyTerms: "DAP Germany", contractType: "EPC" });
+    expect(profile.pileDrivingStart?.toISOString().slice(0, 10)).toBe("2027-01-15");
+    expect(profile.contractSigningDate?.toISOString().slice(0, 10)).toBe("2026-10-20");
+    expect(made.phases.every((p) => p.subStages.length > 0)).toBe(true);
+    expect(await prisma.suggestion.findUniqueOrThrow({ where: { id: row!.id } })).toMatchObject({ status: "APPROVED", projectId: made.id, customerId });
+
+    // no currency stated = EUR, with the amount as the payment base
+    const number2 = `6${Math.floor(Math.random() * 900 + 100)}`;
+    const { row: noCur } = await send({ kind: "NEW_PROJECT", summary: "Signed order, no currency stated", number: number2, name: `NC ${RUN}`.slice(0, 40), contractAmount: "120000", id: `${RUN}-np3`, customer: `Test Customer ${RUN}` });
+    await approveSuggestion(noCur!.id, { customerId });
+    const eur = await prisma.project.findFirstOrThrow({ where: { customerId, name: { startsWith: `${number2}-` } } });
+    expect(eur.paymentCurrency).toBe("EUR");
+    expect(Number(eur.paymentBase)).toBe(120000);
+    expect(eur.contractValue).toBeNull();
+    // the same number again is refused and the proposal stays pending
+    const { row: again } = await send({ ...body, id: `${RUN}-np2`, customer: `Test Customer ${RUN}` });
+    await expect(approveSuggestion(again!.id, { customerId })).rejects.toThrow(/already exists/);
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: again!.id } })).status).toBe("PENDING");
+    expect(await prisma.project.count({ where: { customerId, name: { startsWith: `${number}-` } } })).toBe(1);
+  });
 });
