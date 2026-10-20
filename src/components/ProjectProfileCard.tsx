@@ -280,7 +280,7 @@ export function ProjectProfileCard({
           {choose("contractType", "Contract type", CONTRACT_TYPES)}
           {choose("customerType", "Customer type", CUSTOMER_TYPES)}
           {choose("soilTest", "SPT or GPT", SOIL_TESTS)}
-          {text("intercoms", "Intercoms")}
+          {text("incoterms", "Incoterms")}
           {text("soma", "SOMA")}
           {linkedDate("contractSigning", "Contract signing date")}
           {linkedDate("internalKickoff", "Internal kickoff")}

@@ -3,7 +3,7 @@ import { CONTRACT_PROMPT, parseContractAnswer } from "./contractAnswer";
 
 describe("CONTRACT_PROMPT", () => {
   it("asks for exactly the six labels the parser understands", () => {
-    for (const label of ["SUPPLY TERMS:", "SUPPLY OBLIGATIONS:", "SPT OR GPT:", "INTERCOMS:", "SOMA:", "TYPE:"]) {
+    for (const label of ["SUPPLY TERMS:", "SUPPLY OBLIGATIONS:", "SPT OR GPT:", "INCOTERMS:", "SOMA:", "TYPE:"]) {
       expect(CONTRACT_PROMPT).toContain(label);
     }
   });
@@ -12,13 +12,13 @@ describe("CONTRACT_PROMPT", () => {
 describe("parseContractAnswer", () => {
   it("reads the plain six-line reply", () => {
     const r = parseContractAnswer(
-      ["SUPPLY TERMS: DAP Italy, 30 days payment", "SUPPLY OBLIGATIONS: Deliver by Q3 2026", "SPT OR GPT: SPT", "INTERCOMS: Included", "SOMA: NOT STATED", "TYPE: Single-axis tracker"].join("\n"),
+      ["SUPPLY TERMS: DAP Italy, 30 days payment", "SUPPLY OBLIGATIONS: Deliver by Q3 2026", "SPT OR GPT: SPT", "INCOTERMS: Included", "SOMA: NOT STATED", "TYPE: Single-axis tracker"].join("\n"),
     );
     expect(r.fields).toEqual({
       supplyTerms: "DAP Italy, 30 days payment",
       supplyObligations: "Deliver by Q3 2026",
       soilTest: "SPT",
-      intercoms: "Included",
+      incoterms: "Included",
       soma: "",
       projectType: "Single-axis tracker",
     });
@@ -27,12 +27,12 @@ describe("parseContractAnswer", () => {
 
   it("copes with markdown, bullets, mixed case and a friendly intro", () => {
     const r = parseContractAnswer(
-      ["Sure! Here are the details:", "", "- **Supply terms:** DAP Italy", "- **Supply obligations:** Deliver by Q3", "3. **SPT or GPT:** gpt", "* Intercoms: n/a", "SOMA: Yes", "**Type:** Tracker"].join("\n"),
+      ["Sure! Here are the details:", "", "- **Supply terms:** DAP Italy", "- **Supply obligations:** Deliver by Q3", "3. **SPT or GPT:** gpt", "* Incoterms: n/a", "SOMA: Yes", "**Type:** Tracker"].join("\n"),
     );
     expect(r.fields.supplyTerms).toBe("DAP Italy");
     expect(r.fields.supplyObligations).toBe("Deliver by Q3");
     expect(r.fields.soilTest).toBe("GPT");
-    expect(r.fields.intercoms).toBe("");
+    expect(r.fields.incoterms).toBe("");
     expect(r.fields.soma).toBe("Yes");
     expect(r.fields.projectType).toBe("Tracker");
   });

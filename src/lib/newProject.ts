@@ -9,17 +9,17 @@ export const NEW_PROJECT_EDIT_KEYS = ["number", "name", "country", "capacityKwp"
 
 // The contract details a New project proposal may carry into the project's profile. Only what the signed document
 // states; the project is new, so the profile is empty and each one fills a blank (a typed value is never replaced).
-// "Timeline" = pile driving start, NTP date and the delivery schedule; "delivery terms" = supply terms (Incoterms,
-// delivery conditions) and the delivery / shipping address.
+// "Timeline" = pile driving start, NTP date and the delivery schedule; "delivery terms" = the Incoterms, the supply
+// terms (payment and delivery conditions) and the delivery / shipping address.
 export const NEW_PROJECT_PROFILE_FIELDS = [
-  { key: "supplyTerms", label: "Delivery / supply terms", type: "long" },
+  { key: "incoterms", label: "Incoterms", type: "short" },
+  { key: "supplyTerms", label: "Supply terms (payment and delivery conditions)", type: "long" },
   { key: "deliveryExpectations", label: "Delivery schedule and expectations", type: "long" },
   { key: "pileDrivingStart", label: "Pile driving start", type: "date" },
   { key: "ntpDate", label: "NTP date", type: "date" },
   { key: "supplyObligations", label: "Supply obligations (what, by when, warranties, penalties)", type: "long" },
   { key: "contractType", label: "Contract type", type: "choice" },
   { key: "soilTest", label: "SPT or GPT", type: "choice" },
-  { key: "intercoms", label: "Intercoms", type: "short" },
   { key: "soma", label: "SOMA", type: "short" },
   { key: "projectType", label: "Type of project / system", type: "short" },
   { key: "deliveryAddress", label: "Delivery address", type: "long" },

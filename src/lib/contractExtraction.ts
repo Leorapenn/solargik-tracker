@@ -10,7 +10,7 @@ export type ContractFields = {
   supplyTerms: string;
   supplyObligations: string;
   soilTest: string;
-  intercoms: string;
+  incoterms: string;
   soma: string;
   projectType: string;
 };
@@ -19,7 +19,7 @@ export const CONTRACT_FIELD_LABELS: Record<keyof ContractFields, string> = {
   supplyTerms: "Contractual supply terms",
   supplyObligations: "Contractual supply obligations",
   soilTest: "SPT or GPT",
-  intercoms: "Intercoms",
+  incoterms: "Incoterms",
   soma: "SOMA",
   projectType: "Type",
 };
@@ -30,14 +30,14 @@ export const EXTRACTION_TOOL = {
   input_schema: {
     type: "object" as const,
     properties: {
-      supplyTerms: { type: ["string", "null"], description: "The contractual supply TERMS (delivery terms such as Incoterms, payment and delivery conditions), summarised in a few short sentences." },
+      supplyTerms: { type: ["string", "null"], description: "The contractual supply TERMS (payment and delivery conditions; the Incoterms go in their own field), summarised in a few short sentences." },
       supplyObligations: { type: ["string", "null"], description: "The supplier's contractual OBLIGATIONS regarding supply (what Solargik must deliver, by when, warranties/penalties), summarised in a few short sentences." },
       soilTest: { type: ["string", "null"], enum: ["SPT", "GPT", null], description: "Whether the contract calls for SPT or GPT." },
-      intercoms: { type: ["string", "null"], description: "What the contract says about intercoms, briefly." },
+      incoterms: { type: ["string", "null"], description: "The Incoterms the contract states (e.g. DDP, DAP, FOB, with the version such as 2020), briefly." },
       soma: { type: ["string", "null"], description: "What the contract says about SOMA, briefly." },
       projectType: { type: ["string", "null"], description: "The type of project or system as described in the contract, briefly." },
     },
-    required: ["supplyTerms", "supplyObligations", "soilTest", "intercoms", "soma", "projectType"],
+    required: ["supplyTerms", "supplyObligations", "soilTest", "incoterms", "soma", "projectType"],
   },
 };
 
@@ -60,7 +60,7 @@ export function normalizeExtraction(raw: unknown): ContractFields {
     supplyTerms: text(r.supplyTerms),
     supplyObligations: text(r.supplyObligations),
     soilTest: SOIL_TESTS.some((o) => o.value === soil) ? soil : "",
-    intercoms: text(r.intercoms, 200),
+    incoterms: text(r.incoterms, 200),
     soma: text(r.soma, 200),
     projectType: text(r.projectType, 200),
   };

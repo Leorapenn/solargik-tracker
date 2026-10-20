@@ -5,7 +5,7 @@
 //   npm run profiles:fill -- 257 258 259          dry run: prints what WOULD be filled, writes nothing
 //   npm run profiles:fill -- 257 258 259 --apply  writes the empty fields
 //
-// Not filled, because monday.com has no column for them: intercoms, shipping address, delivery address.
+// Not filled, because monday.com has no column for them: incoterms, shipping address, delivery address.
 
 import { prisma } from "@/lib/prisma";
 import { fetchAllBoardItems, getColumnText, getColumnValue, getLinkedItemIds, type MondayItem } from "@/monday/client";
@@ -32,7 +32,7 @@ const FIELD_LABELS: Record<keyof ProfileInput, string> = {
   contractType: "contract type",
   customerType: "customer type",
   soilTest: "SPT/GPT",
-  intercoms: "intercoms",
+  incoterms: "incoterms",
   soma: "SOMA",
   ntpDate: "NTP date",
   projectType: "type",
@@ -49,7 +49,7 @@ const FIELD_LABELS: Record<keyof ProfileInput, string> = {
   bomStatus: "BOM",
 };
 // the profile fields monday.com has no column for
-const NO_SOURCE: (keyof ProfileInput)[] = ["intercoms", "shippingAddress", "deliveryAddress"];
+const NO_SOURCE: (keyof ProfileInput)[] = ["incoterms", "shippingAddress", "deliveryAddress"];
 
 const short = (v: string, n = 46) => (v.length > n ? `${v.slice(0, n - 1)}…` : v).replace(/\s+/g, " ");
 

@@ -101,7 +101,7 @@ describe("incomingFromMonday", () => {
   it("never produces a field monday has no column for", () => {
     const supply = Object.fromEntries(Object.keys(SUPPLY_COLUMNS).map((k) => [k, "x"])) as SupplyValues;
     const keys = Object.keys(incomingFromMonday(supply, { ...noControl, contractType: "EPC", contractLinkRaw: "{}" }, people));
-    for (const none of ["intercoms", "shippingAddress", "deliveryAddress"]) expect(keys).not.toContain(none);
+    for (const none of ["incoterms", "shippingAddress", "deliveryAddress"]) expect(keys).not.toContain(none);
   });
   it("leaves out text that is longer than the profile allows", () => {
     const supply: SupplyValues = { ...blankSupply(), soma: "x".repeat(201), supplyTerms: "y".repeat(4001) };

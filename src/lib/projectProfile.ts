@@ -56,7 +56,7 @@ export type ProfileInput = {
   contractType: string;
   customerType: string;
   soilTest: string;
-  intercoms: string;
+  incoterms: string;
   soma: string;
   ntpDate: DateText;
   projectType: string;
@@ -81,7 +81,7 @@ export const EMPTY_PROFILE: ProfileInput = {
   contractType: "",
   customerType: "",
   soilTest: "",
-  intercoms: "",
+  incoterms: "",
   soma: "",
   ntpDate: "",
   projectType: "",
@@ -102,7 +102,7 @@ export const LONG_TEXT_MAX = 4000;
 export const SHORT_TEXT_MAX = 200;
 
 export type CleanProfile = {
-  text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "intercoms" | "soma" | "projectType" | "designNotes" | "shippingAddress" | "deliveryAddress", string | null>;
+  text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "incoterms" | "soma" | "projectType" | "designNotes" | "shippingAddress" | "deliveryAddress", string | null>;
   dates: Record<"pileDrivingStart" | "ntpDate" | "designQuestionnaireReceived" | "initialLayoutSent", string | null>;
   choices: Record<ChoiceField, string | null>;
   contractLink: string | null;
@@ -125,7 +125,7 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
   };
 
   const result: CleanProfile = {
-    text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, intercoms: null, soma: null, projectType: null, designNotes: null, shippingAddress: null, deliveryAddress: null },
+    text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, incoterms: null, soma: null, projectType: null, designNotes: null, shippingAddress: null, deliveryAddress: null },
     dates: { pileDrivingStart: null, ntpDate: null, designQuestionnaireReceived: null, initialLayoutSent: null },
     choices: { contractType: null, customerType: null, soilTest: null, designInfoStatus: null, geotechStatus: null, genioCivileStatus: null, bomStatus: null },
     contractLink: null,
@@ -133,7 +133,7 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
   };
 
   const longText = { deliveryExpectations: "Delivery expectations", supplyTerms: "Supply terms", supplyObligations: "Supply obligations", designNotes: "Design notes", shippingAddress: "Shipping address", deliveryAddress: "Delivery address" } as const;
-  const shortText = { intercoms: "Intercoms", soma: "SOMA", projectType: "Type" } as const;
+  const shortText = { incoterms: "Incoterms", soma: "SOMA", projectType: "Type" } as const;
   for (const [key, label] of Object.entries(longText)) {
     const v = text(key as keyof ProfileInput, label, LONG_TEXT_MAX);
     if (v instanceof Error) return { ok: false, error: v.message };

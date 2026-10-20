@@ -2,7 +2,7 @@ import { customerTypeFromMonday } from "@/lib/customerType";
 import type { ProfileInput } from "@/lib/projectProfile";
 
 // Filling a project's profile from monday.com (read-only). The profile was modelled on these columns of the Supply
-// Projects board, so most fields have a source; the few that don't (intercoms, shipping and delivery address) are left
+// Projects board, so most fields have a source; the few that don't (incoterms, shipping and delivery address) are left
 // alone. Only EMPTY profile fields are ever filled: a value somebody typed is never replaced.
 
 // Supply Projects board (6272830165) column ids.

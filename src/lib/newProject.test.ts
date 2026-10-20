@@ -102,17 +102,17 @@ describe("the contract details of a NEW_PROJECT proposal", () => {
     }
   });
   it("leaves out empty values and options that are not in the dropdown (never guessed), and refuses an invalid date", () => {
-    const r = cleanIncoming({ ...base, profile: { contractType: "Turnkey", soilTest: "", intercoms: "  ", supplyTerms: "" } });
+    const r = cleanIncoming({ ...base, profile: { contractType: "Turnkey", soilTest: "", incoterms: "  ", supplyTerms: "" } });
     expect(r.ok && r.value.payload.kind === "NEW_PROJECT" && r.value.payload.profile).toEqual({});
     expect(cleanIncoming({ ...base, profile: { ntpDate: "1 November" } }).ok).toBe(false);
     expect(cleanIncoming({ ...base, signedDate: "2026-13-40" }).ok).toBe(false);
   });
   it("cuts over-long text instead of refusing the whole proposal", () => {
-    const r = cleanIncoming({ ...base, profile: { supplyTerms: "x".repeat(5000), intercoms: "y".repeat(500) } });
+    const r = cleanIncoming({ ...base, profile: { supplyTerms: "x".repeat(5000), incoterms: "y".repeat(500) } });
     expect(r.ok).toBe(true);
     if (r.ok && r.value.payload.kind === "NEW_PROJECT") {
       expect(r.value.payload.profile.supplyTerms).toHaveLength(4000);
-      expect(r.value.payload.profile.intercoms).toHaveLength(200);
+      expect(r.value.payload.profile.incoterms).toHaveLength(200);
     }
   });
 });

@@ -177,7 +177,8 @@ model ProjectProfile {
   supplyTerms          String?
   supplyObligations    String?
   soilTest             String? // SPT / GPT
-  intercoms            String?
+  // Incoterms (DDP, DAP, FOB...). The database column keeps its old name, "intercoms", a mislabel of this field.
+  incoterms            String?              @map("intercoms")
   soma                 String?
   // Only a fallback for the Contract Signing item's own completed date (e.g. read from the contract).
   contractSigningDate  DateTime?
