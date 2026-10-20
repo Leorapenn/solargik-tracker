@@ -243,6 +243,33 @@ export const TASK_FILTERS = [
 export type TaskFilter = (typeof TASK_FILTERS)[number]["key"];
 export const parseTaskFilter = (v: unknown): TaskFilter => (TASK_FILTERS.some((f) => f.key === v) ? (v as TaskFilter) : "open");
 
+// ---- the order of the tasks on the Tasks tab (?sort=) ----
+
+export const TASK_SORTS = [
+  { key: "urgent", label: "Most urgent" },
+  { key: "upcoming", label: "Upcoming" },
+  { key: "newest", label: "Newest first" },
+] as const;
+export type TaskSort = (typeof TASK_SORTS)[number]["key"];
+export const parseTaskSort = (v: unknown): TaskSort => (TASK_SORTS.some((s) => s.key === v) ? (v as TaskSort) : "urgent");
+
+// Most urgent: overdue, due today, quiet, then the rest (compareTasks). Upcoming: the soonest follow-up date first, so an
+// overdue one leads and a task with no follow-up date comes last (ties: most urgent first). Newest first: the day each
+// task was created, latest first (ties: most urgent first). Resolved tasks always come last.
+export function compareForSort<T extends TaskTimes>(sort: TaskSort, a: T, b: T, todayIso: string): number {
+  if (sort === "urgent") return compareTasks(a, b, todayIso);
+  const resolved = Number(a.status === "RESOLVED") - Number(b.status === "RESOLVED");
+  if (resolved !== 0) return resolved;
+  if (sort === "upcoming") {
+    const fa = a.nextFollowUp ?? "9999-12-31";
+    const fb = b.nextFollowUp ?? "9999-12-31";
+    if (fa !== fb) return fa < fb ? -1 : 1;
+  } else if (a.createdOn !== b.createdOn) {
+    return a.createdOn < b.createdOn ? 1 : -1;
+  }
+  return compareTasks(a, b, todayIso);
+}
+
 export function matchesFilter(t: TaskTimes, filter: TaskFilter, todayIso: string): boolean {
   if (filter === "all") return true;
   if (filter === "resolved") return t.status === "RESOLVED";

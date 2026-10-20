@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requirePageAuth } from "@/lib/auth";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
-import { TASK_FILTERS, matchesFilter, parseTaskFilter, type TaskFilter } from "@/lib/tasks";
+import { TASK_FILTERS, TASK_SORTS, compareForSort, matchesFilter, parseTaskFilter, parseTaskSort, type TaskFilter, type TaskSort } from "@/lib/tasks";
 import { listTasks, type TaskView } from "@/server/services/tasks";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskButton } from "@/components/NewTaskButton";
@@ -19,6 +19,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   await requirePageAuth();
   const params = await searchParams;
   const filter = parseTaskFilter(one(params.filter));
+  const sort = parseTaskSort(one(params.sort));
   const customerId = one(params.customer) ?? "";
   const todayIso = toDateInputValue(todayInAppTz());
 
@@ -33,7 +34,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   // the chip counts follow the customer picked, not the chip
   const inCustomer = customerId ? everything.filter((t) => t.customerId === customerId) : everything;
   const count = (f: TaskFilter) => inCustomer.filter((t) => matchesFilter(times(t), f, todayIso)).length;
-  const shown = inCustomer.filter((t) => matchesFilter(times(t), filter, todayIso));
+  // the chosen order (a stable sort of the most-urgent-first list), so the groups below come out in the same order
+  const shown = inCustomer.filter((t) => matchesFilter(times(t), filter, todayIso)).sort((a, b) => compareForSort(sort, times(a), times(b), todayIso));
 
   // grouped by customer; the customer with the most urgent task comes first (the list is already most urgent first)
   const groups: { customerId: string; name: string; tasks: TaskView[] }[] = [];
@@ -43,7 +45,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     g.tasks.push(t);
   }
 
-  const href = (f: TaskFilter) => `/tasks?filter=${f}${customerId ? `&customer=${encodeURIComponent(customerId)}` : ""}`;
+  // links keep the other choices (filter, customer, sort); the default sort is left out of the address
+  const href = (f: TaskFilter, s: TaskSort = sort) => `/tasks?filter=${f}${customerId ? `&customer=${encodeURIComponent(customerId)}` : ""}${s !== "urgent" ? `&sort=${s}` : ""}`;
   const chip = (active: boolean) => ({
     padding: "7px 14px",
     borderRadius: 999,
@@ -74,6 +77,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         ))}
         <form method="get" action="/tasks" style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto" }}>
           <input type="hidden" name="filter" value={filter} />
+          {sort !== "urgent" && <input type="hidden" name="sort" value={sort} />}
           <select name="customer" aria-label="Customer" defaultValue={customerId} style={{ ...inputStyle, maxWidth: 260 }}>
             <option value="">All customers</option>
             {customersWithTasks.map(([id, name]) => (
@@ -86,6 +90,15 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             Show
           </button>
         </form>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: TEXT_MUTED }}>Sort by</span>
+        {TASK_SORTS.map((s) => (
+          <Link key={s.key} href={href(filter, s.key)} style={{ ...chip(sort === s.key), padding: "5px 12px", fontSize: 13 }} aria-current={sort === s.key ? "true" : undefined}>
+            {s.label}
+          </Link>
+        ))}
       </div>
 
       {groups.length === 0 && (

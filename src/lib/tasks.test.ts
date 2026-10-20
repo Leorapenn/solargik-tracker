@@ -7,10 +7,13 @@ import {
   agoText,
   cleanTask,
   cleanTaskUpdate,
+  compareForSort,
   compareTasks,
   daysBetween,
   matchesFilter,
   parseTaskFilter,
+  parseTaskSort,
+  TASK_SORTS,
   taskAttention,
   taskPrefillFromSuggestion,
   matchOwner,
@@ -207,5 +210,33 @@ describe("taskFromActionItem (an approved action item becomes a task)", () => {
     expect(taskFromActionItem({ ...a, by: "2026-02-31" }, "c1", "", people).nextFollowUp).toBe("");
     expect(taskFromActionItem({ ...a, by: "end of next week" }, "c1", "", people).nextFollowUp).toBe("");
     expect(taskFromActionItem({ ...a, who: "the customer", by: null }, "c1", "", people)).toMatchObject({ ownerId: "", nextFollowUp: "" });
+  });
+});
+
+describe("sorting the tasks (?sort=)", () => {
+  const list = [
+    { id: "resolved", ...t({ status: "RESOLVED", nextFollowUp: "2026-10-01" }) },
+    { id: "none-old", ...t({ nextFollowUp: null, createdOn: "2026-09-01", lastContactAt: "2026-10-18" }) },
+    { id: "later", ...t({ nextFollowUp: "2026-11-05", createdOn: "2026-10-12" }) },
+    { id: "overdue", ...t({ nextFollowUp: "2026-10-10", createdOn: "2026-10-02" }) },
+    { id: "soon", ...t({ nextFollowUp: "2026-10-21", createdOn: "2026-10-18" }) },
+    { id: "today", ...t({ nextFollowUp: TODAY, createdOn: "2026-10-15" }) },
+    { id: "none-new", ...t({ nextFollowUp: null, createdOn: "2026-10-17", lastContactAt: "2026-10-18" }) },
+  ];
+  const order = (s: "urgent" | "upcoming" | "newest") => [...list].sort((a, b) => compareForSort(s, a, b, TODAY)).map((x) => x.id);
+  it("has Most urgent (the default), Upcoming and Newest first, and falls back to the default for anything else", () => {
+    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest"]);
+    expect(parseTaskSort("upcoming")).toBe("upcoming");
+    expect(parseTaskSort("nope")).toBe("urgent");
+    expect(parseTaskSort(undefined)).toBe("urgent");
+  });
+  it("Upcoming: soonest follow-up first (an overdue one leads), no follow-up date last, resolved after all", () => {
+    expect(order("upcoming")).toEqual(["overdue", "today", "soon", "later", "none-old", "none-new", "resolved"]);
+  });
+  it("Newest first: the latest created first, resolved last", () => {
+    expect(order("newest")).toEqual(["soon", "none-new", "today", "later", "overdue", "none-old", "resolved"]);
+  });
+  it("Most urgent is the usual order", () => {
+    expect(order("urgent")).toEqual([...list].sort((a, b) => compareTasks(a, b, TODAY)).map((x) => x.id));
   });
 });
