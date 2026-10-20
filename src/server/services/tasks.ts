@@ -23,6 +23,7 @@ export type TaskView = {
   lastContactNote: string | null;
   nextFollowUp: string | null;
   resolvedAt: string | null;
+  sourceLink: string | null; // the email it was created from
   createdOn: string;
   updates: TaskUpdateView[]; // newest first
 };
@@ -52,6 +53,7 @@ function toView(t: Row): TaskView {
     lastContactNote: t.lastContactNote,
     nextFollowUp: iso(t.nextFollowUp),
     resolvedAt: iso(t.resolvedAt),
+    sourceLink: t.sourceLink,
     createdOn: toDateInputValue(t.createdAt),
     updates: t.updates.map((u) => ({ id: u.id, date: toDateInputValue(u.date), text: u.text })),
   };
@@ -118,6 +120,7 @@ export async function createTask(input: Partial<Record<keyof TaskInput, unknown>
       lastContactNote: v.lastContactNote,
       nextFollowUp: day(v.nextFollowUp),
       resolvedAt: v.status === "RESOLVED" ? day(today) : null,
+      sourceLink: v.sourceLink,
       updates: { create: [{ date: day(today)!, text: "Task created" }] },
     },
     select: { id: true },
@@ -150,6 +153,7 @@ export async function updateTask(id: string, input: Partial<Record<keyof TaskInp
           // a resolved task has nothing left to chase
           nextFollowUp: v.status === "RESOLVED" ? null : day(v.nextFollowUp),
           resolvedAt: v.status === "RESOLVED" ? (resolving ? day(today) : before.resolvedAt) : null,
+          sourceLink: v.sourceLink,
         },
       });
       if (v.status !== before.status) await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: statusLine(v.status) } });

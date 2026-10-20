@@ -1,4 +1,5 @@
 import type { Choice } from "@/lib/projectProfile";
+import { cleanWebLink } from "@/lib/links";
 
 // Tasks: ongoing matters to chase per customer (and optionally one of its projects), e.g. a customer disputing charges.
 // A status, the last correspondence, a follow-up date (the reminder) and a dated log. Typed by hand.
@@ -94,6 +95,7 @@ export type TaskInput = {
   lastContactAt: string; // "" = none
   lastContactNote: string;
   nextFollowUp: string; // "" = none
+  sourceLink: string; // link to the email the task was created from ("" = none); only the link is kept, never the email
 };
 export type CleanTask = {
   customerId: string;
@@ -105,6 +107,7 @@ export type CleanTask = {
   lastContactAt: string | null;
   lastContactNote: string | null;
   nextFollowUp: string | null;
+  sourceLink: string | null;
 };
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -134,6 +137,8 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
   if (!last.ok) return last;
   const next = date(input.nextFollowUp, "The follow-up date");
   if (!next.ok) return next;
+  const source = cleanWebLink(str(input.sourceLink));
+  if (!source.ok) return { ok: false, error: `The email link: ${source.error}` };
   return {
     ok: true,
     value: {
@@ -146,7 +151,34 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
       lastContactAt: last.value,
       lastContactNote: note || null,
       nextFollowUp: next.value,
+      sourceLink: source.value,
     },
+  };
+}
+
+// What the "Create task" button on an Inbox proposal fills in: the customer and project of the proposal, its one-line
+// summary as the topic, the day of the email as the last correspondence (with who sent it and its subject, which are
+// not the email's text), and the link to the email. Nothing is saved until the person presses Add task.
+export type PrefillSource = {
+  summary: string;
+  kindText: string;
+  sourceFrom: string | null;
+  sourceSubject: string | null;
+  sourceReceivedAt: string | null; // ISO date or date-time
+  sourceLink: string | null;
+};
+export function taskPrefillFromSuggestion(s: PrefillSource, customerId: string, projectId: string): Partial<TaskInput> {
+  const day = s.sourceReceivedAt && /^\d{4}-\d{2}-\d{2}/.test(s.sourceReceivedAt) ? s.sourceReceivedAt.slice(0, 10) : "";
+  const email = [s.sourceFrom && `from ${s.sourceFrom}`, s.sourceSubject && `“${s.sourceSubject}”`].filter(Boolean).join(" ");
+  const topic = oneLine(s.summary);
+  return {
+    customerId,
+    projectId,
+    topic: topic.length > MAX_TOPIC ? `${topic.slice(0, MAX_TOPIC - 1).trimEnd()}…` : topic,
+    details: `Created from an Inbox proposal (${s.kindText}).${email ? ` Email ${email}.` : ""}`.slice(0, MAX_DETAILS),
+    lastContactAt: validDate(day) ? day : "",
+    lastContactNote: email ? `Email ${email}`.slice(0, MAX_CONTACT_NOTE) : "",
+    sourceLink: s.sourceLink ?? "",
   };
 }
 

@@ -413,6 +413,7 @@ model Task {
   lastContactNote String? // one line about it, e.g. "They replied, trying to set a call"
   nextFollowUp    DateTime?    @db.Date // when to chase again (the reminder)
   resolvedAt      DateTime?    @db.Date
+  sourceLink      String? // link to the email the task was created from (an Inbox proposal); only the link is kept
   updates         TaskUpdate[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt

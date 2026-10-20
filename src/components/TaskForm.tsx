@@ -11,7 +11,7 @@ export type CustomerOption = { id: string; name: string };
 export type ProjectOption = { id: string; name: string; customerId: string };
 export type PersonOption = { id: string; name: string };
 
-const blank = (customerId: string): TaskInput => ({ customerId, projectId: "", topic: "", details: "", status: "OPEN", ownerId: "", lastContactAt: "", lastContactNote: "", nextFollowUp: "" });
+const blank = (customerId: string): TaskInput => ({ customerId, projectId: "", topic: "", details: "", status: "OPEN", ownerId: "", lastContactAt: "", lastContactNote: "", nextFollowUp: "", sourceLink: "" });
 
 const fromTask = (t: TaskView): TaskInput => ({
   customerId: t.customerId,
@@ -23,6 +23,7 @@ const fromTask = (t: TaskView): TaskInput => ({
   lastContactAt: t.lastContactAt ?? "",
   lastContactNote: t.lastContactNote ?? "",
   nextFollowUp: t.nextFollowUp ?? "",
+  sourceLink: t.sourceLink ?? "",
 });
 
 // Creates a task, or edits one: the customer, optionally one of its projects, the topic, the status, who owns it, the last
@@ -30,19 +31,26 @@ const fromTask = (t: TaskView): TaskInput => ({
 export function TaskForm({
   task,
   presetCustomerId = "",
+  prefill,
   customers,
   projects,
   people,
   onDone,
+  onSaved,
 }: {
   task?: TaskView;
   presetCustomerId?: string;
+  // values to start a new task with (e.g. from an Inbox proposal); nothing is saved until Add task
+  prefill?: Partial<TaskInput>;
   customers: CustomerOption[];
   projects: ProjectOption[];
   people: PersonOption[];
+  // closes the form (Cancel, or after saving unless onSaved is given)
   onDone: () => void;
+  // called instead of onDone after a successful save
+  onSaved?: () => void;
 }) {
-  const [data, setData] = useState<TaskInput>(task ? fromTask(task) : blank(presetCustomerId));
+  const [data, setData] = useState<TaskInput>(task ? fromTask(task) : { ...blank(presetCustomerId), ...prefill });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const set = (patch: Partial<TaskInput>) => setData((d) => ({ ...d, ...patch }));
@@ -62,7 +70,7 @@ export function TaskForm({
     setError(null);
     startTransition(async () => {
       const result = task ? await saveTask(task.id, data) : await saveNewTask(data);
-      if (result.ok) onDone();
+      if (result.ok) (onSaved ?? onDone)();
       else setError(result.error);
     });
   }
@@ -139,6 +147,18 @@ export function TaskForm({
         )}
         {field("Follow up on", <DateField ariaLabel="Follow-up date" value={data.nextFollowUp || null} onCommit={(c) => set({ nextFollowUp: c.date ?? "" })} />)}
       </div>
+
+      {data.sourceLink && (
+        <div style={{ fontSize: 13.5, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ color: TEXT_MUTED }}>Linked email:</span>
+          <a href={data.sourceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+            Open email
+          </a>
+          <button type="button" style={{ ...secondaryButton, padding: "2px 10px", fontSize: 12.5 }} onClick={() => set({ sourceLink: "" })}>
+            Remove link
+          </button>
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button type="submit" disabled={pending} style={primaryButton}>

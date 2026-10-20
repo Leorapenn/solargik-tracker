@@ -51,6 +51,17 @@ describe("tasks", () => {
     expect(task.createdOn).toBe(today());
   });
 
+  it("keeps the link to the email a task was created from, through edits", async () => {
+    const link = "https://outlook.office365.com/owa/?ItemID=abc";
+    const id = await createTask({ customerId, projectId, topic: "From an email", sourceLink: link });
+    expect((await mine()).find((t) => t.id === id)!.sourceLink).toBe(link);
+    await updateTask(id, { customerId, projectId, topic: "From an email, edited", sourceLink: link });
+    expect((await mine()).find((t) => t.id === id)!.sourceLink).toBe(link);
+    await updateTask(id, { customerId, projectId, topic: "From an email, edited", sourceLink: "" });
+    expect((await mine()).find((t) => t.id === id)!.sourceLink).toBeNull();
+    await expect(createTask({ customerId, topic: "x", sourceLink: "javascript:alert(1)" })).rejects.toBeInstanceOf(UserError);
+  });
+
   it("refuses a project of another customer, an inactive owner, a missing customer and bad input", async () => {
     await expect(createTask({ customerId, projectId: otherProjectId, topic: "x" })).rejects.toBeInstanceOf(UserError);
     await expect(createTask({ customerId, topic: "x", ownerId: inactiveId })).rejects.toBeInstanceOf(UserError);

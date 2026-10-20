@@ -25,14 +25,15 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const raw = Array.isArray(params.status) ? params.status[0] : params.status;
   const status = TABS.find((t) => t.key === raw?.toUpperCase())?.key ?? "PENDING";
 
-  const [items, projects, customers, waiting, lastRun] = await Promise.all([
+  const [items, projects, customers, waiting, lastRun, people] = await Promise.all([
     listSuggestions(status),
-    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, paymentCurrency: true } }),
+    prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, paymentCurrency: true, customerId: true } }),
     prisma.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     pendingCount(),
     getLastImport(),
+    prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
-  const projectChoices = projects.map((p) => ({ id: p.id, name: p.name, currency: p.paymentCurrency }));
+  const projectChoices = projects.map((p) => ({ id: p.id, name: p.name, currency: p.paymentCurrency, customerId: p.customerId }));
   const unmatched = items.filter((s) => !s.projectId);
   const matched = items.filter((s) => s.projectId);
   const connected = Boolean(process.env.INTAKE_TOKEN && process.env.INTAKE_TOKEN.length >= 16);
@@ -98,12 +99,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
         </h2>
       )}
       {(status === "PENDING" ? unmatched : items).map((s) => (
-        <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} />
+        <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} />
       ))}
       {status === "PENDING" && unmatched.length > 0 && matched.length > 0 && (
         <h2 style={{ margin: "12px 0 0", fontSize: 16, color: NAVY }}>Matched to a project ({matched.length})</h2>
       )}
-      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} />)}
+      {status === "PENDING" && matched.map((s) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} />)}
 
       <details style={{ ...cardStyle, padding: "14px 20px" }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700 }}>

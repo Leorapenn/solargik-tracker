@@ -89,6 +89,11 @@ export function TaskCard({
           </span>
         )}
         {resolved && task.resolvedAt && <span style={{ color: "#047857", fontWeight: 700 }}>Resolved {fmt(task.resolvedAt)}</span>}
+        {task.sourceLink && (
+          <a href={task.sourceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+            Open email
+          </a>
+        )}
         {attention && (
           <span style={{ background: ATTENTION[attention.level].bg, color: ATTENTION[attention.level].text, borderRadius: 999, padding: "1px 10px", fontSize: 12.5, fontWeight: 700 }}>{attention.text}</span>
         )}

@@ -5,6 +5,8 @@ import { approve, reject } from "@/server/actions/suggestions";
 import type { SuggestionView } from "@/server/services/suggestions";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
+import { TaskForm, type PersonOption } from "@/components/TaskForm";
+import { taskPrefillFromSuggestion } from "@/lib/tasks";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
 
 // The fields of a change-order proposal a reviewer can correct before approving (text, as typed).
@@ -31,8 +33,21 @@ function fileLabel(url: string | null | undefined, name: string): string {
 
 // One proposed change from the email reader. Approve applies it (after you pick the project and reword the text if
 // needed); Reject discards it. Nothing changes until Approve.
-export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; projects: { id: string; name: string; currency: string }[]; customers: { id: string; name: string }[] }) {
+export function SuggestionCard({
+  s,
+  projects,
+  customers,
+  people,
+}: {
+  s: SuggestionView;
+  projects: { id: string; name: string; currency: string; customerId: string }[];
+  customers: { id: string; name: string }[];
+  people: PersonOption[];
+}) {
   const pending = s.status === "PENDING";
+  // "Create task": opens the New task form prefilled from this proposal (nothing is saved until Add task there)
+  const [creatingTask, setCreatingTask] = useState(false);
+  const [taskCreated, setTaskCreated] = useState(false);
   const [projectId, setProjectId] = useState(s.projectId ?? "");
   // a note or action item with no project can be filed on the customer's page instead
   const [customerId, setCustomerId] = useState(s.customerId ?? "");
@@ -239,12 +254,39 @@ export function SuggestionCard({ s, projects, customers }: { s: SuggestionView; 
           >
             Reject
           </button>
+          <button type="button" style={secondaryButton} disabled={busy} title="Start a task from this proposal. It does not approve or reject it." onClick={() => setCreatingTask((o) => !o)}>
+            {creatingTask ? "Cancel task" : "Create task"}
+          </button>
         </div>
       ) : (
-        <div style={{ fontSize: 13, color: TEXT_MUTED }}>
-          {s.status === "APPROVED" ? "Approved" : "Rejected"}
-          {s.projectName ? ` · ${s.projectName}` : s.customerName ? ` · ${s.customerName} (general)` : ""}
-          {s.resultNote ? ` · ${s.resultNote}` : ""}
+        <div style={{ fontSize: 13, color: TEXT_MUTED, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span>
+            {s.status === "APPROVED" ? "Approved" : "Rejected"}
+            {s.projectName ? ` · ${s.projectName}` : s.customerName ? ` · ${s.customerName} (general)` : ""}
+            {s.resultNote ? ` · ${s.resultNote}` : ""}
+          </span>
+          <button type="button" style={{ ...secondaryButton, padding: "4px 12px", fontSize: 13 }} title="Start a task from this proposal" onClick={() => setCreatingTask((o) => !o)}>
+            {creatingTask ? "Cancel task" : "Create task"}
+          </button>
+        </div>
+      )}
+
+      {creatingTask && (
+        <TaskForm
+          customers={customers}
+          projects={projects.map((x) => ({ id: x.id, name: x.name, customerId: x.customerId }))}
+          people={people}
+          prefill={taskPrefillFromSuggestion(s, projects.find((x) => x.id === projectId)?.customerId ?? (customerId || s.customerId || ""), projectId)}
+          onDone={() => setCreatingTask(false)}
+          onSaved={() => {
+            setCreatingTask(false);
+            setTaskCreated(true);
+          }}
+        />
+      )}
+      {taskCreated && (
+        <div role="status" style={{ fontSize: 13.5, color: "#047857" }}>
+          Task created. <a href="/tasks" style={{ color: NAVY, fontWeight: 700 }}>Open Tasks</a>
         </div>
       )}
 

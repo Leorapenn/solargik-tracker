@@ -12,6 +12,7 @@ import {
   matchesFilter,
   parseTaskFilter,
   taskAttention,
+  taskPrefillFromSuggestion,
   type TaskTimes,
 } from "./tasks";
 
@@ -88,7 +89,7 @@ describe("cleanTask", () => {
     const r = cleanTask({ ...base, projectId: "p1", details: "Line 1\r\nLine 2 ", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: " They replied ", nextFollowUp: "2026-10-22" });
     expect(r).toEqual({
       ok: true,
-      value: { customerId: "c1", projectId: "p1", topic: "Disputing the charges", details: "Line 1\nLine 2", status: "WAITING_CUSTOMER", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: "They replied", nextFollowUp: "2026-10-22" },
+      value: { customerId: "c1", projectId: "p1", topic: "Disputing the charges", details: "Line 1\nLine 2", status: "WAITING_CUSTOMER", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: "They replied", nextFollowUp: "2026-10-22", sourceLink: null },
     });
   });
   it("treats empty optional fields as none and defaults the status to Open", () => {
@@ -108,6 +109,48 @@ describe("cleanTask", () => {
   });
   it("has the five statuses", () => {
     expect(TASK_STATUSES.map((s) => s.value)).toEqual(["OPEN", "WAITING_CUSTOMER", "WAITING_US", "CALL_SCHEDULED", "RESOLVED"]);
+  });
+});
+
+describe("the link to the email a task was created from", () => {
+  it("accepts a web link, treats empty as none, and refuses anything else", () => {
+    expect(cleanTask({ customerId: "c1", topic: "x", sourceLink: " https://outlook.office365.com/owa/?ItemID=abc " })).toMatchObject({ ok: true, value: { sourceLink: "https://outlook.office365.com/owa/?ItemID=abc" } });
+    expect(cleanTask({ customerId: "c1", topic: "x", sourceLink: "" })).toMatchObject({ ok: true, value: { sourceLink: null } });
+    expect(cleanTask({ customerId: "c1", topic: "x" })).toMatchObject({ ok: true, value: { sourceLink: null } });
+    expect(cleanTask({ customerId: "c1", topic: "x", sourceLink: "javascript:alert(1)" }).ok).toBe(false);
+    expect(cleanTask({ customerId: "c1", topic: "x", sourceLink: "not a link" }).ok).toBe(false);
+  });
+});
+
+describe("taskPrefillFromSuggestion (the Create task button on an Inbox proposal)", () => {
+  const s = {
+    summary: 'Create change order "Redesign for slopes", EUR 6250, from the change order document',
+    kindText: "Change order",
+    sourceFrom: "Hadassa Gabay",
+    sourceSubject: "RE: 333 Vascigliano",
+    sourceReceivedAt: "2026-10-12T08:30:00.000Z",
+    sourceLink: "https://outlook.office365.com/owa/?ItemID=abc",
+  };
+  it("fills the customer, project, topic, the day of the email and the link, but never the email text", () => {
+    const p = taskPrefillFromSuggestion(s, "cust1", "proj1");
+    expect(p).toMatchObject({
+      customerId: "cust1",
+      projectId: "proj1",
+      topic: s.summary,
+      lastContactAt: "2026-10-12",
+      lastContactNote: "Email from Hadassa Gabay “RE: 333 Vascigliano”",
+      sourceLink: s.sourceLink,
+    });
+    expect(p.details).toBe("Created from an Inbox proposal (Change order). Email from Hadassa Gabay “RE: 333 Vascigliano”.");
+    // what it fills in must be a valid task as it stands
+    expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
+  });
+  it("copes with a proposal that has no source details, no date and a very long summary", () => {
+    const p = taskPrefillFromSuggestion({ summary: "x".repeat(300), kindText: "Note", sourceFrom: null, sourceSubject: null, sourceReceivedAt: null, sourceLink: null }, "c", "");
+    expect(p.topic!.length).toBeLessThanOrEqual(MAX_TOPIC);
+    expect(p.topic!.endsWith("…")).toBe(true);
+    expect(p).toMatchObject({ projectId: "", lastContactAt: "", lastContactNote: "", sourceLink: "", details: "Created from an Inbox proposal (Note)." });
+    expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
   });
 });
 
