@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MailError, graphConfigFromEnv, recipientsFromEnv, sendMail } from "./graphMail";
-import { isAuthorizedBearer, isSundayMorningSlot } from "./cron";
+import { isAuthorizedBearer, isSundayMorningSlot, isWorkingMorningSlot } from "./cron";
 import { buildWeeklyEmail, escapeHtml } from "./weeklyEmail";
 import type { ProjectUpdates } from "@/server/services/weeklyUpdates";
 
@@ -64,6 +64,16 @@ describe("cron guards", () => {
     expect(isSundayMorningSlot(new Date("2026-11-01T05:10:00Z"))).toBe(true); // IST = UTC+2 -> 07:10
     expect(isSundayMorningSlot(new Date("2026-11-01T04:10:00Z"))).toBe(false); // 06:10
     expect(isSundayMorningSlot(new Date("2026-10-19T04:10:00Z"))).toBe(false); // a Monday
+  });
+  it("is the 07:xx working-day slot (Sunday to Thursday) in Israel, summer and winter, and never on Friday or Saturday", () => {
+    expect(isWorkingMorningSlot(new Date("2026-10-19T04:10:00Z"))).toBe(true); // Monday, summer time -> 07:10
+    expect(isWorkingMorningSlot(new Date("2026-10-19T05:10:00Z"))).toBe(false); // 08:10
+    expect(isWorkingMorningSlot(new Date("2026-11-02T05:10:00Z"))).toBe(true); // Monday, winter time -> 07:10
+    expect(isWorkingMorningSlot(new Date("2026-11-02T04:10:00Z"))).toBe(false); // 06:10
+    expect(isWorkingMorningSlot(new Date("2026-11-01T05:10:00Z"))).toBe(true); // Sunday
+    expect(isWorkingMorningSlot(new Date("2026-11-05T05:10:00Z"))).toBe(true); // Thursday
+    expect(isWorkingMorningSlot(new Date("2026-11-06T05:10:00Z"))).toBe(false); // Friday
+    expect(isWorkingMorningSlot(new Date("2026-11-07T05:10:00Z"))).toBe(false); // Saturday
   });
 });
 

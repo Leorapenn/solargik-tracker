@@ -6,6 +6,8 @@ import { TASK_FILTERS, TASK_SORTS, compareForSort, matchesFilter, parseTaskFilte
 import { listTasks, type TaskView } from "@/server/services/tasks";
 import { TaskCard } from "@/components/TaskCard";
 import { NewTaskButton } from "@/components/NewTaskButton";
+import { EmailTaskDigestButtons } from "@/components/EmailTaskDigestButtons";
+import { taskDigestConfigured } from "@/server/services/taskDigest";
 import { CloseCustomerTasksButton } from "@/components/CloseCustomerTasksButton";
 import { CollapsibleGroup } from "@/components/CollapsibleGroup";
 import { NAVY, TEXT_MUTED, cardStyle, inputStyle, pageStyle, pageSubtitleStyle, pageTitleStyle, secondaryButton } from "@/lib/theme";
@@ -33,9 +35,12 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const times = (t: TaskView) => ({ status: t.status, nextFollowUp: t.nextFollowUp, lastContactAt: t.lastContactAt, createdOn: t.createdOn });
   // the chip counts follow the customer picked, not the chip
   const inCustomer = customerId ? everything.filter((t) => t.customerId === customerId) : everything;
-  const count = (f: TaskFilter) => inCustomer.filter((t) => matchesFilter(times(t), f, todayIso)).length;
+  // "Needs attention" also takes the tasks whose deadline has passed or is today
+  const matches = (t: TaskView, f: TaskFilter) =>
+    matchesFilter(times(t), f, todayIso) || (f === "attention" && t.status !== "RESOLVED" && (t.deadline?.level === "overdue" || t.deadline?.level === "today"));
+  const count = (f: TaskFilter) => inCustomer.filter((t) => matches(t, f)).length;
   // the chosen order (a stable sort of the most-urgent-first list), so the groups below come out in the same order
-  const shown = inCustomer.filter((t) => matchesFilter(times(t), filter, todayIso)).sort((a, b) => compareForSort(sort, a, b, todayIso));
+  const shown = inCustomer.filter((t) => matches(t, filter)).sort((a, b) => compareForSort(sort, a, b, todayIso));
 
   // grouped by customer; the customer with the most urgent task comes first (the list is already most urgent first)
   const groups: { customerId: string; name: string; tasks: TaskView[] }[] = [];
@@ -68,6 +73,14 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       </div>
 
       <NewTaskButton customers={customers} projects={projects} people={people} presetCustomerId={customerId} />
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 13.5 }}>
+        <Link href="/tasks/digest" style={{ color: NAVY, fontWeight: 700 }}>
+          Preview the task emails
+        </Link>
+        <span style={{ color: TEXT_MUTED }}>Owners are emailed each working morning what is due that day, and on Sunday the week ahead.</span>
+        {taskDigestConfigured() && <EmailTaskDigestButtons />}
+      </div>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         {TASK_FILTERS.map((f) => (

@@ -12,7 +12,7 @@ export type CustomerOption = { id: string; name: string };
 export type ProjectOption = { id: string; name: string; customerId: string };
 export type PersonOption = { id: string; name: string };
 
-const blank = (customerId: string): TaskInput => ({ customerId, projectId: "", topic: "", details: "", status: "OPEN", priority: "MEDIUM", ownerId: "", lastContactAt: "", lastContactNote: "", nextFollowUp: "", sourceLink: "" });
+const blank = (customerId: string): TaskInput => ({ customerId, projectId: "", topic: "", details: "", status: "OPEN", priority: "MEDIUM", ownerId: "", lastContactAt: "", lastContactNote: "", nextFollowUp: "", deadline: "", sourceLink: "" });
 
 const fromTask = (t: TaskView): TaskInput => ({
   customerId: t.customerId,
@@ -25,6 +25,7 @@ const fromTask = (t: TaskView): TaskInput => ({
   lastContactAt: t.lastContactAt ?? "",
   lastContactNote: t.lastContactNote ?? "",
   nextFollowUp: t.nextFollowUp ?? "",
+  deadline: t.deadline?.local ?? "",
   sourceLink: t.sourceLink ?? "",
 });
 
@@ -163,6 +164,25 @@ export function TaskForm({
           <input aria-label="About the last correspondence" value={data.lastContactNote} maxLength={MAX_CONTACT_NOTE} placeholder="e.g. They replied, trying to set a call" onChange={(e) => set({ lastContactNote: e.target.value })} style={{ ...inputStyle, width: 340 }} />,
         )}
         {field("Follow up on", <DateField ariaLabel="Follow-up date" value={data.nextFollowUp || null} onCommit={(c) => set({ nextFollowUp: c.date ?? "" })} />)}
+        {field(
+          "Deadline (day and time, Israel)",
+          <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <DateField
+              ariaLabel="Deadline date"
+              value={data.deadline ? data.deadline.slice(0, 10) : null}
+              onCommit={(c) => set({ deadline: c.date ? `${c.date}T${data.deadline ? data.deadline.slice(11) : "17:00"}` : "" })}
+            />
+            {data.deadline && (
+              <input
+                type="time"
+                aria-label="Deadline time"
+                value={data.deadline.slice(11)}
+                onChange={(e) => e.target.value && set({ deadline: `${data.deadline.slice(0, 10)}T${e.target.value}` })}
+                style={{ ...inputStyle, width: 110 }}
+              />
+            )}
+          </span>,
+        )}
       </div>
 
       {data.sourceLink && (

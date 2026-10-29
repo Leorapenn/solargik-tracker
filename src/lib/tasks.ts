@@ -1,5 +1,6 @@
 import type { Choice } from "@/lib/projectProfile";
 import { cleanWebLink } from "@/lib/links";
+import { cleanDeadline } from "@/lib/deadline";
 
 // Tasks: ongoing matters to chase per customer (and optionally one of its projects), e.g. a customer disputing charges.
 // A status, the last correspondence, a follow-up date (the reminder) and a dated log. Typed by hand.
@@ -110,6 +111,7 @@ export type TaskInput = {
   lastContactAt: string; // "" = none
   lastContactNote: string;
   nextFollowUp: string; // "" = none
+  deadline: string; // "YYYY-MM-DDTHH:mm" in Israel time ("" = none): the day AND time it must be done by, separate from the follow-up date
   sourceLink: string; // link to the email the task was created from ("" = none); only the link is kept, never the email
 };
 export type CleanTask = {
@@ -123,6 +125,7 @@ export type CleanTask = {
   lastContactAt: string | null;
   lastContactNote: string | null;
   nextFollowUp: string | null;
+  deadline: string | null; // "YYYY-MM-DDTHH:mm" Israel time
   sourceLink: string | null;
 };
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -155,6 +158,8 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
   if (!last.ok) return last;
   const next = date(input.nextFollowUp, "The follow-up date");
   if (!next.ok) return next;
+  const deadline = cleanDeadline(input.deadline);
+  if (!deadline.ok) return deadline;
   const source = cleanWebLink(str(input.sourceLink));
   if (!source.ok) return { ok: false, error: `The email link: ${source.error}` };
   return {
@@ -170,6 +175,7 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
       lastContactAt: last.value,
       lastContactNote: note || null,
       nextFollowUp: next.value,
+      deadline: deadline.value,
       sourceLink: source.value,
     },
   };
@@ -271,6 +277,7 @@ export const TASK_SORTS = [
   { key: "customer", label: "Customer A–Z" },
   { key: "project", label: "Project" },
   { key: "priority", label: "Priority" },
+  { key: "deadline", label: "Deadline" },
 ] as const;
 export type TaskSort = (typeof TASK_SORTS)[number]["key"];
 export const parseTaskSort = (v: unknown): TaskSort => (TASK_SORTS.some((s) => s.key === v) ? (v as TaskSort) : "urgent");
@@ -285,11 +292,16 @@ function projectSortKey(name: string | null | undefined): number {
 // overdue one leads and a task with no follow-up date comes last (ties: most urgent first). Newest first: the day each
 // task was created, latest first. Customer A-Z: by the customer's name. Project: by project number. All of them fall back
 // to most urgent first for ties. Resolved tasks always come last.
-export function compareForSort<T extends TaskTimes & { customerName?: string; projectName?: string | null; priority?: string }>(sort: TaskSort, a: T, b: T, todayIso: string): number {
+export function compareForSort<T extends TaskTimes & { customerName?: string; projectName?: string | null; priority?: string; deadlineAt?: string | null }>(sort: TaskSort, a: T, b: T, todayIso: string): number {
   if (sort === "urgent") return compareTasks(a, b, todayIso);
   const resolved = Number(a.status === "RESOLVED") - Number(b.status === "RESOLVED");
   if (resolved !== 0) return resolved;
-  if (sort === "priority") {
+  if (sort === "deadline") {
+    // the nearest deadline first (an overdue one leads), no deadline last
+    const da = a.deadlineAt ?? "9999-12-31T00:00:00.000Z";
+    const db = b.deadlineAt ?? "9999-12-31T00:00:00.000Z";
+    if (da !== db) return da < db ? -1 : 1;
+  } else if (sort === "priority") {
     // High, then Medium, then Low; inside a priority the most urgent first
     const byPriority = taskPriorityRank(a.priority) - taskPriorityRank(b.priority);
     if (byPriority !== 0) return byPriority;

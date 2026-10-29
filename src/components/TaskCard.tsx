@@ -21,6 +21,14 @@ const ATTENTION = {
   quiet: { bg: "#E4E6EC", text: "#4A4F5C" },
 } as const;
 
+// The days-and-hours pill of a deadline: red once passed, amber today, light blue within three days, grey further out.
+export const DEADLINE_STYLE = {
+  overdue: { bg: "#FCE0DD", text: "#8C1D18" },
+  today: { bg: "#FEF0D6", text: "#8A5300" },
+  soon: { bg: "#DCE8FB", text: "#1D4F9F" },
+  later: { bg: "#E4E6EC", text: "#4A4F5C" },
+} as const;
+
 // One task: the topic, status, project, owner, the last correspondence and the next follow-up, with the log of dated
 // entries and the quick actions (contacted today, log an update, edit, delete).
 export function TaskCard({
@@ -115,6 +123,16 @@ export function TaskCard({
           </span>
         )}
         {resolved && task.resolvedAt && <span style={{ color: "#047857", fontWeight: 700 }}>Resolved {fmt(task.resolvedAt)}</span>}
+        {task.deadline && (
+          <span>
+            Deadline: <span style={{ color: "#1A1A1A" }}>{task.deadline.label}</span>
+            {task.deadline.remaining && task.deadline.level && (
+              <span style={{ marginLeft: 8, background: DEADLINE_STYLE[task.deadline.level].bg, color: DEADLINE_STYLE[task.deadline.level].text, borderRadius: 999, padding: "1px 10px", fontSize: 12.5, fontWeight: 700 }}>
+                {task.deadline.remaining}
+              </span>
+            )}
+          </span>
+        )}
         {task.sourceLink && (
           <a href={task.sourceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
             Open email

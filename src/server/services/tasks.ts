@@ -3,12 +3,15 @@ import { UserError } from "@/lib/errors";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { cleanTask, cleanTaskUpdate, compareTasks, isTaskPriority, isTaskStatus, taskAttention, taskPriorityChoice, taskStatusChoice, type Attention, type CleanTask, type TaskInput } from "@/lib/tasks";
 import { cleanWebLink } from "@/lib/links";
+import { deadlineLocal, deadlineStatus, formatDeadline, parseDeadlineLocal, type DeadlineLevel } from "@/lib/deadline";
 import type { TimelineEmail } from "@/lib/taskTimeline";
 import { loadTaskEmails } from "@/server/services/taskMatch";
 
 const iso = (d: Date | null) => (d ? toDateInputValue(d) : null);
 const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
 const todayIso = () => toDateInputValue(todayInAppTz());
+
+export type DeadlineView = { iso: string; local: string; label: string; remaining: string | null; level: DeadlineLevel | null };
 
 export type TaskUpdateView = { id: string; date: string; text: string; sourceLink: string | null; sourceSubject: string | null };
 export type TaskView = {
@@ -27,6 +30,10 @@ export type TaskView = {
   lastContactNote: string | null;
   nextFollowUp: string | null;
   resolvedAt: string | null;
+  // the deadline (day and time, Israel time), worked out when the page is built: the instant, the form value, how it reads,
+  // and the days and hours left (none once the task is resolved)
+  deadline: DeadlineView | null;
+  deadlineAt: string | null; // the same instant, for sorting
   sourceLink: string | null; // the email it was created from
   createdOn: string;
   updates: TaskUpdateView[]; // newest first
@@ -39,6 +46,12 @@ const include = {
   owner: { select: { name: true } },
   updates: { orderBy: [{ date: "desc" as const }, { createdAt: "desc" as const }] },
 };
+
+function toDeadlineView(deadline: Date | null, resolved: boolean, now: Date = new Date()): DeadlineView | null {
+  if (!deadline) return null;
+  const status = resolved ? null : deadlineStatus(deadline, now);
+  return { iso: deadline.toISOString(), local: deadlineLocal(deadline), label: formatDeadline(deadline), remaining: status?.text ?? null, level: status?.level ?? null };
+}
 
 type Row = Awaited<ReturnType<typeof prisma.task.findMany<{ include: typeof include }>>>[number];
 
@@ -59,6 +72,8 @@ function toView(t: Row): TaskView {
     lastContactNote: t.lastContactNote,
     nextFollowUp: iso(t.nextFollowUp),
     resolvedAt: iso(t.resolvedAt),
+    deadline: toDeadlineView(t.deadline, t.status === "RESOLVED"),
+    deadlineAt: t.deadline ? t.deadline.toISOString() : null,
     sourceLink: t.sourceLink,
     createdOn: toDateInputValue(t.createdAt),
     updates: t.updates.map((u) => ({ id: u.id, date: toDateInputValue(u.date), text: u.text, sourceLink: u.sourceLink, sourceSubject: u.sourceSubject })),
@@ -100,15 +115,28 @@ export async function listOpenTasksForProject(projectId: string): Promise<TaskVi
   return (await toViews(rows)).sort((a, b) => compareTasks(a, b, today));
 }
 
+// The reminder a deadline gives: overdue (it has passed) or today (still ahead, but today). Later ones give none.
+export function deadlineAttention(deadline: Date, now: Date): Attention | null {
+  const s = deadlineStatus(deadline, now);
+  if (s.level === "overdue") return { level: "overdue", days: s.days, text: `Deadline passed: ${s.text.toLowerCase()}` };
+  if (s.level === "today") return { level: "today", days: 0, text: `Deadline today at ${deadlineLocal(deadline).slice(11)}: ${s.text}` };
+  return null;
+}
+
 // Everything that needs attention now (for the bell): overdue, due today, or quiet. Most urgent first.
 export type TaskReminder = { id: string; customerId: string; customerName: string; projectName: string | null; topic: string; status: string; attention: Attention };
 export async function listReminders(): Promise<TaskReminder[]> {
   const today = todayIso();
   const rows = await prisma.task.findMany({ where: { NOT: { status: "RESOLVED" } }, include: { customer: { select: { name: true } }, project: { select: { name: true } } } });
   const found: { reminder: TaskReminder; times: { status: string; nextFollowUp: string | null; lastContactAt: string | null; createdOn: string } }[] = [];
+  const now = new Date();
+  const rank = { overdue: 0, today: 1, quiet: 2 } as const;
   for (const r of rows) {
     const times = { status: r.status, nextFollowUp: iso(r.nextFollowUp), lastContactAt: iso(r.lastContactAt), createdOn: toDateInputValue(r.createdAt) };
-    const attention = taskAttention(times, today);
+    let attention = taskAttention(times, today);
+    // a deadline that has passed, or is today, is a reminder too (the more urgent of the two is shown; a tie goes to the deadline)
+    const byDeadline = r.deadline ? deadlineAttention(r.deadline, now) : null;
+    if (byDeadline && (!attention || rank[byDeadline.level] <= rank[attention.level])) attention = byDeadline;
     if (attention) found.push({ reminder: { id: r.id, customerId: r.customerId, customerName: r.customer.name, projectName: r.project?.name ?? null, topic: r.topic, status: r.status, attention }, times });
   }
   return found.sort((a, b) => compareTasks(a.times, b.times, today)).map((x) => x.reminder);
@@ -149,6 +177,7 @@ export async function createTask(input: Partial<Record<keyof TaskInput, unknown>
       lastContactAt: day(v.lastContactAt),
       lastContactNote: v.lastContactNote,
       nextFollowUp: day(v.nextFollowUp),
+      deadline: v.deadline ? parseDeadlineLocal(v.deadline) : null,
       resolvedAt: v.status === "RESOLVED" ? day(today) : null,
       sourceLink: v.sourceLink,
       // a task made from an email: its first entry points at that email
@@ -167,9 +196,10 @@ export async function updateTask(id: string, input: Partial<Record<keyof TaskInp
   const today = todayIso();
   await prisma.$transaction(
     async (tx) => {
-      const before = await tx.task.findUnique({ where: { id }, select: { status: true, priority: true, resolvedAt: true } });
+      const before = await tx.task.findUnique({ where: { id }, select: { status: true, priority: true, resolvedAt: true, deadline: true } });
       if (!before) throw new UserError("That task no longer exists.");
       const resolving = v.status === "RESOLVED" && before.status !== "RESOLVED";
+      const newDeadline = v.deadline ? parseDeadlineLocal(v.deadline) : null;
       await tx.task.update({
         where: { id },
         data: {
@@ -184,10 +214,15 @@ export async function updateTask(id: string, input: Partial<Record<keyof TaskInp
           lastContactNote: v.lastContactNote,
           // a resolved task has nothing left to chase
           nextFollowUp: v.status === "RESOLVED" ? null : day(v.nextFollowUp),
+          deadline: newDeadline,
           resolvedAt: v.status === "RESOLVED" ? (resolving ? day(today) : before.resolvedAt) : null,
           sourceLink: v.sourceLink,
         },
       });
+      if ((newDeadline?.getTime() ?? null) !== (before.deadline?.getTime() ?? null)) {
+        const text = !newDeadline ? "Deadline removed" : before.deadline ? `Deadline changed to ${formatDeadline(newDeadline)}` : `Deadline set to ${formatDeadline(newDeadline)}`;
+        await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text } });
+      }
       if (v.status !== before.status) await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: statusLine(v.status) } });
       if (v.priority !== before.priority) await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: priorityLine(v.priority) } });
     },

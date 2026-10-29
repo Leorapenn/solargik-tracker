@@ -424,6 +424,8 @@ model Task {
   resolvedAt      DateTime?    @db.Date
   sourceLink      String? // link to the email the task was created from (an Inbox proposal); only the link is kept
   priority        String       @default("MEDIUM") // HIGH | MEDIUM | LOW
+  // The deadline: a day and a time (stored as one instant, shown and counted in Israel time). Separate from nextFollowUp.
+  deadline        DateTime?
   updates         TaskUpdate[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt

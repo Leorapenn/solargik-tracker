@@ -94,6 +94,12 @@ export function TasksCard({
               {t.nextFollowUp ? `${showProject || t.lastContactAt ? " · " : ""}follow up ${agoText(t.nextFollowUp, todayIso)}` : ""}
               {attention ? ` · ${attention.text}` : ""}
             </div>
+            {t.deadline && (
+              <div style={{ fontSize: 13, color: TEXT_MUTED }}>
+                Deadline {t.deadline.label}
+                {t.deadline.remaining ? ` · ${t.deadline.remaining}` : ""}
+              </div>
+            )}
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChoicePill choice={taskStatusChoice(t.status)} />
               <ChoicePill choice={taskPriorityChoice(t.priority)} />

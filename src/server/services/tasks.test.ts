@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { UserError } from "@/lib/errors";
+import { deadlineLocal } from "@/lib/deadline";
+import { loadDigestTasks } from "./taskDigest";
 import { addTaskUpdate, closeCustomerTasks, createTask, deleteTask, listOpenTasksForCustomer, listReminders, listTasks, markContactedToday, setTaskStatus, updateTask } from "./tasks";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -95,6 +97,44 @@ describe("tasks", () => {
     await markContactedToday(id);
     task = (await mine()).find((t) => t.id === id)!;
     expect(task.lastContactAt).toBe(today());
+  });
+
+  it("keeps a deadline (day and time) apart from the follow-up date, logs each change, counts days and hours, and reminds when it has passed", async () => {
+    const inHours = (h: number) => deadlineLocal(new Date(Date.now() + h * 3_600_000));
+    const id = await createTask({ customerId, topic: "Deadline test", nextFollowUp: daysFromToday(5), deadline: inHours(50), ownerId: personId });
+    let task = (await mine()).find((t) => t.id === id)!;
+    expect(task.nextFollowUp).toBe(daysFromToday(5)); // the follow-up date is untouched by the deadline
+    expect(task.deadline).toMatchObject({ local: inHours(50), level: "soon" });
+    expect(task.deadline!.remaining).toMatch(/^(1 day|2 days)( \d+ hours?)? left$/);
+    expect(task.deadlineAt).toBe(task.deadline!.iso);
+    // the digest sees the same task, with its owner and its own deadline
+    expect((await loadDigestTasks()).find((d) => d.id === id)).toMatchObject({ topic: "Deadline test", ownerName: `Test Person ${RUN}`, nextFollowUp: daysFromToday(5) });
+
+    // changing it, and removing it, are logged
+    await updateTask(id, { customerId, topic: "Deadline test", nextFollowUp: daysFromToday(5), deadline: inHours(-3), ownerId: personId });
+    task = (await mine()).find((t) => t.id === id)!;
+    expect(task.deadline).toMatchObject({ level: "overdue" });
+    expect(task.deadline!.remaining).toMatch(/^Overdue by (2|3) hours?$|^Overdue by 2 hours$/);
+    // a deadline given when the task is created is part of "Task created"; changing it afterwards is logged
+    expect(task.updates.map((u) => u.text).filter((x) => x.startsWith("Deadline"))).toEqual([expect.stringMatching(/^Deadline changed to /)]);
+    // an overdue deadline is a reminder on its own, although the follow-up date is days away
+    const reminder = (await listReminders()).find((r) => r.id === id)!;
+    expect(reminder.attention).toMatchObject({ level: "overdue" });
+    expect(reminder.attention.text).toMatch(/^Deadline passed: overdue by /);
+
+    await updateTask(id, { customerId, topic: "Deadline test", nextFollowUp: daysFromToday(5), deadline: "", ownerId: personId });
+    task = (await mine()).find((t) => t.id === id)!;
+    expect(task.deadline).toBeNull();
+    expect(task.updates.map((u) => u.text)).toContain("Deadline removed");
+    expect((await listReminders()).find((r) => r.id === id)).toBeUndefined();
+    // giving a task without a deadline one is logged as "set"
+    await updateTask(id, { customerId, topic: "Deadline test", nextFollowUp: daysFromToday(5), deadline: inHours(10), ownerId: personId });
+    expect((await mine()).find((t) => t.id === id)!.updates.map((u) => u.text)).toEqual(expect.arrayContaining([expect.stringMatching(/^Deadline set to /)]));
+
+    // a resolved task keeps its deadline but counts nothing
+    await updateTask(id, { customerId, topic: "Deadline test", deadline: inHours(-3), status: "RESOLVED" });
+    expect((await mine()).find((t) => t.id === id)!.deadline).toMatchObject({ remaining: null, level: null });
+    await expect(createTask({ customerId, topic: "x", deadline: "2026-02-31T10:00" })).rejects.toBeInstanceOf(UserError);
   });
 
   it("changes status with a log line, resolves (clearing the reminder) and reopens", async () => {

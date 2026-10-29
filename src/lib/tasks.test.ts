@@ -98,7 +98,7 @@ describe("cleanTask", () => {
     const r = cleanTask({ ...base, projectId: "p1", details: "Line 1\r\nLine 2 ", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: " They replied ", nextFollowUp: "2026-10-22" });
     expect(r).toEqual({
       ok: true,
-      value: { customerId: "c1", projectId: "p1", topic: "Disputing the charges", details: "Line 1\nLine 2", status: "WAITING_CUSTOMER", priority: "MEDIUM", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: "They replied", nextFollowUp: "2026-10-22", sourceLink: null },
+      value: { customerId: "c1", projectId: "p1", topic: "Disputing the charges", details: "Line 1\nLine 2", status: "WAITING_CUSTOMER", priority: "MEDIUM", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: "They replied", nextFollowUp: "2026-10-22", deadline: null, sourceLink: null },
     });
   });
   it("treats empty optional fields as none and defaults the status to Open", () => {
@@ -229,7 +229,7 @@ describe("sorting the tasks (?sort=)", () => {
   ];
   const order = (s: "urgent" | "upcoming" | "newest") => [...list].sort((a, b) => compareForSort(s, a, b, TODAY)).map((x) => x.id);
   it("has Most urgent (the default), Upcoming and Newest first, and falls back to the default for anything else", () => {
-    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest", "customer", "project", "priority"]);
+    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest", "customer", "project", "priority", "deadline"]);
     expect(parseTaskSort("upcoming")).toBe("upcoming");
     expect(parseTaskSort("nope")).toBe("urgent");
     expect(parseTaskSort(undefined)).toBe("urgent");
@@ -274,6 +274,24 @@ describe("task priority", () => {
   });
   it("is one of the sort choices and parses from the address", () => {
     expect(parseTaskSort("priority")).toBe("priority");
+  });
+});
+
+describe("task deadline (day and time, separate from the follow-up date)", () => {
+  it("is optional, kept as the day and time typed, and refused when it is not a real day and time", () => {
+    expect(cleanTask({ customerId: "c1", topic: "x" })).toMatchObject({ ok: true, value: { deadline: null } });
+    expect(cleanTask({ customerId: "c1", topic: "x", deadline: "" })).toMatchObject({ ok: true, value: { deadline: null } });
+    expect(cleanTask({ customerId: "c1", topic: "x", deadline: "2026-10-30T17:00" })).toMatchObject({ ok: true, value: { deadline: "2026-10-30T17:00", nextFollowUp: null } });
+    // the follow-up date and the deadline are independent
+    expect(cleanTask({ customerId: "c1", topic: "x", nextFollowUp: "2026-10-25", deadline: "2026-10-30T17:00" })).toMatchObject({ ok: true, value: { nextFollowUp: "2026-10-25", deadline: "2026-10-30T17:00" } });
+    expect(cleanTask({ customerId: "c1", topic: "x", deadline: "2026-10-30" }).ok).toBe(false);
+    expect(cleanTask({ customerId: "c1", topic: "x", deadline: "2026-02-31T10:00" }).ok).toBe(false);
+  });
+  it("sorts by the nearest deadline (an overdue one first), no deadline last, resolved after all", () => {
+    const k = (id: string, deadlineAt: string | null, over: Partial<TaskTimes> = {}) => ({ id, deadlineAt, ...t(over) });
+    const list = [k("none", null), k("later", "2026-11-20T10:00:00.000Z"), k("resolved", "2026-10-01T10:00:00.000Z", { status: "RESOLVED" }), k("overdue", "2026-10-10T10:00:00.000Z"), k("soon", "2026-10-21T10:00:00.000Z")];
+    expect([...list].sort((a, b) => compareForSort("deadline", a, b, TODAY)).map((x) => x.id)).toEqual(["overdue", "soon", "later", "none", "resolved"]);
+    expect(parseTaskSort("deadline")).toBe("deadline");
   });
 });
 
