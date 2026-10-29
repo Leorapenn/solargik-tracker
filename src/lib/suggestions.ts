@@ -6,12 +6,13 @@ import { cleanStatusText } from "@/lib/statusUpdate";
 import { CURRENCIES, formatTerms, isCurrency } from "@/lib/payments";
 import { PROJECT_NUMBER_RE, cleanNewProjectProfile, type NewProjectProfile, type NewProjectProfileKey } from "@/lib/newProject";
 import { projectNamePart } from "@/lib/intakeDirectory";
+import { isTaskOutcome, type TaskOutcome } from "@/lib/taskMatch";
 
 // What an outside reader (a Dots agent reading Outlook) may PROPOSE. Nothing here changes any data: a person
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "TASK_UPDATE", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
@@ -24,6 +25,7 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   CONTRACT_DOCUMENT: "Signed contract (sets the project's contract link when approved)",
   NEW_PROJECT: "New project (created in 360 when approved)",
   ACTION_ITEM: "Task (created when approved)",
+  TASK_UPDATE: "Task update (updates or resolves an open task)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
   NOTE: "Note (nothing to apply)",
@@ -36,6 +38,8 @@ export const REVIEW_ONLY_KINDS: readonly SuggestionKind[] = ["NOTE", "CORRESPOND
 // chase). Its result note starts with this, which is how the Correspondence cards know to leave it out: it lives on the
 // Tasks tab now.
 export const TASK_RESULT_PREFIX = "Task created";
+// Every result note that says the proposal went into a task ("Task created", "Task updated", "Task resolved").
+export const TASK_RESULT_ANY = "Task ";
 
 // The only item statuses 360 has. A status change must be one of these.
 export const ITEM_STATUSES = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"] as const;
@@ -69,6 +73,10 @@ export type Payload =
   // the contract signing date, `sources` = for each, the sentence of the document it was read from (shown on the card).
   | { kind: "NEW_PROJECT"; number: string; name: string; country: string | null; capacityKwp: string | null; contractAmount: string | null; currency: string | null; signedDate: string | null; profile: NewProjectProfile; sources: Partial<Record<NewProjectProfileKey | "signedDate", string>> }
   | { kind: "ACTION_ITEM"; text: string; who: string | null; by: string | null }
+  // What an email says about a task that already exists (an answer, a reply, the matter settled). `taskId` is one of the ids
+  // in the directory's openTasks lists. Approving adds `text` to the task's log (and counts as the last correspondence, on the
+  // email's day) and sets the task's status from `outcome`; RESOLVED closes it. A person confirms the task and the outcome.
+  | { kind: "TASK_UPDATE"; taskId: string; text: string; outcome: TaskOutcome }
   // `fileLink`: a document that belongs with the note (e.g. an amendment saved in SharePoint), shown as "Open file".
   | { kind: "CORRESPONDENCE_NOTE"; text: string; fileLink?: string }
   | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; paymentTermsDays: number | null; invoiceLink: string | null; payslipLink: string | null }
@@ -268,6 +276,14 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const t = text("text", true);
     if (!t.ok) return t;
     payload = { kind, text: t.value!, who: oneLine(raw.who, 120), by: oneLine(raw.by, 100) };
+  } else if (kind === "TASK_UPDATE") {
+    const taskId = oneLine(raw.taskId, 60);
+    if (!taskId || !/^[A-Za-z0-9_-]{8,60}$/.test(taskId)) return { ok: false, error: `"taskId" (the id of one of the openTasks in the projects or customers list) is required for TASK_UPDATE.` };
+    const t = text("text", true);
+    if (!t.ok) return t;
+    const rawOutcome = raw.outcome === undefined || raw.outcome === null || raw.outcome === "" ? "LOG" : typeof raw.outcome === "string" ? raw.outcome.trim().toUpperCase().replace(/[\s-]+/g, "_") : "";
+    if (!isTaskOutcome(rawOutcome)) return { ok: false, error: `"outcome" must be RESOLVED, WAITING_CUSTOMER, WAITING_US or LOG.` };
+    payload = { kind, taskId, text: t.value!, outcome: rawOutcome };
   } else if (kind === "CONTRACT_DOCUMENT") {
     const description = oneLine(raw.description, 200);
     if (!description) return { ok: false, error: `"description" (what the document is, e.g. "Signed Framework Supply Agreement") is required for CONTRACT_DOCUMENT.` };
@@ -396,7 +412,7 @@ export function agentInstructions(endpoint: string): string {
     "",
     `For every email that contains something worth recording, send a suggestion with POST ${endpoint}`,
     "Header: Authorization: Bearer <the intake token you were given>. Body: JSON {\"suggestions\": [ ... ]} (up to 20 at a time).",
-    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, CHANGE_ORDER, CHANGE_ORDER_UPDATE, CONTRACT_DOCUMENT, NEW_PROJECT, ACTION_ITEM, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
+    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, CHANGE_ORDER, CHANGE_ORDER_UPDATE, CONTRACT_DOCUMENT, NEW_PROJECT, ACTION_ITEM, TASK_UPDATE, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
     "",
     `Two read-only lists for matching an email to a customer and project (GET, same header): ${base}/customers (name, name variants, business email domains, contacts) and ${base}/projects (number, name, other names, customer, lifecycle, stage, status, each phase's status and current update, and the proposals still waiting for review). Read both at the start of a run. They are the only data you can read from the tracker. Don't propose something that is already a phase update or already waiting for review.`,
     "",
@@ -414,6 +430,7 @@ export function agentInstructions(endpoint: string): string {
     "- NEW_PROJECT when a customer's SIGNED order, offer or contract is for a project that is NOT in the projects list (check the number and the name first): number (the project number as named in its SharePoint folder under EXECUTION, e.g. \"370\": look the folder up, never invent or count a number yourself; if there is no folder yet, send a NOTE instead and say so), name (without the number, e.g. \"Blumberg\"), customer (as written), and only what the document states: country, capacityKwp (kWp, a plain number), contractAmount (a plain number) with its currency (Solargik's contracts are normally in EUR; send currency only when the document states one, and a missing currency is taken as EUR). Leave out anything the document does not say. Also read the signed document and add ONLY what it explicitly states, each with the sentence it comes from: signedDate (YYYY-MM-DD, the contract signing date), and inside \"profile\": incoterms (the Incoterms the document states, e.g. DDP, DAP, FOB, with the version such as 2020), supplyTerms (payment and delivery conditions, without repeating the Incoterms), deliveryExpectations (the delivery schedule or dates, and the project timeline: completion or commissioning dates), pileDrivingStart and ntpDate (YYYY-MM-DD), supplyObligations (what Solargik must deliver, by when, warranties, penalties), contractType (EPC, Tracker Supply or Pilot), soilTest (the tracker's power: SPT = Self-Powered Tracker or GPT = Grid-Powered Tracker, as the document specifies it: 'Grid Powered' in the pricing table means GPT, 'Self Powered' means SPT; an option to upgrade to the other one is NOT the choice), incoterms, soma, projectType (type of project or system), deliveryAddress (the project site address exactly as the document gives it, with its GPS coordinates if shown: for a project delivered to site this IS the delivery address), shippingAddress (only if the document names a different one). Put the supporting sentence of each in \"sources\" under the same key (max 300 characters, original language). Keep each value short and factual, in English; if a detail is not stated, leave it OUT (never write \"not stated\", never guess, never infer a date). A scanned document with no readable text gives you nothing to add: send only what the email states. Approving CREATES the project in 360, so send it only for a real, signed order, once per project.",
     "- STATUS_CHANGE only when the email clearly states a change, and only to one of NOT_STARTED, IN_PROGRESS, BLOCKED, DONE for a named sub-phase. ACTION_ITEM is for a clear request or commitment; approving it CREATES A TASK for a person to do or chase (who = the person's full name if the email names one, by = a date as YYYY-MM-DD ONLY when the email states a date, else leave it out or write it as the email does). CORRESPONDENCE_NOTE is for other meaningful communication, and never for something an ACTION_ITEM from the same email already says. Say in the text whether it was the customer or Solargik staff.",
     "- Give each suggestion a unique 'id' (the email's id plus a number) so a retry doesn't create duplicates. Without an id the tracker still skips an identical proposal from the same email, but an id is more reliable.",
+    "- OPEN TASKS AND ANSWERS: every project (and every customer, for general items) has \"openTasks\": the tasks still open, each with its id, topic, status, owner, last correspondence and the email chain it started in (\"thread\" = the subject, \"conversationId\"). When an email is a reply or answer in the SAME chain as an open task, or clearly about the same matter, do NOT send an ACTION_ITEM or a CORRESPONDENCE_NOTE for it: send a TASK_UPDATE with taskId (copied exactly from openTasks), text (one or two plain lines saying what the email says: who answered what), and outcome: RESOLVED when the email shows the matter is settled or the question is fully answered, WAITING_CUSTOMER when Solargik answered or asked and the customer must reply, WAITING_US when the customer replied or asked something more and Solargik must act, LOG when it only adds information. The same subject is NOT enough to call a task resolved: a chain can carry several matters, so read the whole request and answer, and resolve only when every part of the task's topic is addressed (otherwise use WAITING_CUSTOMER or LOG and say what is still missing). If two open tasks could be meant, choose by content; if you cannot tell, use LOG for the clearest one and say so in the text. A person confirms the task and the outcome on the card. Only a brand-new matter that no open task covers is an ACTION_ITEM.",
     "- AVOID REPEATS: every project in the projects list (and every customer in the customers list, for general items) has \"recentProposals\": everything proposed in the last 14 days, whatever its status (REJECTED ones were turned down by a person), with the email chain (\"thread\") and the day it came from. Before sending a proposal, compare it with that list: if the same fact, request or note is already there, even worded differently, do not send it again. A reply in a chain usually quotes the earlier emails: take only what the NEWEST message of the chain adds, never facts that are only in the quoted older text. One proposal per fact: when an ACTION_ITEM covers it, do not also send a CORRESPONDENCE_NOTE saying the same. If a reply only confirms something already proposed, send nothing.",
     "- Always send 'customer' too (the customer's name as written, e.g. 'Revalue'). A general question, request or commitment for the customer that is NOT about one project (for example a question about a framework agreement or an invoice process) is a CORRESPONDENCE_NOTE or ACTION_ITEM with 'customer' set and NO 'project': a person files it on the customer's page.",
     "- If an email is clearly about one of our customers but you can't tell which project, still send a suggestion (a NOTE if nothing else fits) and leave the project out: it will show under Unmatched for a person to assign. If an email is irrelevant (newsletters, unrelated senders), send nothing.",
@@ -463,6 +480,8 @@ export function describePayload(p: Payload): string {
     }
     case "ACTION_ITEM":
       return `Create a task${p.who ? ` for ${p.who}` : ""}${p.by ? `, due ${p.by}` : ""}: ${p.text}`;
+    case "TASK_UPDATE":
+      return `${p.outcome === "RESOLVED" ? "Resolve the task" : p.outcome === "LOG" ? "Add to the task's log" : `Update the task and set it to ${p.outcome === "WAITING_US" ? "Waiting on us" : "Waiting on customer"}`}: ${p.text}`;
     case "CORRESPONDENCE_NOTE":
       return p.text;
     case "MILESTONE_UPDATE": {

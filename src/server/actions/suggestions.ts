@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
-import { CHANGE_ORDER_EDIT_KEYS, approveSuggestion, approveSuggestionAsTask, rejectSuggestion, type CardEdits } from "@/server/services/suggestions";
+import { CHANGE_ORDER_EDIT_KEYS, approveSuggestion, approveSuggestionAsTask, approveWithTask, rejectSuggestion, type CardEdits } from "@/server/services/suggestions";
 import type { TaskInput } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS } from "@/lib/newProject";
 
@@ -42,6 +42,18 @@ export async function approveAsTask(id: string, input: TaskInput): Promise<Actio
     const note = await approveSuggestionAsTask(id, input);
     refresh();
     revalidatePath("/tasks");
+    return { note };
+  });
+}
+
+// Approving a task update, or a note that is the answer in a task's email chain, as an update to the task picked on the card.
+export async function approveForTask(id: string, taskId: string, outcome: string, text?: string): Promise<ActionResult<{ note: string }>> {
+  await requireActionAuth();
+  return run(async () => {
+    const note = await approveWithTask(id, { taskId: String(taskId ?? ""), outcome: String(outcome ?? ""), ...(typeof text === "string" ? { text: text.slice(0, 5000) } : {}) });
+    refresh();
+    revalidatePath("/tasks");
+    revalidatePath("/customers", "layout");
     return { note };
   });
 }

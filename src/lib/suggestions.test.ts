@@ -120,6 +120,19 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
     expect(error({ kind: "NOTE", text: "x", confidence: "certain" })).toMatch(/confidence/);
   });
 
+  it("accepts a task update naming an open task, with an outcome (default: just log it)", () => {
+    const base = { kind: "TASK_UPDATE", taskId: "cmgx1abcd0001xyz", text: "Yechiel answered: 2 MCs, an AC feed per MC, no PDUs for SPT." };
+    expect(ok({ ...base, outcome: "resolved" }).payload).toEqual({ kind: "TASK_UPDATE", taskId: "cmgx1abcd0001xyz", text: base.text, outcome: "RESOLVED" });
+    expect(ok({ ...base, outcome: "waiting-customer" }).payload).toMatchObject({ outcome: "WAITING_CUSTOMER" });
+    expect(ok(base).payload).toMatchObject({ outcome: "LOG" });
+    expect(error({ ...base, outcome: "DONE" })).toMatch(/outcome/);
+    expect(error({ ...base, taskId: "" })).toMatch(/taskId/);
+    expect(error({ ...base, taskId: "a b; drop" })).toMatch(/taskId/);
+    expect(error({ kind: "TASK_UPDATE", taskId: "cmgx1abcd0001xyz" })).toMatch(/text/);
+    expect(describePayload(ok({ ...base, outcome: "RESOLVED" }).payload)).toMatch(/^Resolve the task: Yechiel answered/);
+    expect(describePayload(ok({ ...base, outcome: "WAITING_US" }).payload)).toMatch(/Waiting on us/);
+  });
+
   it("says in plain words what approving a status change or an action item does", () => {
     expect(describePayload(ok({ kind: "STATUS_CHANGE", item: "Layout Approval", phase: "DESIGN", status: "DONE" }).payload)).toBe('Set "Layout Approval" (Design) to Done');
     expect(describePayload(ok({ kind: "ACTION_ITEM", text: "Send the layout", who: "Dan", by: "Friday" }).payload)).toBe("Create a task for Dan, due Friday: Send the layout");

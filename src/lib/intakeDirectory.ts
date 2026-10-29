@@ -61,6 +61,25 @@ export function shapeRecent(list: RecentSource[] | undefined): RecentProposal[] 
   }));
 }
 
+// The tasks still open (resolved ones are never listed), so an email that answers one can name it (TASK_UPDATE). Only the
+// task's one-line topic, state, owner's name and last correspondence day, plus the email chain it started in (the subject
+// and the conversation id, when the task was made from an email): never its details, notes or log.
+export type OpenTaskView = { id: string; topic: string; status: string; owner: string | null; lastContact: string | null; thread: string | null; conversationId: string | null };
+export type OpenTaskSource = { id: string; topic: string; status: string; ownerName: string | null; lastContactAt: string | null; subjects: string[]; conversationIds: string[]; subjectText?: string | null };
+export const MAX_OPEN_TASKS_PER_OWNER = 30;
+
+export function shapeOpenTasks(list: OpenTaskSource[] | undefined): OpenTaskView[] {
+  return (list ?? []).slice(0, MAX_OPEN_TASKS_PER_OWNER).map((t) => ({
+    id: t.id,
+    topic: t.topic.slice(0, 150),
+    status: t.status,
+    owner: t.ownerName,
+    lastContact: t.lastContactAt,
+    thread: (t.subjectText ?? t.subjects[0] ?? "").slice(0, 120) || null,
+    conversationId: t.conversationIds[0] ?? null,
+  }));
+}
+
 export type CustomerView = {
   id: string;
   name: string;
@@ -69,6 +88,8 @@ export type CustomerView = {
   contacts: { name: string; email: string | null; role: string | null }[];
   // proposals about this customer in general (no project) in the last two weeks
   recentProposals: RecentProposal[];
+  // this customer's open tasks that are not tied to a project
+  openTasks: OpenTaskView[];
 };
 
 export type CustomerSource = {
@@ -77,6 +98,7 @@ export type CustomerSource = {
   aliases: { alias: string }[];
   contacts: { id: string; name: string; email: string | null; role: string | null }[];
   recentSuggestions?: RecentSource[]; // newest first
+  openTasks?: OpenTaskSource[];
 };
 
 export function shapeCustomer(c: CustomerSource): CustomerView {
@@ -94,6 +116,7 @@ export function shapeCustomer(c: CustomerSource): CustomerView {
     // the same person on several projects is listed once
     contacts: groupContacts(rows).map((p) => ({ name: p.name, email: p.email, role: p.role })),
     recentProposals: shapeRecent(c.recentSuggestions),
+    openTasks: shapeOpenTasks(c.openTasks),
   };
 }
 
@@ -112,6 +135,8 @@ export type ProjectView = {
   pendingProposals: { kind: string; summary: string }[];
   // everything proposed for this project in the last two weeks, whatever its status (newest first): see RecentProposal
   recentProposals: RecentProposal[];
+  // the project's open tasks (see OpenTaskView), so an email that answers one can update or resolve it
+  openTasks: OpenTaskView[];
   // the project's change orders (their names and state only, no amounts), so an invoice can update the right one
   changeOrders: { name: string; status: string; invoiceStatus: string | null }[];
 };
@@ -130,6 +155,7 @@ export type ProjectSource = {
   phases: { name: string; status: string; order: number; statusUpdate: string | null; statusUpdateAt: Date | null }[];
   suggestions: { kind: string; summary: string }[]; // PENDING ones, newest first
   recentSuggestions?: RecentSource[]; // the last two weeks, any status, newest first
+  openTasks?: OpenTaskSource[];
   changeOrders: { reason: string; status: string; invoiceStatus: string | null }[];
 };
 
@@ -161,6 +187,7 @@ export function shapeProject(p: ProjectSource): ProjectView {
       })),
     pendingProposals: p.suggestions.slice(0, MAX_PENDING_PER_PROJECT).map((s) => ({ kind: s.kind, summary: s.summary })),
     recentProposals: shapeRecent(p.recentSuggestions),
+    openTasks: shapeOpenTasks(p.openTasks),
     changeOrders: p.changeOrders.map((c) => ({ name: c.reason.replace(/\s+/g, " ").trim().slice(0, 150), status: c.status, invoiceStatus: c.invoiceStatus })),
   };
 }

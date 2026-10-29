@@ -53,7 +53,7 @@ describe("shapeCustomer", () => {
 
   it("contains exactly the agreed fields (no phone numbers or anything else)", () => {
     const v = shapeCustomer(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "contacts", "emailDomains", "id", "name", "recentProposals"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "contacts", "emailDomains", "id", "name", "openTasks", "recentProposals"]);
     for (const c of v.contacts) expect(Object.keys(c).sort()).toEqual(["email", "name", "role"]);
   });
 });
@@ -114,6 +114,23 @@ describe("shapeProject", () => {
     const many = Array.from({ length: 50 }, (_, i) => ({ ...recent[0], summary: `n${i}` }));
     expect(shapeProject({ ...source, recentSuggestions: many }).recentProposals).toHaveLength(30);
   });
+  it("lists the open tasks with the email chain each started in, and nothing else of the task", () => {
+    const openTasks = [
+      { id: "task-aaaa1111", topic: "367: Greenergy asks for the number of MC panels", status: "OPEN", ownerName: "Yechiel", lastContactAt: "2026-10-28", subjects: ["367 valfabbrica initial layout"], conversationIds: ["AAQk"], subjectText: "367 Valfabbrica Initial layout" },
+      { id: "task-bbbb2222", topic: "By hand", status: "WAITING_CUSTOMER", ownerName: null, lastContactAt: null, subjects: [], conversationIds: [] },
+    ];
+    const v = shapeProject({ ...source, openTasks });
+    expect(v.openTasks).toEqual([
+      { id: "task-aaaa1111", topic: "367: Greenergy asks for the number of MC panels", status: "OPEN", owner: "Yechiel", lastContact: "2026-10-28", thread: "367 Valfabbrica Initial layout", conversationId: "AAQk" },
+      { id: "task-bbbb2222", topic: "By hand", status: "WAITING_CUSTOMER", owner: null, lastContact: null, thread: null, conversationId: null },
+    ]);
+    expect(Object.keys(v.openTasks[0]).sort()).toEqual(["conversationId", "id", "lastContact", "owner", "status", "thread", "topic"]);
+    expect(shapeProject(source).openTasks).toEqual([]);
+    expect(shapeCustomer({ id: "c1", name: "X", aliases: [], contacts: [], openTasks }).openTasks).toHaveLength(2);
+    const many = Array.from({ length: 50 }, (_, i) => ({ ...openTasks[1], id: `task-${i}` }));
+    expect(shapeProject({ ...source, openTasks: many }).openTasks).toHaveLength(30);
+  });
+
   it("lists each change order by name and state only: never an amount", () => {
     const v = shapeProject(source);
     expect(v.changeOrders).toEqual([{ name: "Change Order 02: additional PDUs", status: "SENT", invoiceStatus: null }]);
@@ -127,7 +144,7 @@ describe("shapeProject", () => {
 
   it("contains exactly the agreed fields and never the SharePoint link", () => {
     const v = shapeProject(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "name", "number", "pendingProposals", "phases", "recentProposals", "stage", "status"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "name", "number", "openTasks", "pendingProposals", "phases", "recentProposals", "stage", "status"]);
     for (const ph of v.phases) expect(Object.keys(ph).sort()).toEqual(["phase", "status", "update"]);
     expect(JSON.stringify(v)).not.toMatch(/https?:|sharepoint\.com/i);
   });

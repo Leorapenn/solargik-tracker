@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { CORRESPONDENCE_KINDS, shapeAndSort, type CorrespondenceItem } from "@/lib/correspondence";
-import { TASK_RESULT_PREFIX } from "@/lib/suggestions";
+import { TASK_RESULT_ANY } from "@/lib/suggestions";
 
 const MAX_ITEMS = 100;
 
-// An action item that became a task is on the Tasks tab, not here (older ones, from before that, stay as history).
-const notATask = { OR: [{ resultNote: null }, { NOT: { resultNote: { startsWith: TASK_RESULT_PREFIX } } }] };
+// An action item that became a task, or a note that went into a task's log, is on the Tasks tab, not here (older ones, from
+// before that, stay as history). Their result notes all start with "Task " ("Task created", "Task updated", "Task resolved").
+const notATask = { OR: [{ resultNote: null }, { NOT: { resultNote: { startsWith: TASK_RESULT_ANY } } }] };
 
 const select = { id: true, kind: true, summary: true, payload: true, sourceFrom: true, sourceSubject: true, sourceLink: true, sourceReceivedAt: true, reviewedAt: true, createdAt: true, doneAt: true } as const;
 

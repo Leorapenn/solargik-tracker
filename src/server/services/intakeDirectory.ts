@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { MAX_PENDING_PER_PROJECT, MAX_RECENT_PER_PROJECT, RECENT_DAYS, shapeCustomer, shapeProject, type CustomerView, type ProjectView } from "@/lib/intakeDirectory";
+import { openTasksByOwner } from "@/server/services/taskMatch";
 
 // Everything proposed in the last RECENT_DAYS days, newest first, grouped by project and, for proposals with no project, by
 // customer. One query for all of them (the relation can't be selected twice with different filters).
@@ -36,7 +37,8 @@ export async function listCustomersForMatching(): Promise<CustomerView[]> {
     },
   });
   const { byCustomer } = await recentByOwner();
-  return rows.map((c) => shapeCustomer({ ...c, recentSuggestions: byCustomer.get(c.id) }));
+  const tasks = await openTasksByOwner();
+  return rows.map((c) => shapeCustomer({ ...c, recentSuggestions: byCustomer.get(c.id), openTasks: tasks.byCustomer.get(c.id) }));
 }
 
 // The names of the items every project has, by phase ("DESIGN": ["Layout Approval", ...]), so a status change can
@@ -64,5 +66,6 @@ export async function listProjectsForMatching(): Promise<ProjectView[]> {
     },
   });
   const { byProject } = await recentByOwner();
-  return rows.map((p) => shapeProject({ ...p, recentSuggestions: byProject.get(p.id) })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const tasks = await openTasksByOwner();
+  return rows.map((p) => shapeProject({ ...p, recentSuggestions: byProject.get(p.id), openTasks: tasks.byProject.get(p.id) })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }

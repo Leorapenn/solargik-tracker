@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { approve, approveAsTask, reject } from "@/server/actions/suggestions";
+import { approve, approveAsTask, approveForTask, reject } from "@/server/actions/suggestions";
 import type { SuggestionView } from "@/server/services/suggestions";
+import type { OpenTaskChoice } from "@/server/services/taskMatch";
+import { TASK_OUTCOMES, matchTasksToEmail } from "@/lib/taskMatch";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { DateField } from "@/components/DateField";
 import { TaskForm, type PersonOption } from "@/components/TaskForm";
@@ -15,10 +17,15 @@ import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryButton, se
 type ChangeOrderFields = { reason: string; amount: string; dateSent: string; invoicedDate: string; invoiceStatus: string; paymentTermsDays: string };
 const fieldLabel = { fontSize: 12.5, fontWeight: 700, color: NAVY, display: "flex", flexDirection: "column" as const, gap: 4 };
 
-const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+const TEXT_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "TASK_UPDATE"];
 // a note only records that someone looked at it, and an action item becomes a task: neither needs a project (one can
 // still be picked), but an action item needs a customer or a project (the task is for a customer)
-const REVIEW_ONLY = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE"];
+const REVIEW_ONLY = ["NOTE", "ACTION_ITEM", "CORRESPONDENCE_NOTE", "TASK_UPDATE"];
+
+const taskLabel = (t: OpenTaskChoice) => {
+  const label = `${t.customerName}${t.projectName ? ` · ${t.projectName}` : ""}: ${t.topic}`;
+  return label.length > 110 ? `${label.slice(0, 109)}…` : label;
+};
 // a new project is not about an existing one: it needs a customer, not a project
 const CURRENCY_CODES = ["USD", "EUR", "ILS", "GBP", "CHF", "CAD"];
 const CONFIDENCE_STYLE: Record<string, { bg: string; text: string; label: string }> = {
@@ -43,13 +50,25 @@ export function SuggestionCard({
   projects,
   customers,
   people,
+  openTasks = [],
 }: {
   s: SuggestionView;
   projects: { id: string; name: string; currency: string; customerId: string }[];
   customers: { id: string; name: string }[];
   people: PersonOption[];
+  openTasks?: OpenTaskChoice[];
 }) {
   const pending = s.status === "PENDING";
+  // An open task this email may be about: the same email chain, else the same subject in the same project or customer.
+  // A task update names its task itself; a note in the task's chain can be approved as the answer to it.
+  const isTaskUpdate = s.payload.kind === "TASK_UPDATE";
+  const canAnswerTask = pending && (s.payload.kind === "NOTE" || s.payload.kind === "CORRESPONDENCE_NOTE");
+  const match = pending ? matchTasksToEmail({ conversationId: s.conversationId, sourceSubject: s.sourceSubject, projectId: s.projectId, customerId: s.customerId }, openTasks) : null;
+  const candidates = match ? openTasks.filter((t) => match.candidateIds.includes(t.id)) : [];
+  // the picker lists the likely tasks first, then the rest of that customer's open tasks (every open task when the customer is unknown)
+  const taskChoices = [...candidates, ...openTasks.filter((t) => !candidates.some((c) => c.id === t.id) && (!s.customerId || t.customerId === s.customerId))];
+  const [taskId, setTaskId] = useState(s.payload.kind === "TASK_UPDATE" ? s.payload.taskId : (match?.taskId ?? ""));
+  const [outcome, setOutcome] = useState<string>(s.payload.kind === "TASK_UPDATE" ? s.payload.outcome : "RESOLVED");
   // "Create task": opens the New task form prefilled from this proposal (nothing is saved until Add task there)
   const [creatingTask, setCreatingTask] = useState(false);
   const [taskCreated, setTaskCreated] = useState(false);
@@ -145,6 +164,55 @@ export function SuggestionCard({
           onChange={(e) => setText(e.target.value)}
           style={{ ...inputStyle, width: "100%", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical" }}
         />
+      )}
+
+      {pending && s.kind === "ACTION_ITEM" && candidates.length > 0 && (
+        <div style={{ fontSize: 13.5, padding: "8px 12px", borderRadius: 8, background: "#FFF6E0", color: "#6B4A00" }}>
+          An open task already exists in this email chain: {candidates.map((t) => `“${t.topic}”`).join(", ")}. Check the Tasks tab before creating another.
+        </div>
+      )}
+      {canAnswerTask && candidates.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 14px", border: "1px solid #BFD3F2", borderRadius: 10, background: "#F2F7FE" }}>
+          <div style={{ fontSize: 13.5, color: NAVY }}>
+            <strong>{candidates.length === 1 ? "This looks like an answer to an open task" : "This may be an answer to one of these open tasks"}</strong>
+            {match?.how === "conversation" ? " (same email chain)" : " (same subject and project)"}:{" "}
+            {candidates.length === 1 ? `“${candidates[0].topic}”${candidates[0].ownerName ? `, owner ${candidates[0].ownerName}` : ""}.` : "pick the task, then choose what this email does to it."}
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            {candidates.length > 1 && (
+              <select aria-label="Task this email answers" value={taskId} onChange={(e) => setTaskId(e.target.value)} style={{ ...inputStyle, maxWidth: 360, borderColor: taskId ? undefined : "#F0C069" }}>
+                <option value="">Pick the task</option>
+                {candidates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {taskLabel(t)}
+                  </option>
+                ))}
+              </select>
+            )}
+            <select aria-label="What this email does to the task" value={outcome} onChange={(e) => setOutcome(e.target.value)} style={{ ...inputStyle, maxWidth: 260 }}>
+              {TASK_OUTCOMES.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              style={primaryButton}
+              disabled={busy || !taskId}
+              title="Adds this email to the task's log and approves this note. It does not change anything else."
+              onClick={() =>
+                startTransition(async () => {
+                  setMessage(null);
+                  const result = await approveForTask(s.id, taskId, outcome, editing || text !== textPayload ? text : undefined);
+                  setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
+                })
+              }
+            >
+              {busy ? "Working…" : outcome === "RESOLVED" ? "Resolve task" : "Update task"}
+            </button>
+          </div>
+        </div>
       )}
 
       {pending && isChangeOrder && (
@@ -301,7 +369,26 @@ export function SuggestionCard({
 
       {pending ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          {!isNewProject && !isTaskProposal && <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
+          {isTaskUpdate && (
+            <>
+              <select aria-label="Task" value={taskId} onChange={(e) => setTaskId(e.target.value)} style={{ ...inputStyle, maxWidth: 360, borderColor: taskId ? undefined : "#F0C069" }}>
+                <option value="">Pick the task</option>
+                {taskChoices.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {taskLabel(t)}
+                  </option>
+                ))}
+              </select>
+              <select aria-label="What this email does to the task" value={outcome} onChange={(e) => setOutcome(e.target.value)} style={{ ...inputStyle, maxWidth: 260 }}>
+                {TASK_OUTCOMES.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+          {!isNewProject && !isTaskProposal && !isTaskUpdate && <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
             <option value="">{s.projectRef ? `Pick the project (email says “${s.projectRef}”)` : needsProject ? "Pick the project" : "No project (optional)"}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -319,7 +406,7 @@ export function SuggestionCard({
               ))}
             </select>
           )}
-          {!needsProject && !isNewProject && !isTaskProposal && !projectId && (
+          {!needsProject && !isNewProject && !isTaskProposal && !isTaskUpdate && !projectId && (
             <select aria-label="Customer" value={customerId} onChange={(e) => setCustomerId(e.target.value)} style={{ ...inputStyle, maxWidth: 260, borderColor: customerId ? undefined : "#F0C069" }}>
               <option value="">{s.kind === "ACTION_ITEM" ? "Pick the customer for the task" : "General item: pick the customer"}</option>
               {customers.map((c) => (
@@ -339,7 +426,24 @@ export function SuggestionCard({
               {creatingTask ? "Cancel task" : "Create task"}
             </button>
           )}
-          {!isTaskProposal && (
+          {isTaskUpdate && (
+            <button
+              type="button"
+              style={primaryButton}
+              disabled={busy || !taskId}
+              title="Adds this to the task's log and sets the task's status as chosen. Nothing else changes."
+              onClick={() =>
+                startTransition(async () => {
+                  setMessage(null);
+                  const result = await approveForTask(s.id, taskId, outcome, editing || text !== textPayload ? text : undefined);
+                  setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
+                })
+              }
+            >
+              {busy ? "Working…" : outcome === "RESOLVED" ? "Resolve task" : "Update task"}
+            </button>
+          )}
+          {!isTaskProposal && !isTaskUpdate && (
           <button
             type="button"
             style={primaryButton}

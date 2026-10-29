@@ -7,6 +7,7 @@ import { listSuggestions, pendingCount, type SuggestionView } from "@/server/ser
 import { groupThreads } from "@/lib/threads";
 import { ThreadBlock } from "@/components/ThreadBlock";
 import { getLastImport } from "@/server/services/importRuns";
+import { listOpenTasksForCards } from "@/server/services/taskMatch";
 import { formatRunTime } from "@/lib/importRun";
 import { SuggestionCard } from "@/components/SuggestionCard";
 import { CopyBox } from "@/components/CopyBox";
@@ -27,22 +28,25 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const raw = Array.isArray(params.status) ? params.status[0] : params.status;
   const status = TABS.find((t) => t.key === raw?.toUpperCase())?.key ?? "PENDING";
 
-  const [items, projects, customers, waiting, lastRun, people] = await Promise.all([
+  const [items, projects, customers, waiting, lastRun, people, openTasks] = await Promise.all([
     listSuggestions(status),
     prisma.project.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, paymentCurrency: true, customerId: true } }),
     prisma.customer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     pendingCount(),
     getLastImport(),
     prisma.person.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    // the open tasks, with the email chain each started in: a reply in that chain is offered as the answer to the task
+    status === "PENDING" ? listOpenTasksForCards().catch(() => []) : Promise.resolve([]),
   ]);
   const projectChoices = projects.map((p) => ({ id: p.id, name: p.name, currency: p.paymentCurrency, customerId: p.customerId }));
-  const unmatched = items.filter((s) => !s.projectId);
-  const matched = items.filter((s) => s.projectId);
+  // an update to a task belongs to the task's customer, so it is not "unmatched" even when the task has no project
+  const unmatched = items.filter((s) => !s.projectId && s.kind !== "TASK_UPDATE");
+  const matched = items.filter((s) => s.projectId || s.kind === "TASK_UPDATE");
   const connected = Boolean(process.env.INTAKE_TOKEN && process.env.INTAKE_TOKEN.length >= 16);
   const endpoint = `${baseUrl().replace(/\/$/, "")}/api/intake/suggestions`;
 
   // proposals from the same email chain are shown together; a chain of one proposal is just its card
-  const card = (s: SuggestionView) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} />;
+  const card = (s: SuggestionView) => <SuggestionCard key={s.id} s={s} projects={projectChoices} customers={customers} people={people} openTasks={openTasks} />;
   const threads = (list: SuggestionView[]) =>
     groupThreads(list).map((th) => (th.rows.length > 1 ? <ThreadBlock key={th.key} thread={th}>{th.rows.map(card)}</ThreadBlock> : card(th.rows[0])));
 
