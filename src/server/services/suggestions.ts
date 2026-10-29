@@ -216,8 +216,11 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
     const label = ITEM_STATUS_LABELS[payload.status];
     if (item.status === payload.status) return `"${item.name}" was already ${label}.`;
     // the same path as changing the status by hand: dates are stamped, the history is written, the phase is re-derived
-    await prisma.$transaction((tx) => patchSubStages(tx, [item.id], { status: payload.status }, "inbox"), { timeout: 20000 });
-    return `"${item.name}" set to ${label}.`;
+    // a delivery confirmation names the day it really happened: that is the completed date (not the day it is approved)
+    if (payload.date && payload.status === "DONE" && payload.date > toDateInputValue(todayInAppTz())) throw new UserError(`The date ${payload.date} is in the future: a completed date can't be. Reject this or correct the email.`);
+    const completedAt = payload.date && payload.status === "DONE" ? day(payload.date) : undefined;
+    await prisma.$transaction((tx) => patchSubStages(tx, [item.id], { status: payload.status, ...(completedAt ? { completedAt } : {}) }, "inbox"), { timeout: 20000 });
+    return `"${item.name}" set to ${label}${completedAt ? ` (completed ${payload.date})` : ""}.`;
   }
 
   if (payload.kind === "MILESTONE_UPDATE") {

@@ -133,6 +133,15 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
     expect(describePayload(ok({ ...base, outcome: "WAITING_US" }).payload)).toMatch(/Waiting on us/);
   });
 
+  it("takes the day it really happened with DONE only (a delivery confirmation), and says so in plain words", () => {
+    const done = ok({ kind: "STATUS_CHANGE", item: "Delivery – Tracker Structure", phase: "SUPPLY", status: "done", date: "2026-10-20" }).payload;
+    expect(done).toEqual({ kind: "STATUS_CHANGE", item: "Delivery – Tracker Structure", phase: "SUPPLY", status: "DONE", date: "2026-10-20" });
+    expect(describePayload(done)).toBe('Set "Delivery – Tracker Structure" (Supply) to Done, completed on 2026-10-20');
+    expect(ok({ kind: "STATUS_CHANGE", item: "Layout Approval", status: "DONE" }).payload).not.toHaveProperty("date"); // none given: none stored
+    expect(error({ kind: "STATUS_CHANGE", item: "x", status: "IN_PROGRESS", date: "2026-10-20" })).toMatch(/only go with status DONE/);
+    expect(error({ kind: "STATUS_CHANGE", item: "x", status: "DONE", date: "20/10/2026" })).toMatch(/date/);
+  });
+
   it("accepts one task update for several tasks (taskIds), the first being the taskId, with no duplicates and at most ten", () => {
     const base = { kind: "TASK_UPDATE", text: "Answered both questions.", outcome: "RESOLVED" };
     const many = ok({ ...base, taskIds: ["cmgx1abcd0001aaa", "cmgx1abcd0002bbb", "cmgx1abcd0001aaa"] }).payload;

@@ -126,6 +126,24 @@ describe("suggestions", () => {
     expect(await prisma.subStage.count({ where: { phase: { projectId }, name: { contains: "Delivery" }, status: "DONE" } })).toBe(0);
   });
 
+  it("sets Done on the day a delivery really happened (the completed date), never a day in the future, and only with DONE", async () => {
+    const wrong = await createSuggestions([{ kind: "STATUS_CHANGE", item: "Manufacturing Start", phase: "SUPPLY", status: "IN_PROGRESS", date: "2026-10-20", summary: "s", id: `${RUN}-d0` }]);
+    expect(wrong).toMatchObject({ created: 0 });
+    expect(wrong.rejected[0].error).toMatch(/only go with status DONE/);
+
+    const item = await prisma.subStage.findFirstOrThrow({ where: { phase: { projectId, name: "SUPPLY" }, name: "Manufacturing Start" } });
+    const future = await send({ kind: "STATUS_CHANGE", item: item.name, phase: "SUPPLY", status: "DONE", date: "2999-01-01", id: `${RUN}-d1`, project: projectName });
+    await expect(approveSuggestion(future.row!.id)).rejects.toThrow(/in the future/);
+    expect((await prisma.subStage.findUniqueOrThrow({ where: { id: item.id } })).status).toBe("NOT_STARTED");
+
+    const { row } = await send({ kind: "STATUS_CHANGE", item: item.name, phase: "SUPPLY", status: "DONE", date: "2026-10-20", id: `${RUN}-d2`, project: projectName });
+    expect(row!.payload).toMatchObject({ date: "2026-10-20" });
+    expect(await approveSuggestion(row!.id)).toBe(`"${item.name}" set to Done (completed 2026-10-20).`);
+    const after = await prisma.subStage.findUniqueOrThrow({ where: { id: item.id } });
+    expect(after.status).toBe("DONE");
+    expect(after.completedAt?.toISOString().slice(0, 10)).toBe("2026-10-20");
+  });
+
   describe("change orders", () => {
     const orders = () => prisma.changeOrder.findMany({ where: { projectId }, orderBy: { createdAt: "asc" } });
     const emailLink = (n: string) => `https://outlook.office.com/mail/${RUN}-${n}`;

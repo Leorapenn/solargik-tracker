@@ -59,7 +59,9 @@ export const MAX_TASKS_PER_UPDATE = 10;
 export type Payload =
   | { kind: "PHASE_UPDATE"; phase: PhaseName; text: string }
   | { kind: "ITEM_UPDATE"; phase: PhaseName | null; item: string; text: string }
-  | { kind: "STATUS_CHANGE"; phase: PhaseName | null; item: string; status: ItemStatus }
+  // `date` (only with DONE): the day it really happened, e.g. the delivery day on a signed proof of delivery. It becomes the item's
+  // completed date (a warranty or a payment milestone counts from it); without it the completed date is the day it is approved.
+  | { kind: "STATUS_CHANGE"; phase: PhaseName | null; item: string; status: ItemStatus; date?: string }
   // A change order the email announces. Approving CREATES it on the Payments page (links only, never files): fileLink
   // is the email that carries the change order document, invoiceLink the one that carries its invoice. `currency`
   // is what the email says the amount is in; it is only checked against the project's payment currency.
@@ -227,7 +229,10 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     if (raw.phase && !phase) return { ok: false, error: `"phase" must be one of: ${PHASE_ORDER.join(", ")}.` };
     const status = itemStatusOf(raw.status);
     if (!status) return { ok: false, error: `"status" must be one of: ${ITEM_STATUSES.join(", ")}.` };
-    payload = { kind, phase, item, status };
+    const happened = optionalDate(raw, "date");
+    if (!happened.ok) return happened;
+    if (happened.value && status !== "DONE") return { ok: false, error: `"date" (the day it happened) can only go with status DONE.` };
+    payload = happened.value ? { kind, phase, item, status, date: happened.value } : { kind, phase, item, status };
   } else if (kind === "CHANGE_ORDER" || kind === "CHANGE_ORDER_UPDATE") {
     const amount = kind === "CHANGE_ORDER" ? cleanAmount(raw.amount) : ({ ok: true, value: null } as Result<string | null>);
     if (!amount.ok) return amount;
@@ -432,6 +437,7 @@ export function agentInstructions(endpoint: string): string {
     "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'. Put the email's own id in source.messageId AND the id of its conversation (the whole email chain) in source.conversationId, so the tracker shows the proposals of one chain together; say how sure you are in 'confidence' (high, medium or low).",
     "- CHANGE_ORDER when an email announces a NEW change order: reason (what it is for, e.g. \"Change Order 02: additional PDUs\"), and only what the email states: amount as a plain number (no thousands separators), currency, dateSent, invoicedDate, paymentTermsDays. Put this email's Outlook web link in fileLink when the change order document is attached to it. Approving it CREATES the change order on the Payments page, so never guess an amount, date or term. When the INVOICE for an existing change order arrives, use CHANGE_ORDER_UPDATE (changeOrder = its name as in the project's changeOrders list, invoicedDate, invoiceStatus SENT or PAID, paymentTermsDays, and the email's link in invoiceLink) instead of creating a second one.",
     "- MATCH AN INVOICE TO THE PROJECT'S MILESTONES: every project in the projects list has \"milestones\" (name, percent of the contract, status). An invoice line (\"Advance payment 35%\", \"Milestone 2\", \"Pylon 20%\") belongs to the ONE milestone whose name or percent it states: for example an invoice for 35% with 'Advance payment' in it matches the milestone named \"Advance payment\" whose percent is 35. Send a MILESTONE_UPDATE with that milestone's name exactly as listed, and the SharePoint link of the saved invoice PDF in invoiceLink. When the invoice's percent equals the SUM of several milestones, or no single milestone matches, send a CORRESPONDENCE_NOTE instead of guessing. A milestone already INVOICE_SENT or PAYMENT_RECEIVED is not proposed again.",
+    "- SHIPPING EMAILS: mail from (or forwarded from) a freight forwarder, customs broker, shipping line or trucking company about goods on their way (booked or shipped with containers and dates, arrival at the port, customs documents or release, delivery to the site, proof of delivery). Name the project by its number as in the subject or the packing list (e.g. \"Project 360\", \"360 - PYLONS\"). Send an ITEM_UPDATE on the matching SUPPLY Delivery item (\"Delivery – Piles\" = foundation piles, \"Delivery – Tracker Structure\" = pylons, torque tubes, beams, \"Delivery – Drive Units & I&C\" = motors, drive units, control boxes, cables) with the facts and dates as written; an ACTION_ITEM for each question someone must answer or document someone must send (who answers: say it); and, only for a signed proof of delivery of the WHOLE item, a STATUS_CHANGE to DONE with date = the delivery day. A partial delivery is an ITEM_UPDATE only. If the goods do not clearly map to one item, send a PHASE_UPDATE on SUPPLY. Do not save packing lists or customs papers, never state amounts.",
     "- INVOICE FOR A MILESTONE: when accounting (e.g. Hadassa) sends the copy of a milestone invoice for the first time, send a MILESTONE_UPDATE with status INVOICE_SENT, invoiceSentDate (the invoice date printed on the invoice; if it is not readable, the day the email was sent), the invoice link, and paymentTermsDays ONLY if the invoice or email states the terms (\"Net 30\" = 30, \"Net 10\" = 10, \"immediate\" = 0). If no terms are stated leave paymentTermsDays out: the tracker uses 30 days. The tracker calculates the due date (invoice date + terms) and shows Overdue by itself. For change orders the terms are 30 or 10 days as the change order or email states: always send paymentTermsDays when it is written.",
     "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
     "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
@@ -455,7 +461,7 @@ export function describePayload(p: Payload): string {
     case "ITEM_UPDATE":
       return `Set the update of "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to: ${p.text}`;
     case "STATUS_CHANGE":
-      return `Set "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to ${ITEM_STATUS_LABELS[p.status]}`;
+      return `Set "${p.item}"${p.phase ? ` (${phaseShortName(p.phase)})` : ""} to ${ITEM_STATUS_LABELS[p.status]}${p.date ? `, completed on ${p.date}` : ""}`;
     case "CHANGE_ORDER": {
       const parts = [
         p.amount ? `amount ${p.amount}${p.currency ? ` ${p.currency}` : ""}` : "no amount stated",
