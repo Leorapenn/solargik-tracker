@@ -67,8 +67,21 @@ export function SuggestionCard({
   const candidates = match ? openTasks.filter((t) => match.candidateIds.includes(t.id)) : [];
   // the picker lists the likely tasks first, then the rest of that customer's open tasks (every open task when the customer is unknown)
   const taskChoices = [...candidates, ...openTasks.filter((t) => !candidates.some((c) => c.id === t.id) && (!s.customerId || t.customerId === s.customerId))];
-  const [taskId, setTaskId] = useState(s.payload.kind === "TASK_UPDATE" ? s.payload.taskId : (match?.taskId ?? ""));
+  // one proposal can settle several tasks: tick each one it applies to
+  const [taskIds, setTaskIds] = useState<string[]>(s.payload.kind === "TASK_UPDATE" ? (s.payload.taskIds ?? [s.payload.taskId]) : match?.taskId ? [match.taskId] : []);
+  const toggleTask = (id: string) => setTaskIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   const [outcome, setOutcome] = useState<string>(s.payload.kind === "TASK_UPDATE" ? s.payload.outcome : "RESOLVED");
+  const taskButton = outcome === "RESOLVED" ? (taskIds.length > 1 ? `Resolve ${taskIds.length} tasks` : "Resolve task") : taskIds.length > 1 ? `Update ${taskIds.length} tasks` : "Update task";
+  const taskChecks = (list: OpenTaskChoice[]) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      {list.map((t) => (
+        <label key={t.id} style={{ fontSize: 13.5, display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+          <input type="checkbox" checked={taskIds.includes(t.id)} onChange={() => toggleTask(t.id)} style={{ marginTop: 3 }} />
+          <span style={{ overflowWrap: "anywhere" }}>{taskLabel(t)}</span>
+        </label>
+      ))}
+    </div>
+  );
   // "Create task": opens the New task form prefilled from this proposal (nothing is saved until Add task there)
   const [creatingTask, setCreatingTask] = useState(false);
   const [taskCreated, setTaskCreated] = useState(false);
@@ -174,21 +187,12 @@ export function SuggestionCard({
       {canAnswerTask && candidates.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "10px 14px", border: "1px solid #BFD3F2", borderRadius: 10, background: "#F2F7FE" }}>
           <div style={{ fontSize: 13.5, color: NAVY }}>
-            <strong>{candidates.length === 1 ? "This looks like an answer to an open task" : "This may be an answer to one of these open tasks"}</strong>
+            <strong>{candidates.length === 1 ? "This looks like an answer to an open task" : "This may answer these open tasks"}</strong>
             {match?.how === "conversation" ? " (same email chain)" : " (same subject and project)"}:{" "}
-            {candidates.length === 1 ? `“${candidates[0].topic}”${candidates[0].ownerName ? `, owner ${candidates[0].ownerName}` : ""}.` : "pick the task, then choose what this email does to it."}
+            {candidates.length === 1 ? `“${candidates[0].topic}”${candidates[0].ownerName ? `, owner ${candidates[0].ownerName}` : ""}.` : "tick every task this email settles, then choose what it does to them."}
           </div>
+          {candidates.length > 1 && taskChecks(candidates)}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            {candidates.length > 1 && (
-              <select aria-label="Task this email answers" value={taskId} onChange={(e) => setTaskId(e.target.value)} style={{ ...inputStyle, maxWidth: 360, borderColor: taskId ? undefined : "#F0C069" }}>
-                <option value="">Pick the task</option>
-                {candidates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {taskLabel(t)}
-                  </option>
-                ))}
-              </select>
-            )}
             <select aria-label="What this email does to the task" value={outcome} onChange={(e) => setOutcome(e.target.value)} style={{ ...inputStyle, maxWidth: 260 }}>
               {TASK_OUTCOMES.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -199,17 +203,17 @@ export function SuggestionCard({
             <button
               type="button"
               style={primaryButton}
-              disabled={busy || !taskId}
-              title="Adds this email to the task's log and approves this note. It does not change anything else."
+              disabled={busy || taskIds.length === 0}
+              title="Adds this email to the log of each ticked task and approves this note. It does not change anything else."
               onClick={() =>
                 startTransition(async () => {
                   setMessage(null);
-                  const result = await approveForTask(s.id, taskId, outcome, editing || text !== textPayload ? text : undefined);
+                  const result = await approveForTask(s.id, taskIds, outcome, editing || text !== textPayload ? text : undefined);
                   setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
                 })
               }
             >
-              {busy ? "Working…" : outcome === "RESOLVED" ? "Resolve task" : "Update task"}
+              {busy ? "Working…" : taskButton}
             </button>
           </div>
         </div>
@@ -367,18 +371,17 @@ export function SuggestionCard({
         </div>
       )}
 
+      {pending && isTaskUpdate && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: NAVY }}>Tasks this email settles (tick every one it applies to)</div>
+          {taskChoices.length === 0 ? <div style={{ fontSize: 13.5, color: TEXT_MUTED }}>No open task is left for this customer.</div> : taskChecks(taskChoices)}
+        </div>
+      )}
+
       {pending ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           {isTaskUpdate && (
             <>
-              <select aria-label="Task" value={taskId} onChange={(e) => setTaskId(e.target.value)} style={{ ...inputStyle, maxWidth: 360, borderColor: taskId ? undefined : "#F0C069" }}>
-                <option value="">Pick the task</option>
-                {taskChoices.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {taskLabel(t)}
-                  </option>
-                ))}
-              </select>
               <select aria-label="What this email does to the task" value={outcome} onChange={(e) => setOutcome(e.target.value)} style={{ ...inputStyle, maxWidth: 260 }}>
                 {TASK_OUTCOMES.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -430,17 +433,17 @@ export function SuggestionCard({
             <button
               type="button"
               style={primaryButton}
-              disabled={busy || !taskId}
-              title="Adds this to the task's log and sets the task's status as chosen. Nothing else changes."
+              disabled={busy || taskIds.length === 0}
+              title="Adds this to the log of each ticked task and sets their status as chosen. Nothing else changes."
               onClick={() =>
                 startTransition(async () => {
                   setMessage(null);
-                  const result = await approveForTask(s.id, taskId, outcome, editing || text !== textPayload ? text : undefined);
+                  const result = await approveForTask(s.id, taskIds, outcome, editing || text !== textPayload ? text : undefined);
                   setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
                 })
               }
             >
-              {busy ? "Working…" : outcome === "RESOLVED" ? "Resolve task" : "Update task"}
+              {busy ? "Working…" : taskButton}
             </button>
           )}
           {!isTaskProposal && !isTaskUpdate && (

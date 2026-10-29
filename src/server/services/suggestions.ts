@@ -7,7 +7,7 @@ import { cleanWebLink } from "@/lib/links";
 import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
-import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, TASK_RESULT_PREFIX, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
+import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, MAX_TASKS_PER_UPDATE, TASK_RESULT_PREFIX, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 import { patchSubStages } from "@/server/services/subStages";
 import { createProject } from "@/server/services/createProject";
@@ -44,16 +44,24 @@ export async function createSuggestions(list: unknown[]): Promise<IntakeResult> 
     // an update to a task must name a task that exists and is still open; its project and customer are the task's
     let taskScope: { projectId: string | null; customerId: string } | null = null;
     if (c.payload.kind === "TASK_UPDATE") {
-      const task = await prisma.task.findUnique({ where: { id: c.payload.taskId }, select: { status: true, projectId: true, customerId: true } });
-      if (!task) {
-        result.rejected.push({ index, error: `There is no task with id "${c.payload.taskId}". Use an id from the openTasks list of the project or customer.` });
+      const wanted = c.payload.taskIds ?? [c.payload.taskId];
+      const found = await prisma.task.findMany({ where: { id: { in: wanted } }, select: { id: true, status: true, projectId: true, customerId: true } });
+      const missing = wanted.find((id) => !found.some((t) => t.id === id));
+      if (missing) {
+        result.rejected.push({ index, error: `There is no task with id "${missing}". Use an id from the openTasks list of the project or customer.` });
         continue;
       }
-      if (task.status === "RESOLVED") {
-        result.rejected.push({ index, error: "That task is already resolved." });
+      if (found.some((t) => t.status === "RESOLVED")) {
+        result.rejected.push({ index, error: found.length > 1 ? "One of those tasks is already resolved." : "That task is already resolved." });
         continue;
       }
-      taskScope = { projectId: task.projectId, customerId: task.customerId };
+      if (new Set(found.map((t) => t.customerId)).size > 1) {
+        result.rejected.push({ index, error: "All the tasks of one TASK_UPDATE must belong to the same customer." });
+        continue;
+      }
+      // the first task decides the project (none when the tasks are in different projects)
+      const first = found.find((t) => t.id === wanted[0])!;
+      taskScope = { projectId: found.every((t) => t.projectId === first.projectId) ? first.projectId : null, customerId: first.customerId };
     }
     // the project when it is unambiguous; the customer from what the sender wrote, else from the project's customer
     const projectId = taskScope ? taskScope.projectId : matchProject(c.projectRef, projects);
@@ -524,20 +532,24 @@ export async function approveSuggestionAsTask(id: string, input: Partial<Record<
   }
 }
 
-// Approving a proposal AS an update to one task: a TASK_UPDATE (the agent's own), or a note / correspondence note that is
-// really the answer in the task's email chain. The text goes in the task's log (dated the day of the email, and counted as
-// the last correspondence), the outcome sets the task's status (RESOLVED closes it, WAITING_* or nothing), and the
-// proposal is approved. The proposal is claimed first so a double click can't log it twice, and goes back to pending if
-// the task can't be updated. Nothing else about the task changes.
-export async function approveWithTask(id: string, opts: { taskId?: string; outcome?: string; text?: string }): Promise<string> {
+// Approving a proposal AS an update to one task or to several at once (one email can settle more than one): a TASK_UPDATE
+// (the agent's own), or a note / correspondence note that is really the answer in the tasks' email chain. The text goes in
+// each task's log (dated the day of the email, and counted as the last correspondence), the outcome sets each task's status
+// (RESOLVED closes it, WAITING_* or nothing), and the proposal is approved. The proposal is claimed first so a double click
+// can't log it twice, and every task is checked before anything is written (they must exist, be open and be one customer's).
+// If one fails half-way the proposal stays approved with a note of what was and wasn't done (re-approving would log twice);
+// if the first fails it goes back to pending. Nothing else about the tasks changes.
+export async function approveWithTask(id: string, opts: { taskId?: string; taskIds?: string[]; outcome?: string; text?: string }): Promise<string> {
   const row = await prisma.suggestion.findUnique({ where: { id } });
   if (!row) throw new UserError("That suggestion no longer exists.");
   if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
   const payload = row.payload as unknown as Payload;
   if (payload.kind !== "TASK_UPDATE" && payload.kind !== "NOTE" && payload.kind !== "CORRESPONDENCE_NOTE") throw new UserError("Only a task update or a note can update a task.");
 
-  const taskId = opts.taskId || (payload.kind === "TASK_UPDATE" ? payload.taskId : "");
-  if (!taskId) throw new UserError("Pick the task first.");
+  const fromPayload = payload.kind === "TASK_UPDATE" ? (payload.taskIds ?? [payload.taskId]) : [];
+  const wanted = [...new Set((opts.taskIds && opts.taskIds.length ? opts.taskIds : opts.taskId ? [opts.taskId] : fromPayload).filter((x) => typeof x === "string" && x))];
+  if (wanted.length === 0) throw new UserError("Pick the task first.");
+  if (wanted.length > MAX_TASKS_PER_UPDATE) throw new UserError(`Pick at most ${MAX_TASKS_PER_UPDATE} tasks.`);
   const outcome = opts.outcome || (payload.kind === "TASK_UPDATE" ? payload.outcome : "LOG");
   if (!isTaskOutcome(outcome)) throw new UserError("That outcome doesn't exist.");
   const cleaned = cleanStatusText(opts.text ?? payload.text);
@@ -545,26 +557,43 @@ export async function approveWithTask(id: string, opts: { taskId?: string; outco
   if (!cleaned.value) throw new UserError("The text can't be empty. Reject the suggestion instead.");
   const text = cleaned.value.slice(0, MAX_UPDATE_TEXT);
 
-  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, topic: true, status: true, customerId: true, projectId: true } });
-  if (!task) throw new UserError("That task no longer exists.");
-  if (task.status === "RESOLVED") throw new UserError("That task is already resolved.");
+  const found = await prisma.task.findMany({ where: { id: { in: wanted } }, select: { id: true, topic: true, status: true, customerId: true, projectId: true } });
+  const tasks = wanted.map((w) => found.find((t) => t.id === w));
+  if (tasks.some((t) => !t)) throw new UserError(wanted.length > 1 ? "One of those tasks no longer exists." : "That task no longer exists.");
+  const picked = tasks as NonNullable<(typeof tasks)[number]>[];
+  const resolvedOne = picked.find((t) => t.status === "RESOLVED");
+  if (resolvedOne) throw new UserError(wanted.length > 1 ? `"${resolvedOne.topic}" is already resolved: untick it.` : "That task is already resolved.");
+  if (new Set(picked.map((t) => t.customerId)).size > 1) throw new UserError("A proposal can update only tasks of one customer.");
 
-  const first = await prisma.suggestion.updateMany({ where: { id, status: "PENDING" }, data: { status: "APPROVED", reviewedAt: new Date() } });
-  if (first.count === 0) throw new UserError("That suggestion was already handled.");
+  const claimed = await prisma.suggestion.updateMany({ where: { id, status: "PENDING" }, data: { status: "APPROVED", reviewedAt: new Date() } });
+  if (claimed.count === 0) throw new UserError("That suggestion was already handled.");
+  const emailDay = toDateInputValue(todayInAppTz(row.sourceReceivedAt ?? new Date()));
+  const status = outcomeStatus(outcome);
+  const verb = outcome === "RESOLVED" ? "resolved" : "updated";
+  const done: string[] = [];
   try {
-    const emailDay = toDateInputValue(todayInAppTz(row.sourceReceivedAt ?? new Date()));
-    // the log entry keeps the email's link and subject (never its text), so the task's history shows the correspondence
-    await addTaskUpdate(task.id, { date: emailDay, text, contact: true, sourceLink: row.sourceLink ?? "", sourceSubject: row.sourceSubject ?? "" });
-    const status = outcomeStatus(outcome);
-    if (status && status !== task.status) await setTaskStatus(task.id, status);
-    const note = `Task ${outcome === "RESOLVED" ? "resolved" : "updated"}: "${task.topic}". Open it on the Tasks tab.`;
-    const nextPayload: Payload = payload.kind === "TASK_UPDATE" ? { ...payload, taskId: task.id, text, outcome } : payload;
-    await prisma.suggestion.update({ where: { id }, data: { resultNote: note, projectId: task.projectId, customerId: task.customerId, payload: nextPayload as unknown as Prisma.InputJsonObject } });
-    return note;
+    for (const task of picked) {
+      // the log entry keeps the email's link and subject (never its text), so the task's history shows the correspondence
+      await addTaskUpdate(task.id, { date: emailDay, text, contact: true, sourceLink: row.sourceLink ?? "", sourceSubject: row.sourceSubject ?? "" });
+      if (status && status !== task.status) await setTaskStatus(task.id, status);
+      done.push(task.topic);
+    }
   } catch (error) {
-    await prisma.suggestion.updateMany({ where: { id, status: "APPROVED", resultNote: null }, data: { status: "PENDING", reviewedAt: null } });
-    throw error;
+    if (done.length === 0) {
+      await prisma.suggestion.updateMany({ where: { id, status: "APPROVED", resultNote: null }, data: { status: "PENDING", reviewedAt: null } });
+      throw error;
+    }
+    // some tasks were already updated: keep the proposal approved so nothing is logged twice, and say what is left
+    const left = picked.slice(done.length).map((t) => `"${t.topic}"`).join("; ");
+    const partial = `Task ${verb} for ${done.length} of ${picked.length} tasks; not done: ${left}. ${error instanceof Error ? error.message : "Unknown error."}`;
+    await prisma.suggestion.update({ where: { id }, data: { resultNote: partial, projectId: picked[0].projectId, customerId: picked[0].customerId } });
+    throw new UserError(partial);
   }
+  const note = picked.length === 1 ? `Task ${verb}: "${picked[0].topic}". Open it on the Tasks tab.` : `Task ${verb} on ${picked.length} tasks: ${picked.map((t) => `"${t.topic}"`).join("; ")}. Open them on the Tasks tab.`;
+  const sameProject = picked.every((t) => t.projectId === picked[0].projectId);
+  const nextPayload: Payload = payload.kind === "TASK_UPDATE" ? { ...payload, taskId: picked[0].id, ...(picked.length > 1 ? { taskIds: picked.map((t) => t.id) } : { taskIds: undefined }), text, outcome } : payload;
+  await prisma.suggestion.update({ where: { id }, data: { resultNote: note, projectId: sameProject ? picked[0].projectId : null, customerId: picked[0].customerId, payload: nextPayload as unknown as Prisma.InputJsonObject } });
+  return note;
 }
 
 export async function rejectSuggestion(id: string): Promise<void> {

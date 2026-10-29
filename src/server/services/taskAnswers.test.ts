@@ -16,6 +16,7 @@ describe("an email that answers an open task", () => {
   let projectId: string;
   let taskId: string;
   let otherTaskId: string;
+  let otherCustomerId: string;
   const suggestionIds: string[] = [];
 
   const view = async (id: string) => (await listTasks()).find((t) => t.id === id)!;
@@ -48,8 +49,10 @@ describe("an email that answers an open task", () => {
     // every cleanup is scoped by an id that exists; an undefined id would otherwise match every row
     if (suggestionIds.length) await prisma.suggestion.deleteMany({ where: { id: { in: suggestionIds } } });
     if (customerId) await prisma.task.deleteMany({ where: { customerId } });
+    if (otherCustomerId) await prisma.task.deleteMany({ where: { customerId: otherCustomerId } });
     if (projectId) await prisma.project.deleteMany({ where: { id: projectId } });
     if (customerId) await prisma.customer.deleteMany({ where: { id: customerId } });
+    if (otherCustomerId) await prisma.customer.deleteMany({ where: { id: otherCustomerId } });
     await prisma.$disconnect();
   });
 
@@ -158,6 +161,54 @@ describe("an email that answers an open task", () => {
     const made = await createTask({ customerId, topic: `Prioritised ${RUN}`, priority: "HIGH" });
     expect((await view(made)).priority).toBe("HIGH");
     await expect(createTask({ customerId, topic: "bad", priority: "SOON" })).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("lets one proposal resolve several tasks at once, and refuses a mix that is not safe", async () => {
+    const a = await createTask({ customerId, projectId, topic: `First question ${RUN}` });
+    const b = await createTask({ customerId, projectId, topic: `Second question ${RUN}` });
+    otherCustomerId = (await prisma.customer.create({ data: { name: `Test Other ${RUN}` } })).id;
+    const foreign = await createTask({ customerId: otherCustomerId, topic: `Someone else ${RUN}` });
+    const done = await createTask({ customerId, topic: `Closed ${RUN}` });
+    await setTaskStatus(done, "RESOLVED");
+
+    // the intake takes several ids; every one must exist, be open and belong to one customer
+    const result = await createSuggestions([
+      proposal(7, { kind: "TASK_UPDATE", taskIds: [a, b], text: "Answered both: 2 MCs, no PDUs.", outcome: "RESOLVED" }),
+      proposal(8, { kind: "TASK_UPDATE", taskIds: [a, foreign], text: "x" }),
+      proposal(9, { kind: "TASK_UPDATE", taskIds: [a, done], text: "x" }),
+      proposal(10, { kind: "TASK_UPDATE", taskIds: [a, "does-not-exist-123"], text: "x" }),
+    ]);
+    expect(result.created).toBe(1);
+    expect(result.rejected.map((r) => r.index)).toEqual([1, 2, 3]);
+    expect(result.rejected[0].error).toMatch(/same customer/);
+    expect(result.rejected[1].error).toMatch(/already resolved/);
+    expect(result.rejected[2].error).toMatch(/no task with id/);
+    const row = (await created(7))!;
+    expect(row.payload).toMatchObject({ kind: "TASK_UPDATE", taskId: a, taskIds: [a, b], outcome: "RESOLVED" });
+    expect(row).toMatchObject({ projectId, customerId });
+
+    const note = await approveSuggestion(row.id, {});
+    expect(note).toMatch(/^Task resolved on 2 tasks:/);
+    for (const id of [a, b]) {
+      const task = await view(id);
+      expect(task.status).toBe("RESOLVED");
+      expect(task.lastContactAt).toBe("2026-10-28");
+      expect(task.updates.filter((u) => u.text === "Answered both: 2 MCs, no PDUs.")).toHaveLength(1);
+    }
+    expect(await prisma.suggestion.findUnique({ where: { id: row.id }, select: { status: true } })).toEqual({ status: "APPROVED" });
+    await expect(approveSuggestion(row.id, {})).rejects.toBeInstanceOf(UserError);
+
+    // a note can be approved as the answer to several picked tasks too; the card's picks win over the proposal's
+    const c = await createTask({ customerId, projectId, topic: `Third question ${RUN}` });
+    const d = await createTask({ customerId, projectId, topic: `Fourth question ${RUN}` });
+    await createSuggestions([proposal(11, { kind: "CORRESPONDENCE_NOTE", text: "Customer confirmed both." })]);
+    const noteRow = (await created(11))!;
+    await expect(approveWithTask(noteRow.id, { taskIds: [c, foreign], outcome: "LOG" })).rejects.toBeInstanceOf(UserError); // two customers
+    await expect(approveWithTask(noteRow.id, { taskIds: [c, a], outcome: "LOG" })).rejects.toBeInstanceOf(UserError); // a is resolved
+    expect((await prisma.suggestion.findUnique({ where: { id: noteRow.id }, select: { status: true } }))!.status).toBe("PENDING");
+    expect((await view(c)).updates.map((u) => u.text)).toEqual(["Task created"]); // nothing was written by the refused tries
+    await approveWithTask(noteRow.id, { taskIds: [c, d], outcome: "WAITING_CUSTOMER" });
+    for (const id of [c, d]) expect(await view(id)).toMatchObject({ status: "WAITING_CUSTOMER", lastContactAt: "2026-10-28" });
   });
 
   it("refuses what it should: a resolved task, an unknown outcome, no task, and kinds that are not notes", async () => {

@@ -133,6 +133,19 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
     expect(describePayload(ok({ ...base, outcome: "WAITING_US" }).payload)).toMatch(/Waiting on us/);
   });
 
+  it("accepts one task update for several tasks (taskIds), the first being the taskId, with no duplicates and at most ten", () => {
+    const base = { kind: "TASK_UPDATE", text: "Answered both questions.", outcome: "RESOLVED" };
+    const many = ok({ ...base, taskIds: ["cmgx1abcd0001aaa", "cmgx1abcd0002bbb", "cmgx1abcd0001aaa"] }).payload;
+    expect(many).toEqual({ kind: "TASK_UPDATE", taskId: "cmgx1abcd0001aaa", taskIds: ["cmgx1abcd0001aaa", "cmgx1abcd0002bbb"], text: "Answered both questions.", outcome: "RESOLVED" });
+    // taskId plus taskIds are combined; a single id stays a plain taskId
+    expect(ok({ ...base, taskId: "cmgx1abcd0001aaa", taskIds: ["cmgx1abcd0002bbb"] }).payload).toMatchObject({ taskId: "cmgx1abcd0001aaa", taskIds: ["cmgx1abcd0001aaa", "cmgx1abcd0002bbb"] });
+    expect(ok({ ...base, taskIds: ["cmgx1abcd0001aaa"] }).payload).toEqual({ kind: "TASK_UPDATE", taskId: "cmgx1abcd0001aaa", text: "Answered both questions.", outcome: "RESOLVED" });
+    expect(error({ ...base, taskIds: Array.from({ length: 11 }, (_, i) => `cmgx1abcd00${String(i).padStart(2, "0")}zzz`) })).toMatch(/at most 10/);
+    expect(error({ ...base, taskIds: ["cmgx1abcd0001aaa", "bad id!"] })).toMatch(/taskId/);
+    expect(error({ ...base, taskIds: [] })).toMatch(/taskId/);
+    expect(describePayload(many)).toMatch(/^Resolve 2 tasks: /);
+  });
+
   it("says in plain words what approving a status change or an action item does", () => {
     expect(describePayload(ok({ kind: "STATUS_CHANGE", item: "Layout Approval", phase: "DESIGN", status: "DONE" }).payload)).toBe('Set "Layout Approval" (Design) to Done');
     expect(describePayload(ok({ kind: "ACTION_ITEM", text: "Send the layout", who: "Dan", by: "Friday" }).payload)).toBe("Create a task for Dan, due Friday: Send the layout");

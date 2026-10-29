@@ -47,10 +47,11 @@ export async function approveAsTask(id: string, input: TaskInput): Promise<Actio
 }
 
 // Approving a task update, or a note that is the answer in a task's email chain, as an update to the task picked on the card.
-export async function approveForTask(id: string, taskId: string, outcome: string, text?: string): Promise<ActionResult<{ note: string }>> {
+export async function approveForTask(id: string, taskIds: string[], outcome: string, text?: string): Promise<ActionResult<{ note: string }>> {
   await requireActionAuth();
   return run(async () => {
-    const note = await approveWithTask(id, { taskId: String(taskId ?? ""), outcome: String(outcome ?? ""), ...(typeof text === "string" ? { text: text.slice(0, 5000) } : {}) });
+    const ids = Array.isArray(taskIds) ? taskIds.filter((x): x is string => typeof x === "string").slice(0, 20) : [];
+    const note = await approveWithTask(id, { taskIds: ids, outcome: String(outcome ?? ""), ...(typeof text === "string" ? { text: text.slice(0, 5000) } : {}) });
     refresh();
     revalidatePath("/tasks");
     revalidatePath("/customers", "layout");
