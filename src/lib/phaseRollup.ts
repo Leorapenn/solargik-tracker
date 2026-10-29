@@ -30,7 +30,10 @@ const min = (dates: Date[]) => (dates.length ? new Date(Math.min(...dates.map((d
 const max = (dates: Date[]) => (dates.length ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null);
 const present = (dates: (Date | null)[]): Date[] => dates.filter((d): d is Date => d !== null);
 
-export function rollupPhase(items: RollupItem[], today: Date): PhaseRollup {
+// Items marked N/A (NOT_APPLICABLE) don't count: not in the total, never "not done", never overdue, and they don't set the
+// phase's dates. A phase of only N/A items has total 0.
+export function rollupPhase(allItems: RollupItem[], today: Date): PhaseRollup {
+  const items = allItems.filter((i) => i.status !== "NOT_APPLICABLE");
   const done = items.filter((i) => i.status === "DONE");
   const allDone = items.length > 0 && done.length === items.length;
 
@@ -40,7 +43,7 @@ export function rollupPhase(items: RollupItem[], today: Date): PhaseRollup {
     startedAt: min(present(items.map((i) => i.startedAt))),
     completedAt: allDone ? max(present(done.map((i) => i.completedAt))) : null,
     targetDate: max(present(items.map((i) => i.targetDate))),
-    owners: [...new Set(items.map((i) => i.ownerName).filter((n): n is string => !!n))].sort(),
+    owners: [...new Set(allItems.map((i) => i.ownerName).filter((n): n is string => !!n))].sort(),
     doneWithoutDate: done.filter((i) => !i.completedAt && !i.naDates?.includes("completedAt")).length,
     overdueSince: min(
       present(items.filter((i) => i.status !== "DONE" && i.targetDate && i.targetDate < today).map((i) => i.targetDate)),

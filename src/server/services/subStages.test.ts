@@ -79,6 +79,27 @@ describe("patchSubStages", () => {
     expect(events.map((e) => e.toStatus)).toEqual(["DONE", "BLOCKED"]);
   });
 
+  it("marks an item N/A: dates cleared, left out of the phase's status, and a phase of only N/A items is N/A", async () => {
+    // Supply: one item done, the rest N/A -> the phase is judged by the one item that applies
+    await patch(supplyIds, { status: "NOT_APPLICABLE" }, "test-na");
+    for (const id of supplyIds) {
+      const row = await item(id);
+      expect(row).toMatchObject({ status: "NOT_APPLICABLE", startedAt: null, completedAt: null });
+    }
+    expect(await phaseStatus("SUPPLY")).toBe("NOT_APPLICABLE");
+    expect((await prisma.statusEvent.findMany({ where: { subStageId: supplyIds[0] } })).map((e) => e.toStatus)).toEqual(["NOT_APPLICABLE"]);
+
+    // one item applies again and is done: the phase is Done (the N/A ones don't hold it back)
+    await patch([supplyIds[0]], { status: "DONE" }, "test-na");
+    expect(await phaseStatus("SUPPLY")).toBe("DONE");
+    // reopening it: the phase follows the item, not the N/A ones
+    await patch([supplyIds[0]], { status: "NOT_STARTED" }, "test-na");
+    expect(await phaseStatus("SUPPLY")).toBe("NOT_STARTED");
+    // and N/A can be taken off again
+    await patch(supplyIds, { status: "NOT_STARTED" }, "test-na");
+    expect(await phaseStatus("SUPPLY")).toBe("NOT_STARTED");
+  });
+
   it("lets an explicit completed date override the automatic one", async () => {
     const date = new Date("2026-01-05T00:00:00.000Z");
     await patch([supplyIds[0]], { status: "DONE", completedAt: date });

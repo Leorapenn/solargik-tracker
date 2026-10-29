@@ -81,7 +81,7 @@ export async function getUpdatesInRange(range: DateRange): Promise<ProjectUpdate
       lifecycle: p.lifecycle,
       summary: projectSummary(
         p.statusSummaryOverride,
-        p.phases.map((ph) => ({ name: ph.name, status: ph.status, done: ph.subStages.filter((s) => s.status === "DONE").length, total: ph.subStages.length })),
+        p.phases.map((ph) => ({ name: ph.name, status: ph.status, done: ph.subStages.filter((s) => s.status === "DONE").length, total: ph.subStages.filter((s) => s.status !== "NOT_APPLICABLE").length })),
       ),
       entries,
     };

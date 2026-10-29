@@ -2,9 +2,9 @@
 
 import { useTransition } from "react";
 import type { StageStatus } from "@prisma/client";
-import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
+import { ITEM_STATUS_CHOICES, STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 
-const STATUS_OPTIONS: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+const STATUS_OPTIONS: StageStatus[] = ITEM_STATUS_CHOICES;
 
 export function StatusSelect({
   value,

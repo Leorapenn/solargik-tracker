@@ -25,7 +25,7 @@ type Params = Record<string, string | string[] | undefined>;
 
 const STATUS_ORDER: StageStatus[] = ["DONE", "IN_PROGRESS", "BLOCKED", "NOT_STARTED"];
 // For sorting a phase column: further along sorts higher.
-const PROGRESS_RANK: Record<StageStatus, number> = { NOT_STARTED: 0, BLOCKED: 1, IN_PROGRESS: 2, DONE: 3 };
+const PROGRESS_RANK: Record<StageStatus, number> = { NOT_APPLICABLE: -1, NOT_STARTED: 0, BLOCKED: 1, IN_PROGRESS: 2, DONE: 3 };
 
 export default async function PhasesPage({ searchParams }: { searchParams: Promise<Params> }) {
   await requirePageAuth();
@@ -140,12 +140,14 @@ export default async function PhasesPage({ searchParams }: { searchParams: Promi
   }));
 
   const summaries = PHASE_ORDER.map((phase) => {
-    const counts = { DONE: 0, IN_PROGRESS: 0, BLOCKED: 0, NOT_STARTED: 0 } as Record<StageStatus, number>;
+    const counts = { DONE: 0, IN_PROGRESS: 0, BLOCKED: 0, NOT_STARTED: 0, NOT_APPLICABLE: 0 } as Record<StageStatus, number>;
     let total = 0;
     for (const row of rows) {
       const cell = row.cells[phase];
       // with a filter on, projects with none of those items don't count
       if (!cell && departments.length > 0) continue;
+      // a phase that doesn't apply to a project (all its items N/A) is left out of the phase's totals
+      if (cell?.status === "NOT_APPLICABLE") continue;
       total += 1;
       counts[cell?.status ?? "NOT_STARTED"] += 1;
     }

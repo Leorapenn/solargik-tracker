@@ -1,7 +1,7 @@
 import type { Department, PhaseName, StageStatus } from "@prisma/client";
 import { DEPARTMENTS, departmentLabel } from "@/lib/departments";
 import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
-import { STATUS_LABELS } from "@/lib/statusColors";
+import { ITEM_STATUS_CHOICES, STATUS_LABELS } from "@/lib/statusColors";
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -32,7 +32,7 @@ export const FILTER_LABELS: Record<FilterKey, string> = {
 };
 
 export const UNASSIGNED = "none";
-const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+const STATUSES: StageStatus[] = ITEM_STATUS_CHOICES;
 export const DATE_MODES_FOR: Record<"target" | "started" | "completed", DateMode[]> = {
   target: ["set", "none", "na", "overdue"],
   started: ["set", "none", "na"],
@@ -103,12 +103,13 @@ const DATE_FIELD = { target: "targetDate", started: "startedAt", completed: "com
 function dateMatches(row: FilterableRow, key: keyof typeof DATE_FIELD, wanted: DateMode[], todayIso: string): boolean {
   const field = DATE_FIELD[key];
   const value = row[field];
-  const na = row.naDates.includes(field);
+  // an item marked N/A has no dates that apply
+  const na = row.naDates.includes(field) || row.status === "NOT_APPLICABLE";
   return wanted.some((mode) => {
     if (mode === "set") return value !== null;
     if (mode === "none") return value === null && !na;
     if (mode === "na") return na;
-    return key === "target" && value !== null && value < todayIso && row.status !== "DONE";
+    return key === "target" && value !== null && value < todayIso && row.status !== "DONE" && row.status !== "NOT_APPLICABLE";
   });
 }
 

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import type { Department, PhaseName, StageStatus } from "@prisma/client";
 import { updateSubStages, updateSubStageStatus, type PatchInput } from "@/server/actions/updateStatus";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
+import { ITEM_STATUS_CHOICES, STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import type { SortState } from "@/lib/sort";
 import { DateField, type DateChoice } from "@/components/DateField";
 import { ColumnFilters } from "@/components/ColumnFilters";
@@ -57,7 +57,7 @@ const FIELD_LABELS: Record<BulkField, string> = {
   startedAt: "Start date",
   completedAt: "Completed date",
 };
-const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+const STATUSES: StageStatus[] = ITEM_STATUS_CHOICES;
 
 const th = { padding: "13px 14px", textAlign: "left" as const, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const };
 const td = { padding: "10px 14px", fontSize: 14, verticalAlign: "middle" as const };
@@ -171,6 +171,14 @@ export function SubStageTable({
 
   const dateCell = (row: SubStageRow, key: "targetDate" | "startedAt" | "completedAt") => {
     const current = row[key];
+    // an item marked N/A as a whole has no dates; change its status to give it some
+    if (row.status === "NOT_APPLICABLE") {
+      return (
+        <span style={{ color: TEXT_MUTED }} title="This item is marked N/A (it doesn't apply to this project)">
+          N/A
+        </span>
+      );
+    }
     const notApplicable = row.naDates.includes(key);
     const editable = key !== "completedAt" || row.status === "DONE";
     if (editing && editable) {

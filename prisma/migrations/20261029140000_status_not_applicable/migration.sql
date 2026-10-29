@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StageStatus" ADD VALUE 'NOT_APPLICABLE';

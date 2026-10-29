@@ -58,6 +58,16 @@ describe("matchesFilters", () => {
     expect(matchesFilters({ ...withDate, status: "DONE" }, f({ target: "overdue" }), TODAY)).toBe(false);
     expect(matchesFilters(row({ targetDate: "2026-12-01" }), f({ target: "overdue" }), TODAY)).toBe(false);
   });
+
+  it("knows the N/A status: it can be filtered on, and an N/A item has no missing or overdue dates", () => {
+    const na = row({ status: "NOT_APPLICABLE", targetDate: "2026-09-01" });
+    expect(parseRowFilters({ status: "not_applicable,done" }).status).toEqual(["DONE", "NOT_APPLICABLE"]);
+    expect(matchesFilters(na, f({ status: "NOT_APPLICABLE" }), TODAY)).toBe(true);
+    expect(matchesFilters(row(), f({ status: "NOT_APPLICABLE" }), TODAY)).toBe(false);
+    expect(matchesFilters(na, f({ target: "overdue" }), TODAY)).toBe(false);
+    expect(matchesFilters(row({ status: "NOT_APPLICABLE" }), f({ started: "none" }), TODAY)).toBe(false);
+    expect(matchesFilters(row({ status: "NOT_APPLICABLE" }), f({ started: "na" }), TODAY)).toBe(true);
+  });
 });
 
 describe("describeFilter", () => {

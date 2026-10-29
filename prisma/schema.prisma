@@ -30,6 +30,8 @@ enum StageStatus {
   IN_PROGRESS
   BLOCKED
   DONE
+  // The item does not apply to this project (e.g. no design questionnaire). Left out of the phase's status and progress.
+  NOT_APPLICABLE
 }
 
 enum CustomerImportance {

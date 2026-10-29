@@ -17,6 +17,21 @@ describe("rollupPhase", () => {
     expect(rollupPhase([], today)).toMatchObject({ total: 0, done: 0, startedAt: null, completedAt: null, owners: [] });
   });
 
+  it("does not count N/A items: not in the total, never overdue, no dates from them", () => {
+    const r = rollupPhase(
+      [
+        item({ status: "DONE", completedAt: d("2026-09-20") }),
+        item({ status: "NOT_APPLICABLE", targetDate: d("2026-08-01"), ownerName: "Amit" }),
+      ],
+      today,
+    );
+    expect(r).toMatchObject({ total: 1, done: 1, overdueSince: null, doneWithoutDate: 0 });
+    expect(r.completedAt).toEqual(d("2026-09-20")); // the phase is complete: the N/A item does not hold it back
+    expect(r.targetDate).toBeNull();
+    // a phase of only N/A items
+    expect(rollupPhase([item({ status: "NOT_APPLICABLE" })], today)).toMatchObject({ total: 0, done: 0, completedAt: null });
+  });
+
   it("uses the earliest start and the latest target", () => {
     const r = rollupPhase(
       [

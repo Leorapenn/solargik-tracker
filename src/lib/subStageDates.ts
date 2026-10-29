@@ -8,9 +8,11 @@ export type RecordedDates = { startedAt: Date | null; completedAt: Date | null }
 //   In progress → started set (kept if already set), completed cleared
 //   Blocked     → completed cleared; started left as it was (an item can be blocked before it starts)
 //   Done        → started set if missing, completed = today
+//   N/A         → both cleared (the item doesn't apply, so no dates belong to it)
 export function applyStatusToDates(previous: RecordedDates, next: StageStatus, today: Date): RecordedDates {
   switch (next) {
     case "NOT_STARTED":
+    case "NOT_APPLICABLE":
       return { startedAt: null, completedAt: null };
     case "IN_PROGRESS":
       return { startedAt: previous.startedAt ?? today, completedAt: null };

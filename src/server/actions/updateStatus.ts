@@ -7,10 +7,11 @@ import { cleanDepartments } from "@/lib/departmentFilter";
 import { requireActionAuth } from "@/lib/auth";
 import { parseDateInput } from "@/lib/dates";
 import { run, UserError, type ActionResult } from "@/lib/errors";
+import { ITEM_STATUS_CHOICES } from "@/lib/statusColors";
 import { NOT_APPLICABLE, patchSubStages, type DatePatch, type SubStagePatch } from "@/server/services/subStages";
 
 const MAX_ITEMS = 1000;
-const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+const STATUSES: StageStatus[] = ITEM_STATUS_CHOICES;
 
 // Dates travel as "YYYY-MM-DD" strings; null or "" clears the date, and "NA" marks it Not Applicable.
 export type PatchInput = {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DEPARTMENTS, departmentLabel } from "@/lib/departments";
 import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
-import { STATUS_LABELS } from "@/lib/statusColors";
+import { ITEM_STATUS_CHOICES, STATUS_LABELS } from "@/lib/statusColors";
 import { hrefWith } from "@/lib/sort";
 import {
   DATE_MODES_FOR,
@@ -24,7 +24,7 @@ import type { StageStatus } from "@prisma/client";
 type Params = Record<string, string | string[] | undefined>;
 type Option = { value: string; label: string };
 
-const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+const STATUSES: StageStatus[] = ITEM_STATUS_CHOICES;
 
 // "+ Filter": pick any column of the items table and choose which values to show. Active filters appear as
 // chips (click one to change it, x to remove it). Everything is kept in the URL, so it combines with sorting

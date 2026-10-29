@@ -66,4 +66,8 @@ describe("applyStatusToDates", () => {
     const done = { startedAt: d("2026-09-01"), completedAt: d("2026-09-20") };
     expect(applyStatusToDates(done, "NOT_STARTED", today)).toEqual(none);
   });
+  it("marking an item N/A clears both dates (they don't belong to an item that doesn't apply)", () => {
+    const done = { startedAt: d("2026-09-01"), completedAt: d("2026-09-20") };
+    expect(applyStatusToDates(done, "NOT_APPLICABLE", today)).toEqual(none);
+  });
 });

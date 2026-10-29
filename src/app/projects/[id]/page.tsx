@@ -45,7 +45,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 type Params = Record<string, string | string[] | undefined>;
-const STATUS_RANK = { NOT_STARTED: 0, IN_PROGRESS: 1, BLOCKED: 2, DONE: 3 } as const;
+const STATUS_RANK = { NOT_STARTED: 0, IN_PROGRESS: 1, BLOCKED: 2, DONE: 3, NOT_APPLICABLE: 4 } as const;
 
 export default async function ProjectDetailPage({
   params,
@@ -110,7 +110,7 @@ export default async function ProjectDetailPage({
       name: phase.name,
       status: phase.status,
       done: phase.subStages.filter((s) => s.status === "DONE").length,
-      total: phase.subStages.length,
+      total: phase.subStages.filter((s) => s.status !== "NOT_APPLICABLE").length, // N/A items don't count
     })),
   );
   const filters = parseRowFilters(query);

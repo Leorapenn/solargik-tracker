@@ -24,6 +24,18 @@ describe("derivePhaseStatus", () => {
     expect(derivePhaseStatus(["IN_PROGRESS", "BLOCKED", "NOT_STARTED"])).toBe("BLOCKED");
   });
 
+  it("leaves N/A items out: the phase is judged by the items that apply", () => {
+    expect(derivePhaseStatus(["DONE", "DONE", "NOT_APPLICABLE"])).toBe("DONE");
+    expect(derivePhaseStatus(["NOT_APPLICABLE", "NOT_STARTED", "NOT_STARTED"])).toBe("NOT_STARTED");
+    expect(derivePhaseStatus(["NOT_APPLICABLE", "DONE", "NOT_STARTED"])).toBe("IN_PROGRESS");
+    expect(derivePhaseStatus(["NOT_APPLICABLE", "BLOCKED", "DONE"])).toBe("BLOCKED");
+  });
+
+  it("is N/A when every item is N/A (the phase does not apply)", () => {
+    expect(derivePhaseStatus(["NOT_APPLICABLE", "NOT_APPLICABLE"])).toBe("NOT_APPLICABLE");
+    expect(derivePhaseStatus(["NOT_APPLICABLE"])).toBe("NOT_APPLICABLE");
+  });
+
   it("returns null for a phase with no sub-stages so its stored status is kept", () => {
     expect(derivePhaseStatus([])).toBeNull();
   });

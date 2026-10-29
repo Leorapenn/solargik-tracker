@@ -11,7 +11,8 @@ type ProjectWithPhases = { phases: { name: PhaseName; status: StageStatus }[] };
 export function progressScore(projects: ProjectWithPhases[]): number {
   let score = 0;
   for (const phase of PHASE_ORDER) {
-    const statuses = projects.map((p) => p.phases.find((x) => x.name === phase)?.status ?? "NOT_STARTED");
+    // a phase that doesn't apply to a project (N/A) is left out
+    const statuses = projects.map((p) => p.phases.find((x) => x.name === phase)?.status ?? "NOT_STARTED").filter((s) => s !== "NOT_APPLICABLE");
     if (statuses.length > 0 && statuses.every((s) => s === "DONE")) score += 2;
     else if (statuses.some((s) => s !== "NOT_STARTED")) score += 1;
   }
@@ -36,20 +37,22 @@ export function phaseBreakdown(projects: { id: string; name: string; phases: { n
 // all done → navy, some started/done → blue, nothing started → grey.
 export function phaseSpread(projects: ProjectWithPhases[]): SpreadSegment[] {
   return PHASE_ORDER.map((phase) => {
-    const counts = { DONE: 0, IN_PROGRESS: 0, BLOCKED: 0, NOT_STARTED: 0 } as Record<StageStatus, number>;
+    const counts = { DONE: 0, IN_PROGRESS: 0, BLOCKED: 0, NOT_STARTED: 0, NOT_APPLICABLE: 0 } as Record<StageStatus, number>;
     for (const project of projects) {
       counts[project.phases.find((p) => p.name === phase)?.status ?? "NOT_STARTED"] += 1;
     }
+    // projects where the phase doesn't apply (N/A) don't count towards "all done"
+    const applicable = projects.length - counts.NOT_APPLICABLE;
 
     let color = GRAY_LIGHT;
     if (counts.BLOCKED > 0) color = ORANGE;
-    else if (projects.length > 0 && counts.DONE === projects.length) color = NAVY;
+    else if (applicable > 0 && counts.DONE === applicable) color = NAVY;
     else if (counts.DONE > 0 || counts.IN_PROGRESS > 0) color = NAVY_MID;
 
     return {
       phase,
       color,
-      title: `${phaseLabel(phase)}: ${counts.DONE} done · ${counts.IN_PROGRESS} in progress · ${counts.BLOCKED} blocked · ${counts.NOT_STARTED} not started`,
+      title: `${phaseLabel(phase)}: ${counts.DONE} done · ${counts.IN_PROGRESS} in progress · ${counts.BLOCKED} blocked · ${counts.NOT_STARTED} not started${counts.NOT_APPLICABLE > 0 ? ` · ${counts.NOT_APPLICABLE} N/A` : ""}`,
     };
   });
 }

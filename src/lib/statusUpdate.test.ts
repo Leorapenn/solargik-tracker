@@ -34,6 +34,11 @@ describe("generateSummary", () => {
     expect(generateSummary([p("INITIATION", "DONE", 5), p("DESIGN", "DONE", 5)])).toBe("All phases are complete.");
     expect(generateSummary([])).toBe("No phases yet.");
   });
+  it("leaves phases that don't apply (all items N/A) out", () => {
+    expect(generateSummary([p("INITIATION", "DONE", 5), p("DESIGN", "NOT_APPLICABLE", 0, 0)])).toBe("All phases are complete.");
+    expect(generateSummary([p("INITIATION", "NOT_STARTED"), p("DESIGN", "NOT_APPLICABLE", 0, 0)])).toBe("Not started yet.");
+    expect(generateSummary([p("DESIGN", "NOT_APPLICABLE", 0, 0)])).toBe("No phase applies to this project.");
+  });
 });
 
 describe("projectSummary", () => {

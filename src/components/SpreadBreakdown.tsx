@@ -8,7 +8,7 @@ import { phaseLabel } from "@/lib/phases";
 import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import { NAVY, TEXT_MUTED } from "@/lib/theme";
 
-const STATUS_ORDER: StageStatus[] = ["BLOCKED", "IN_PROGRESS", "NOT_STARTED", "DONE"];
+const STATUS_ORDER: StageStatus[] = ["BLOCKED", "IN_PROGRESS", "NOT_STARTED", "DONE", "NOT_APPLICABLE"];
 
 // The phase spread bar of a customer. Click a phase to see which of the customer's projects are in which state
 // for it (the bar itself only shows the worst case); click it again to close.

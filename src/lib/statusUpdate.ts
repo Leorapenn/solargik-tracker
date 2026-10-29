@@ -17,8 +17,9 @@ const join = (names: string[]) => names.join(", ");
 // The automatic project status summary, built only from the phases' statuses (and item counts). It is
 // rebuilt whenever it is shown, so it never goes stale; a typed-over summary replaces it (see projectSummary).
 export function generateSummary(phases: PhaseProgress[]): string {
-  const ordered = [...phases].sort((a, b) => PHASE_ORDER.indexOf(a.name) - PHASE_ORDER.indexOf(b.name));
-  if (ordered.length === 0) return "No phases yet.";
+  // a phase whose items are all N/A doesn't apply to the project: it is left out of the summary
+  const ordered = [...phases].filter((p) => p.status !== "NOT_APPLICABLE").sort((a, b) => PHASE_ORDER.indexOf(a.name) - PHASE_ORDER.indexOf(b.name));
+  if (ordered.length === 0) return phases.length === 0 ? "No phases yet." : "No phase applies to this project.";
 
   const withStatus = (status: StageStatus) => ordered.filter((p) => p.status === status);
   const done = withStatus("DONE");

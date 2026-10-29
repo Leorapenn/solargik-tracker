@@ -8,7 +8,7 @@ import { updatePhases, type PatchInput } from "@/server/actions/updateStatus";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { PHASE_ORDER, phaseLabel } from "@/lib/phases";
 import { LIFECYCLE_LABELS, LIFECYCLE_STYLES } from "@/lib/lifecycle";
-import { STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
+import { ITEM_STATUS_CHOICES, STATUS_LABELS, STATUS_PILL_STYLES } from "@/lib/statusColors";
 import type { SortState } from "@/lib/sort";
 import { DateField, type DateChoice } from "@/components/DateField";
 import { SortSummary } from "@/components/SortSummary";
@@ -59,7 +59,7 @@ const SORT_LABELS: Record<string, string> = {
   customer: "Customer",
   ...Object.fromEntries(PHASE_ORDER.map((phase) => [phase, phaseLabel(phase)])),
 };
-const STATUSES: StageStatus[] = ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"];
+const STATUSES: StageStatus[] = ITEM_STATUS_CHOICES;
 
 const th = { padding: "13px 14px", textAlign: "left" as const, fontSize: 11.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, whiteSpace: "nowrap" as const };
 const td = { padding: "10px 14px", fontSize: 13.5, verticalAlign: "top" as const };
