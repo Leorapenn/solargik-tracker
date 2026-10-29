@@ -156,6 +156,7 @@ model Project {
   changeOrders            ChangeOrder[]
   suggestions             Suggestion[]
   tasks                   Task[]
+  shipments               Shipment[]
   // Payments (milestones, change orders) are in this currency (USD, EUR, ILS...). paymentBase is the
   // contract amount in that currency that milestone percentages apply to; when empty, contractValue
   // (imported from monday.com) is used.
@@ -163,6 +164,42 @@ model Project {
   paymentBase             Decimal?         @db.Decimal(14, 2)
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
+}
+
+// One shipment of a project's goods (pylons, piles, drive units...): who moves it, in which containers and on which vessel, when it
+// reaches the port, where it stands with customs and when it reaches the site. Typed by hand, or proposed from the forwarder's
+// emails in the Inbox (SHIPMENT_UPDATE). Links and short facts only: no documents are stored.
+model Shipment {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // how the shipment is named in the emails: a PO or invoice number, "Shipment #02"
+  reference       String
+  goods           String?
+  forwarder       String?
+  vessel          String?
+  containers      String[]  @default([])
+  portOfLoading   String?
+  portOfDischarge String?
+  // BOOKED | IN_TRANSIT | AT_PORT | CUSTOMS | DELIVERY_PLANNED | DELIVERED (see src/lib/shipments.ts)
+  status          String    @default("BOOKED")
+  // NOT_STARTED | IN_PROGRESS | HELD | CLEARED
+  customsStatus   String    @default("NOT_STARTED")
+  etd             DateTime? @db.Date
+  // expected arrival at the port, and the day it really arrived
+  eta             DateTime? @db.Date
+  arrivedAt       DateTime? @db.Date
+  customsClearedAt DateTime? @db.Date
+  // planned delivery to the site, and the day it really arrived there
+  deliveryDate    DateTime? @db.Date
+  deliveredAt     DateTime? @db.Date
+  notes           String?
+  // the last email this came from (a link only)
+  sourceLink      String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([projectId])
 }
 
 // The "project profile": extra details people fill in by hand (or from the contract), one row per project,

@@ -148,6 +148,15 @@ describe("shapeProject", () => {
     expect(shapeProject(source).milestones).toEqual([]);
   });
 
+  it("lists the shipments by name, state, containers and expected arrival: never notes, forwarders or links", () => {
+    const shipments = [{ reference: "PO 26000253", status: "DELIVERY_PLANNED", customsStatus: "CLEARED", containers: ["TCNU5368259", "BHCU3190171"], eta: new Date("2026-11-09T00:00:00Z"), notes: "secret", forwarder: "Viamar", sourceLink: "https://x/y" }];
+    const v = shapeProject({ ...source, shipments });
+    expect(v.shipments).toEqual([{ reference: "PO 26000253", status: "DELIVERY_PLANNED", customsStatus: "CLEARED", containers: ["TCNU5368259", "BHCU3190171"], eta: "2026-11-09" }]);
+    expect(Object.keys(v.shipments[0]).sort()).toEqual(["containers", "customsStatus", "eta", "reference", "status"]);
+    expect(JSON.stringify(v.shipments)).not.toMatch(/secret|Viamar|https?:/);
+    expect(shapeProject(source).shipments).toEqual([]);
+  });
+
   it("lists each change order by name and state only: never an amount", () => {
     const v = shapeProject(source);
     expect(v.changeOrders).toEqual([{ name: "Change Order 02: additional PDUs", status: "SENT", invoiceStatus: null }]);
@@ -161,7 +170,7 @@ describe("shapeProject", () => {
 
   it("contains exactly the agreed fields and never the SharePoint link", () => {
     const v = shapeProject(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "milestones", "name", "number", "openTasks", "pendingProposals", "phases", "recentProposals", "stage", "status"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "milestones", "name", "number", "openTasks", "pendingProposals", "phases", "recentProposals", "shipments", "stage", "status"]);
     for (const ph of v.phases) expect(Object.keys(ph).sort()).toEqual(["phase", "status", "update"]);
     expect(JSON.stringify(v)).not.toMatch(/https?:|sharepoint\.com/i);
   });

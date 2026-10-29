@@ -7,12 +7,16 @@ import { CURRENCIES, formatTerms, isCurrency } from "@/lib/payments";
 import { PROJECT_NUMBER_RE, cleanNewProjectProfile, type NewProjectProfile, type NewProjectProfileKey } from "@/lib/newProject";
 import { projectNamePart } from "@/lib/intakeDirectory";
 import { isTaskOutcome, type TaskOutcome } from "@/lib/taskMatch";
+import { DATE_KEYS, MAX_NOTES, isCustomsStatus, isShipmentStatus, parseContainers } from "@/lib/shipments";
+
+// The free-text facts a shipment proposal can carry (the dates, the two statuses and the containers are handled separately).
+export const SHIPMENT_TEXT_KEYS = ["goods", "forwarder", "vessel", "portOfLoading", "portOfDischarge", "notes"] as const;
 
 // What an outside reader (a Dots agent reading Outlook) may PROPOSE. Nothing here changes any data: a person
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "TASK_UPDATE", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "TASK_UPDATE", "SHIPMENT_UPDATE", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
@@ -26,6 +30,7 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   NEW_PROJECT: "New project (created in 360 when approved)",
   ACTION_ITEM: "Task (created when approved)",
   TASK_UPDATE: "Task update (updates or resolves an open task)",
+  SHIPMENT_UPDATE: "Shipment (added or updated on the project when approved)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
   NOTE: "Note (nothing to apply)",
@@ -82,6 +87,10 @@ export type Payload =
   // email's day) and sets the task's status from `outcome`; RESOLVED closes it. A person confirms the task and the outcome.
   // `taskIds` is only there when the email settles several tasks at once (then `taskId` is the first of them).
   | { kind: "TASK_UPDATE"; taskId: string; taskIds?: string[]; text: string; outcome: TaskOutcome }
+  // A shipment of the project's goods as a forwarder's email describes it. Only the facts the email states (`reference` names the
+  // shipment: a PO or invoice number, "Shipment #02"). Approving adds it to the project's Shipments, or updates the one with the same
+  // reference (else the one sharing a container number); containers are added, never dropped.
+  | ({ kind: "SHIPMENT_UPDATE"; reference: string; containers?: string[] } & Partial<Record<(typeof SHIPMENT_TEXT_KEYS)[number] | (typeof DATE_KEYS)[number] | "status" | "customsStatus", string>>)
   // `fileLink`: a document that belongs with the note (e.g. an amendment saved in SharePoint), shown as "Open file".
   | { kind: "CORRESPONDENCE_NOTE"; text: string; fileLink?: string }
   | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; paymentTermsDays: number | null; invoiceLink: string | null; payslipLink: string | null }
@@ -296,6 +305,33 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     const rawOutcome = raw.outcome === undefined || raw.outcome === null || raw.outcome === "" ? "LOG" : typeof raw.outcome === "string" ? raw.outcome.trim().toUpperCase().replace(/[\s-]+/g, "_") : "";
     if (!isTaskOutcome(rawOutcome)) return { ok: false, error: `"outcome" must be RESOLVED, WAITING_CUSTOMER, WAITING_US or LOG.` };
     payload = ids.length > 1 ? { kind, taskId, taskIds: ids, text: t.value!, outcome: rawOutcome } : { kind, taskId, text: t.value!, outcome: rawOutcome };
+  } else if (kind === "SHIPMENT_UPDATE") {
+    const reference = oneLine(raw.reference, 120);
+    if (!reference) return { ok: false, error: `"reference" (the shipment's PO or invoice number, or "Shipment #02") is required for SHIPMENT_UPDATE.` };
+    const facts: Record<string, string | string[]> = {};
+    for (const key of SHIPMENT_TEXT_KEYS) {
+      const v = key === "notes" ? str(raw[key], MAX_NOTES) : oneLine(raw[key], key === "goods" ? 200 : 120);
+      if (v) facts[key] = v;
+    }
+    for (const key of DATE_KEYS) {
+      const d = optionalDate(raw, key);
+      if (!d.ok) return d;
+      if (d.value) facts[key] = d.value;
+    }
+    const norm = (v: unknown) => (typeof v === "string" ? v.trim().toUpperCase().replace(/[\s-]+/g, "_") : "");
+    if (raw.status !== undefined && raw.status !== null && raw.status !== "") {
+      if (!isShipmentStatus(norm(raw.status))) return { ok: false, error: `"status" must be one of: BOOKED, IN_TRANSIT, AT_PORT, CUSTOMS, DELIVERY_PLANNED, DELIVERED.` };
+      facts.status = norm(raw.status);
+    }
+    if (raw.customsStatus !== undefined && raw.customsStatus !== null && raw.customsStatus !== "") {
+      if (!isCustomsStatus(norm(raw.customsStatus))) return { ok: false, error: `"customsStatus" must be one of: NOT_STARTED, IN_PROGRESS, HELD, CLEARED.` };
+      facts.customsStatus = norm(raw.customsStatus);
+    }
+    const containers = raw.containers === undefined || raw.containers === null ? { ok: true as const, value: [] as string[] } : parseContainers(raw.containers);
+    if (!containers.ok) return containers;
+    if (containers.value.length) facts.containers = containers.value;
+    if (Object.keys(facts).length === 0) return { ok: false, error: "A SHIPMENT_UPDATE needs at least one fact besides the reference (status, dates, containers, vessel...)." };
+    payload = { kind, reference, ...facts } as Payload;
   } else if (kind === "CONTRACT_DOCUMENT") {
     const description = oneLine(raw.description, 200);
     if (!description) return { ok: false, error: `"description" (what the document is, e.g. "Signed Framework Supply Agreement") is required for CONTRACT_DOCUMENT.` };
@@ -437,7 +473,7 @@ export function agentInstructions(endpoint: string): string {
     "- Always name the project as written in the email (the project code like '259' if present) and quote the sentence that supports your suggestion in 'evidence'. Put the email's own id in source.messageId AND the id of its conversation (the whole email chain) in source.conversationId, so the tracker shows the proposals of one chain together; say how sure you are in 'confidence' (high, medium or low).",
     "- CHANGE_ORDER when an email announces a NEW change order: reason (what it is for, e.g. \"Change Order 02: additional PDUs\"), and only what the email states: amount as a plain number (no thousands separators), currency, dateSent, invoicedDate, paymentTermsDays. Put this email's Outlook web link in fileLink when the change order document is attached to it. Approving it CREATES the change order on the Payments page, so never guess an amount, date or term. When the INVOICE for an existing change order arrives, use CHANGE_ORDER_UPDATE (changeOrder = its name as in the project's changeOrders list, invoicedDate, invoiceStatus SENT or PAID, paymentTermsDays, and the email's link in invoiceLink) instead of creating a second one.",
     "- MATCH AN INVOICE TO THE PROJECT'S MILESTONES: every project in the projects list has \"milestones\" (name, percent of the contract, status). An invoice line (\"Advance payment 35%\", \"Milestone 2\", \"Pylon 20%\") belongs to the ONE milestone whose name or percent it states: for example an invoice for 35% with 'Advance payment' in it matches the milestone named \"Advance payment\" whose percent is 35. Send a MILESTONE_UPDATE with that milestone's name exactly as listed, and the SharePoint link of the saved invoice PDF in invoiceLink. When the invoice's percent equals the SUM of several milestones, or no single milestone matches, send a CORRESPONDENCE_NOTE instead of guessing. A milestone already INVOICE_SENT or PAYMENT_RECEIVED is not proposed again.",
-    "- SHIPPING EMAILS: mail from (or forwarded from) a freight forwarder, customs broker, shipping line or trucking company about goods on their way (booked or shipped with containers and dates, arrival at the port, customs documents or release, delivery to the site, proof of delivery). Name the project by its number as in the subject or the packing list (e.g. \"Project 360\", \"360 - PYLONS\"). Send an ITEM_UPDATE on the matching SUPPLY Delivery item (\"Delivery – Piles\" = foundation piles, \"Delivery – Tracker Structure\" = pylons, torque tubes, beams, \"Delivery – Drive Units & I&C\" = motors, drive units, control boxes, cables) with the facts and dates as written; an ACTION_ITEM for each question someone must answer or document someone must send (who answers: say it); and, only for a signed proof of delivery of the WHOLE item, a STATUS_CHANGE to DONE with date = the delivery day. A partial delivery is an ITEM_UPDATE only. If the goods do not clearly map to one item, send a PHASE_UPDATE on SUPPLY. Do not save packing lists or customs papers, never state amounts.",
+    "- SHIPPING EMAILS: mail from (or forwarded from) a freight forwarder, customs broker, shipping line or trucking company about goods on their way (booked or shipped with containers and dates, arrival at the port, customs documents or release, delivery to the site, proof of delivery). Name the project by its number as in the subject or the packing list (e.g. \"Project 360\", \"360 - PYLONS\"). Send ONE SHIPMENT_UPDATE per shipment with only the facts stated: reference (the PO or invoice number, or \"Shipment #02\"), goods, forwarder, vessel, containers (container numbers: four letters and seven digits, copied from the packing list, never invented), portOfLoading, portOfDischarge, status (BOOKED, IN_TRANSIT, AT_PORT, CUSTOMS, DELIVERY_PLANNED, DELIVERED), customsStatus (NOT_STARTED, IN_PROGRESS, HELD, CLEARED), the dates etd, eta, arrivedAt, customsClearedAt, deliveryDate, deliveredAt, and a one-line notes. Use the shipment's `shipments` list on the project (same reference or same containers) so a proposal updates it instead of adding another. Also send an ACTION_ITEM for each question someone must answer or document someone must send (say who answers); and, only for a signed proof of delivery of a WHOLE Delivery item (\"Delivery – Piles\" = foundation piles, \"Delivery – Tracker Structure\" = pylons, torque tubes, beams, \"Delivery – Drive Units & I&C\" = motors, drive units, control boxes, cables), a STATUS_CHANGE to DONE with date = the delivery day. A partial delivery is a SHIPMENT_UPDATE only. Do not save packing lists or customs papers, never state amounts.",
     "- INVOICE FOR A MILESTONE: when accounting (e.g. Hadassa) sends the copy of a milestone invoice for the first time, send a MILESTONE_UPDATE with status INVOICE_SENT, invoiceSentDate (the invoice date printed on the invoice; if it is not readable, the day the email was sent), the invoice link, and paymentTermsDays ONLY if the invoice or email states the terms (\"Net 30\" = 30, \"Net 10\" = 10, \"immediate\" = 0). If no terms are stated leave paymentTermsDays out: the tracker uses 30 days. The tracker calculates the due date (invoice date + terms) and shows Overdue by itself. For change orders the terms are 30 or 10 days as the change order or email states: always send paymentTermsDays when it is written.",
     "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
     "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
@@ -498,6 +534,23 @@ export function describePayload(p: Payload): string {
       const many = p.taskIds && p.taskIds.length > 1;
       const task = many ? `${p.taskIds!.length} tasks` : "the task";
       return `${p.outcome === "RESOLVED" ? `Resolve ${task}` : p.outcome === "LOG" ? `Add to the log of ${many ? task : "the task"}` : `Update ${task} and set ${many ? "them" : "it"} to ${p.outcome === "WAITING_US" ? "Waiting on us" : "Waiting on customer"}`}: ${p.text}`;
+    }
+    case "SHIPMENT_UPDATE": {
+      const parts = [
+        p.status ? `status ${p.status.toLowerCase().replace(/_/g, " ")}` : null,
+        p.customsStatus ? `customs ${p.customsStatus.toLowerCase().replace(/_/g, " ")}` : null,
+        p.vessel ? `vessel ${p.vessel}` : null,
+        p.containers?.length ? `${p.containers.length} container${p.containers.length === 1 ? "" : "s"}` : null,
+        p.portOfDischarge ? `to ${p.portOfDischarge}` : null,
+        p.etd ? `sails ${p.etd}` : null,
+        p.eta ? `expected at the port ${p.eta}` : null,
+        p.arrivedAt ? `arrived at the port ${p.arrivedAt}` : null,
+        p.customsClearedAt ? `customs cleared ${p.customsClearedAt}` : null,
+        p.deliveryDate ? `delivery to the site ${p.deliveryDate}` : null,
+        p.deliveredAt ? `delivered ${p.deliveredAt}` : null,
+        p.notes ? `note: ${p.notes}` : null,
+      ].filter(Boolean);
+      return `Add or update shipment "${p.reference}"${p.goods ? ` (${p.goods})` : ""}: ${parts.join(", ")}`;
     }
     case "CORRESPONDENCE_NOTE":
       return p.text;

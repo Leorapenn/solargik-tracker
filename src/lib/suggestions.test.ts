@@ -142,6 +142,21 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
     expect(error({ kind: "STATUS_CHANGE", item: "x", status: "DONE", date: "20/10/2026" })).toMatch(/date/);
   });
 
+  it("accepts a shipment with only the facts it states, and refuses bad containers, statuses, dates and an empty one", () => {
+    const p = ok({
+      kind: "SHIPMENT_UPDATE", reference: " PO 26000253 ", goods: "Pylons", forwarder: "Viamar", containers: ["tcnu 5368259", "BHCU3190171", "TCNU5368259"],
+      portOfDischarge: "Genoa", status: "delivery planned", customsStatus: "in-progress", eta: "2026-11-09",
+    }).payload;
+    expect(p).toEqual({ kind: "SHIPMENT_UPDATE", reference: "PO 26000253", goods: "Pylons", forwarder: "Viamar", portOfDischarge: "Genoa", eta: "2026-11-09", status: "DELIVERY_PLANNED", customsStatus: "IN_PROGRESS", containers: ["TCNU5368259", "BHCU3190171"] });
+    expect(describePayload(p)).toBe('Add or update shipment "PO 26000253" (Pylons): status delivery planned, customs in progress, 2 containers, to Genoa, expected at the port 2026-11-09');
+    expect(error({ kind: "SHIPMENT_UPDATE", goods: "x", status: "BOOKED" })).toMatch(/reference/);
+    expect(error({ kind: "SHIPMENT_UPDATE", reference: "A" })).toMatch(/at least one fact/);
+    expect(error({ kind: "SHIPMENT_UPDATE", reference: "A", containers: ["not a container"] })).toMatch(/container number/);
+    expect(error({ kind: "SHIPMENT_UPDATE", reference: "A", status: "LOST" })).toMatch(/status/);
+    expect(error({ kind: "SHIPMENT_UPDATE", reference: "A", customsStatus: "MAYBE" })).toMatch(/customsStatus/);
+    expect(error({ kind: "SHIPMENT_UPDATE", reference: "A", eta: "09/11/2026" })).toMatch(/eta/);
+  });
+
   it("accepts one task update for several tasks (taskIds), the first being the taskId, with no duplicates and at most ten", () => {
     const base = { kind: "TASK_UPDATE", text: "Answered both questions.", outcome: "RESOLVED" };
     const many = ok({ ...base, taskIds: ["cmgx1abcd0001aaa", "cmgx1abcd0002bbb", "cmgx1abcd0001aaa"] }).payload;

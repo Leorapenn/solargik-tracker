@@ -64,6 +64,7 @@ export async function listProjectsForMatching(): Promise<ProjectView[]> {
       suggestions: { where: { status: "PENDING" }, orderBy: { createdAt: "desc" }, take: MAX_PENDING_PER_PROJECT, select: { kind: true, summary: true } },
       changeOrders: { orderBy: { createdAt: "asc" }, select: { reason: true, status: true, invoiceStatus: true } }, // names and state only: never the amounts
       milestones: { orderBy: { order: "asc" }, select: { label: true, percent: true, order: true, status: true } }, // name, percent and state only: never amounts, dates or links
+      shipments: { orderBy: { createdAt: "asc" }, select: { reference: true, status: true, customsStatus: true, containers: true, eta: true } }, // no notes, forwarders or links
     },
   });
   const { byProject } = await recentByOwner();

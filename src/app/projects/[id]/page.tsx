@@ -37,6 +37,8 @@ import { ProjectSummary } from "@/components/ProjectSummary";
 import { CorrespondenceCard } from "@/components/CorrespondenceCard";
 import { listProjectCorrespondence } from "@/server/services/correspondence";
 import { listOpenTasksForProject } from "@/server/services/tasks";
+import { listShipments } from "@/server/services/shipments";
+import { ShipmentsCard } from "@/components/ShipmentsCard";
 import { TasksCard } from "@/components/TasksCard";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle } from "@/lib/theme";
 
@@ -58,7 +60,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence, openTasks] = await Promise.all([
+  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence, openTasks, shipments] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -79,6 +81,7 @@ export default async function ProjectDetailPage({
     getContractSigningDate(id),
     listProjectCorrespondence(id),
     listOpenTasksForProject(id).catch(() => []),
+    listShipments(id).catch(() => []), // the shipments never break the page
   ]);
 
   if (!project) notFound();
@@ -357,6 +360,13 @@ export default async function ProjectDetailPage({
             ),
           )}
         />
+      </details>
+
+      <details open>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
+          Shipments{shipments.length > 0 ? ` (${shipments.length})` : ""}
+        </summary>
+        <ShipmentsCard projectId={project.id} shipments={shipments} />
       </details>
 
       {payments && <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />}

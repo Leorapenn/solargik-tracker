@@ -15,6 +15,7 @@ import { addTaskUpdate, createTask, setTaskStatus } from "@/server/services/task
 import { MAX_UPDATE_TEXT, cleanTask, taskFromActionItem, type TaskInput } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS, newProjectName, projectClash, type NewProjectEdits } from "@/lib/newProject";
 import { saveProfile } from "@/server/services/projectProfile";
+import { applyShipmentProposal, type ShipmentProposal } from "@/server/services/shipments";
 
 // ---- intake: what an outside reader sends ----
 
@@ -197,6 +198,13 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
   if (!projectId) throw new UserError("Choose which project this belongs to first.");
   const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true, customerId: true, paymentCurrency: true } });
   if (!project) throw new UserError("That project no longer exists.");
+
+  // a shipment: added to the project's Shipments, or the matching one is updated (see applyShipmentProposal)
+  if (payload.kind === "SHIPMENT_UPDATE") {
+    const { kind: ignored, ...proposal } = payload;
+    void ignored;
+    return applyShipmentProposal(projectId, proposal as ShipmentProposal, sourceLink);
+  }
 
   if (payload.kind === "PHASE_UPDATE") {
     const phase = await prisma.phase.findUnique({ where: { projectId_name: { projectId, name: payload.phase } }, select: { id: true } });

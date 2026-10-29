@@ -142,6 +142,8 @@ export type ProjectView = {
   // the project's payment milestones in order (name, the percent of the contract, state): never an amount, a date or a link.
   // With them an invoice that says "Advance payment 35%" can be matched to the one milestone it belongs to.
   milestones: { name: string; percent: number | null; status: string }[];
+  // the project's shipments (name, state, containers, expected arrival), so an email about one updates it instead of adding another
+  shipments: { reference: string; status: string; customsStatus: string; containers: string[]; eta: string | null }[];
 };
 
 // Percent as a number, or null when the milestone is a typed amount (no percent) or the value is not a number.
@@ -168,6 +170,7 @@ export type ProjectSource = {
   openTasks?: OpenTaskSource[];
   changeOrders: { reason: string; status: string; invoiceStatus: string | null }[];
   milestones?: { label: string; percent: { toString(): string } | string | number | null; order: number; status: string }[];
+  shipments?: { reference: string; status: string; customsStatus: string; containers: string[]; eta: Date | null }[];
 };
 
 export function shapeProject(p: ProjectSource): ProjectView {
@@ -201,5 +204,6 @@ export function shapeProject(p: ProjectSource): ProjectView {
     openTasks: shapeOpenTasks(p.openTasks),
     changeOrders: p.changeOrders.map((c) => ({ name: c.reason.replace(/\s+/g, " ").trim().slice(0, 150), status: c.status, invoiceStatus: c.invoiceStatus })),
     milestones: [...(p.milestones ?? [])].sort((a, b) => a.order - b.order).map((m) => ({ name: m.label.replace(/\s+/g, " ").trim().slice(0, 100), percent: percentNumber(m.percent), status: m.status })),
+    shipments: (p.shipments ?? []).slice(0, 30).map((s) => ({ reference: s.reference.slice(0, 120), status: s.status, customsStatus: s.customsStatus, containers: s.containers.slice(0, 60), eta: s.eta ? s.eta.toISOString().slice(0, 10) : null })),
   };
 }
