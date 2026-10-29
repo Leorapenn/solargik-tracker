@@ -35,11 +35,20 @@ function sameScope(email: EmailRef, task: MatchableTask): boolean {
   return false;
 }
 
+// A long chain (a regular project meeting thread, say) can hold tasks of many customers and projects, so the chain alone is not
+// enough: an email about one project is only offered that project's tasks (and the same customer's general ones), an email about
+// a customer only that customer's. With neither known, the chain decides.
+function chainScopeAllows(email: EmailRef, task: MatchableTask): boolean {
+  if (email.projectId) return task.projectId === email.projectId || (task.projectId === null && Boolean(email.customerId) && email.customerId === task.customerId);
+  if (email.customerId) return email.customerId === task.customerId;
+  return true;
+}
+
 // 1) the same email chain (conversation id), 2) the same subject in the same project or customer. A level with exactly one
 // open task decides; a level with several leaves the choice to the reviewer (all are candidates). Resolved tasks never match.
 export function matchTasksToEmail(email: EmailRef, tasks: MatchableTask[]): TaskMatch {
   const open = tasks.filter((t) => t.status !== "RESOLVED");
-  const conversation = email.conversationId ? open.filter((t) => t.conversationIds.includes(email.conversationId as string)) : [];
+  const conversation = email.conversationId ? open.filter((t) => t.conversationIds.includes(email.conversationId as string) && chainScopeAllows(email, t)) : [];
   if (conversation.length === 1) return { taskId: conversation[0].id, how: "conversation", candidateIds: [conversation[0].id] };
   if (conversation.length > 1) return { taskId: null, how: "conversation", candidateIds: conversation.map((t) => t.id) };
 

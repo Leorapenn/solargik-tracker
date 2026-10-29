@@ -16,6 +16,25 @@ describe("matchTasksToEmail", () => {
     expect(matchTasksToEmail({ conversationId: "AAA", sourceSubject: "Something else", projectId: "p367", customerId: "c1" }, tasks)).toEqual({ taskId: "t1", how: "conversation", candidateIds: ["t1"] });
   });
 
+  it("on a long chain shared by many projects, offers only the tasks of the email's own project or customer", () => {
+    const tasks = [
+      task({ id: "p257", projectId: "p257", customerId: "revalue", conversationIds: ["MEET"] }),
+      task({ id: "p318", projectId: "p318", customerId: "revalue", conversationIds: ["MEET"] }),
+      task({ id: "general", projectId: null, customerId: "revalue", conversationIds: ["MEET"] }),
+      task({ id: "p370", projectId: "p370", customerId: "iaccess", conversationIds: ["MEET"] }),
+    ];
+    // an email about 370 (iAccess): only 370's task, never the Revalue ones from the same meeting thread
+    expect(matchTasksToEmail({ conversationId: "MEET", projectId: "p370", customerId: "iaccess" }, tasks)).toEqual({ taskId: "p370", how: "conversation", candidateIds: ["p370"] });
+    // an email about 318: its task and the customer's general one, so the reviewer picks
+    expect(matchTasksToEmail({ conversationId: "MEET", projectId: "p318", customerId: "revalue" }, tasks).candidateIds.sort()).toEqual(["general", "p318"]);
+    // a customer but no project: that customer's tasks only
+    expect(matchTasksToEmail({ conversationId: "MEET", projectId: null, customerId: "iaccess" }, tasks).candidateIds).toEqual(["p370"]);
+    // a project with no task in the chain gets nothing
+    expect(matchTasksToEmail({ conversationId: "MEET", projectId: "p999", customerId: "other" }, tasks)).toEqual({ taskId: null, how: null, candidateIds: [] });
+    // nothing known about the email: the chain decides, as before
+    expect(matchTasksToEmail({ conversationId: "MEET" }, tasks).candidateIds).toHaveLength(4);
+  });
+
   it("falls back to the same subject (Re:/Fw: ignored) in the same project", () => {
     const tasks = [task({ id: "t1", subjects: ["367 valfabbrica initial layout"] })];
     const m = matchTasksToEmail({ conversationId: null, sourceSubject: "RE: 367 Valfabbrica Initial layout", projectId: "p367", customerId: "c1" }, tasks);

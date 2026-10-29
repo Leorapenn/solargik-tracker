@@ -139,6 +139,16 @@ export type ProjectView = {
   openTasks: OpenTaskView[];
   // the project's change orders (their names and state only, no amounts), so an invoice can update the right one
   changeOrders: { name: string; status: string; invoiceStatus: string | null }[];
+  // the project's payment milestones in order (name, the percent of the contract, state): never an amount, a date or a link.
+  // With them an invoice that says "Advance payment 35%" can be matched to the one milestone it belongs to.
+  milestones: { name: string; percent: number | null; status: string }[];
+};
+
+// Percent as a number, or null when the milestone is a typed amount (no percent) or the value is not a number.
+const percentNumber = (v: { toString(): string } | string | number | null | undefined): number | null => {
+  if (v === null || v === undefined) return null;
+  const n = Number(v.toString());
+  return Number.isFinite(n) ? n : null;
 };
 
 export const MAX_PENDING_PER_PROJECT = 15;
@@ -157,6 +167,7 @@ export type ProjectSource = {
   recentSuggestions?: RecentSource[]; // the last two weeks, any status, newest first
   openTasks?: OpenTaskSource[];
   changeOrders: { reason: string; status: string; invoiceStatus: string | null }[];
+  milestones?: { label: string; percent: { toString(): string } | string | number | null; order: number; status: string }[];
 };
 
 export function shapeProject(p: ProjectSource): ProjectView {
@@ -189,5 +200,6 @@ export function shapeProject(p: ProjectSource): ProjectView {
     recentProposals: shapeRecent(p.recentSuggestions),
     openTasks: shapeOpenTasks(p.openTasks),
     changeOrders: p.changeOrders.map((c) => ({ name: c.reason.replace(/\s+/g, " ").trim().slice(0, 150), status: c.status, invoiceStatus: c.invoiceStatus })),
+    milestones: [...(p.milestones ?? [])].sort((a, b) => a.order - b.order).map((m) => ({ name: m.label.replace(/\s+/g, " ").trim().slice(0, 100), percent: percentNumber(m.percent), status: m.status })),
   };
 }

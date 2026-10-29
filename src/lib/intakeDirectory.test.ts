@@ -131,6 +131,23 @@ describe("shapeProject", () => {
     expect(shapeProject({ ...source, openTasks: many }).openTasks).toHaveLength(30);
   });
 
+  it("lists the payment milestones in order by name, percent and state: never an amount, date or link", () => {
+    const milestones = [
+      { label: "  Pylon (upon   shipment notice) ", percent: "20", order: 2, status: "NOT_DUE", amountOverride: "9999", invoiceLink: "https://x.sharepoint.com/inv.pdf" },
+      { label: "Advance payment", percent: { toString: () => "35.000" }, order: 1, status: "INVOICE_SENT" },
+      { label: "Typed amount", percent: null, order: 3, status: "NOT_DUE" },
+    ];
+    const v = shapeProject({ ...source, milestones });
+    expect(v.milestones).toEqual([
+      { name: "Advance payment", percent: 35, status: "INVOICE_SENT" },
+      { name: "Pylon (upon shipment notice)", percent: 20, status: "NOT_DUE" },
+      { name: "Typed amount", percent: null, status: "NOT_DUE" },
+    ]);
+    for (const m of v.milestones) expect(Object.keys(m).sort()).toEqual(["name", "percent", "status"]);
+    expect(JSON.stringify(v.milestones)).not.toMatch(/9999|https?:|sharepoint/i);
+    expect(shapeProject(source).milestones).toEqual([]);
+  });
+
   it("lists each change order by name and state only: never an amount", () => {
     const v = shapeProject(source);
     expect(v.changeOrders).toEqual([{ name: "Change Order 02: additional PDUs", status: "SENT", invoiceStatus: null }]);
@@ -144,7 +161,7 @@ describe("shapeProject", () => {
 
   it("contains exactly the agreed fields and never the SharePoint link", () => {
     const v = shapeProject(source);
-    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "name", "number", "openTasks", "pendingProposals", "phases", "recentProposals", "stage", "status"]);
+    expect(Object.keys(v).sort()).toEqual(["aliases", "changeOrders", "customer", "id", "lifecycle", "milestones", "name", "number", "openTasks", "pendingProposals", "phases", "recentProposals", "stage", "status"]);
     for (const ph of v.phases) expect(Object.keys(ph).sort()).toEqual(["phase", "status", "update"]);
     expect(JSON.stringify(v)).not.toMatch(/https?:|sharepoint\.com/i);
   });
