@@ -14,6 +14,20 @@ export const TASK_STATUSES: Choice[] = [
 export const isTaskStatus = (v: unknown): v is string => TASK_STATUSES.some((s) => s.value === v);
 export const taskStatusChoice = (v: string): Choice => TASK_STATUSES.find((s) => s.value === v) ?? TASK_STATUSES[0];
 
+// How important a task is. Medium unless set; it only orders and labels tasks (the reminders work the same for all).
+export const TASK_PRIORITIES: Choice[] = [
+  { value: "HIGH", label: "High", bg: "#FCE0DD", text: "#8C1D18" },
+  { value: "MEDIUM", label: "Medium", bg: "#DCE8FB", text: "#1D4F9F" },
+  { value: "LOW", label: "Low", bg: "#E4E6EC", text: "#4A4F5C" },
+];
+export const isTaskPriority = (v: unknown): v is string => TASK_PRIORITIES.some((p) => p.value === v);
+export const taskPriorityChoice = (v: string | null | undefined): Choice => TASK_PRIORITIES.find((p) => p.value === v) ?? TASK_PRIORITIES[1];
+// High first: 0, Medium 1, Low 2 (an unknown value counts as Medium).
+export const taskPriorityRank = (v: string | null | undefined): number => {
+  const i = TASK_PRIORITIES.findIndex((p) => p.value === v);
+  return i < 0 ? 1 : i;
+};
+
 export const MAX_TOPIC = 120;
 export const MAX_DETAILS = 2000;
 export const MAX_CONTACT_NOTE = 300;
@@ -91,6 +105,7 @@ export type TaskInput = {
   topic: string;
   details: string;
   status: string;
+  priority: string; // HIGH | MEDIUM | LOW ("" = Medium)
   ownerId: string; // "" = none
   lastContactAt: string; // "" = none
   lastContactNote: string;
@@ -103,6 +118,7 @@ export type CleanTask = {
   topic: string;
   details: string | null;
   status: string;
+  priority: string;
   ownerId: string | null;
   lastContactAt: string | null;
   lastContactNote: string | null;
@@ -131,6 +147,8 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
   if (details.length > MAX_DETAILS) return { ok: false, error: `The details can be at most ${MAX_DETAILS} characters.` };
   const status = str(input.status) || "OPEN";
   if (!isTaskStatus(status)) return { ok: false, error: "That status doesn't exist." };
+  const priority = str(input.priority) || "MEDIUM";
+  if (!isTaskPriority(priority)) return { ok: false, error: "That priority doesn't exist." };
   const note = oneLine(input.lastContactNote);
   if (note.length > MAX_CONTACT_NOTE) return { ok: false, error: `The note about the last correspondence can be at most ${MAX_CONTACT_NOTE} characters.` };
   const last = date(input.lastContactAt, "The last correspondence date");
@@ -147,6 +165,7 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
       topic,
       details: details || null,
       status,
+      priority,
       ownerId: str(input.ownerId).trim() || null,
       lastContactAt: last.value,
       lastContactNote: note || null,
@@ -251,6 +270,7 @@ export const TASK_SORTS = [
   { key: "newest", label: "Newest first" },
   { key: "customer", label: "Customer A–Z" },
   { key: "project", label: "Project" },
+  { key: "priority", label: "Priority" },
 ] as const;
 export type TaskSort = (typeof TASK_SORTS)[number]["key"];
 export const parseTaskSort = (v: unknown): TaskSort => (TASK_SORTS.some((s) => s.key === v) ? (v as TaskSort) : "urgent");
@@ -265,11 +285,15 @@ function projectSortKey(name: string | null | undefined): number {
 // overdue one leads and a task with no follow-up date comes last (ties: most urgent first). Newest first: the day each
 // task was created, latest first. Customer A-Z: by the customer's name. Project: by project number. All of them fall back
 // to most urgent first for ties. Resolved tasks always come last.
-export function compareForSort<T extends TaskTimes & { customerName?: string; projectName?: string | null }>(sort: TaskSort, a: T, b: T, todayIso: string): number {
+export function compareForSort<T extends TaskTimes & { customerName?: string; projectName?: string | null; priority?: string }>(sort: TaskSort, a: T, b: T, todayIso: string): number {
   if (sort === "urgent") return compareTasks(a, b, todayIso);
   const resolved = Number(a.status === "RESOLVED") - Number(b.status === "RESOLVED");
   if (resolved !== 0) return resolved;
-  if (sort === "customer") {
+  if (sort === "priority") {
+    // High, then Medium, then Low; inside a priority the most urgent first
+    const byPriority = taskPriorityRank(a.priority) - taskPriorityRank(b.priority);
+    if (byPriority !== 0) return byPriority;
+  } else if (sort === "customer") {
     const byName = (a.customerName ?? "").localeCompare(b.customerName ?? "", undefined, { sensitivity: "base" });
     if (byName !== 0) return byName;
   } else if (sort === "project") {

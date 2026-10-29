@@ -13,8 +13,12 @@ import {
   matchesFilter,
   parseTaskFilter,
   parseTaskSort,
+  TASK_PRIORITIES,
   TASK_SORTS,
+  isTaskPriority,
   taskAttention,
+  taskPriorityChoice,
+  taskPriorityRank,
   taskPrefillFromSuggestion,
   matchOwner,
   taskFromActionItem,
@@ -94,7 +98,7 @@ describe("cleanTask", () => {
     const r = cleanTask({ ...base, projectId: "p1", details: "Line 1\r\nLine 2 ", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: " They replied ", nextFollowUp: "2026-10-22" });
     expect(r).toEqual({
       ok: true,
-      value: { customerId: "c1", projectId: "p1", topic: "Disputing the charges", details: "Line 1\nLine 2", status: "WAITING_CUSTOMER", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: "They replied", nextFollowUp: "2026-10-22", sourceLink: null },
+      value: { customerId: "c1", projectId: "p1", topic: "Disputing the charges", details: "Line 1\nLine 2", status: "WAITING_CUSTOMER", priority: "MEDIUM", ownerId: "o1", lastContactAt: "2026-10-12", lastContactNote: "They replied", nextFollowUp: "2026-10-22", sourceLink: null },
     });
   });
   it("treats empty optional fields as none and defaults the status to Open", () => {
@@ -225,7 +229,7 @@ describe("sorting the tasks (?sort=)", () => {
   ];
   const order = (s: "urgent" | "upcoming" | "newest") => [...list].sort((a, b) => compareForSort(s, a, b, TODAY)).map((x) => x.id);
   it("has Most urgent (the default), Upcoming and Newest first, and falls back to the default for anything else", () => {
-    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest", "customer", "project"]);
+    expect(TASK_SORTS.map((s) => s.key)).toEqual(["urgent", "upcoming", "newest", "customer", "project", "priority"]);
     expect(parseTaskSort("upcoming")).toBe("upcoming");
     expect(parseTaskSort("nope")).toBe("urgent");
     expect(parseTaskSort(undefined)).toBe("urgent");
@@ -238,6 +242,38 @@ describe("sorting the tasks (?sort=)", () => {
   });
   it("Most urgent is the usual order", () => {
     expect(order("urgent")).toEqual([...list].sort((a, b) => compareTasks(a, b, TODAY)).map((x) => x.id));
+  });
+});
+
+describe("task priority", () => {
+  it("has High, Medium and Low; a task is Medium unless set; nothing else is accepted", () => {
+    expect(TASK_PRIORITIES.map((p) => p.value)).toEqual(["HIGH", "MEDIUM", "LOW"]);
+    expect(cleanTask({ customerId: "c1", topic: "x" })).toMatchObject({ ok: true, value: { priority: "MEDIUM" } });
+    expect(cleanTask({ customerId: "c1", topic: "x", priority: "" })).toMatchObject({ ok: true, value: { priority: "MEDIUM" } });
+    expect(cleanTask({ customerId: "c1", topic: "x", priority: "HIGH" })).toMatchObject({ ok: true, value: { priority: "HIGH" } });
+    expect(cleanTask({ customerId: "c1", topic: "x", priority: "URGENT" }).ok).toBe(false);
+    expect(isTaskPriority("LOW")).toBe(true);
+    expect(isTaskPriority("low")).toBe(false);
+    expect(taskPriorityChoice("HIGH").label).toBe("High");
+    expect(taskPriorityChoice(undefined).label).toBe("Medium");
+    expect([taskPriorityRank("HIGH"), taskPriorityRank("MEDIUM"), taskPriorityRank("LOW"), taskPriorityRank("odd")]).toEqual([0, 1, 2, 1]);
+  });
+
+  const p = (id: string, priority: string, over: Partial<TaskTimes> = {}) => ({ id, priority, ...t(over) });
+  const list = [
+    p("resolved-high", "HIGH", { status: "RESOLVED" }),
+    p("low-overdue", "LOW", { nextFollowUp: "2026-10-01" }),
+    p("med-quiet", "MEDIUM"),
+    p("high-later", "HIGH", { nextFollowUp: "2026-11-20" }),
+    p("high-overdue", "HIGH", { nextFollowUp: "2026-10-05" }),
+    p("med-today", "MEDIUM", { nextFollowUp: TODAY }),
+  ];
+  it("sorts High first, then Medium, then Low; the most urgent first inside a priority; resolved last", () => {
+    const order = [...list].sort((a, b) => compareForSort("priority", a, b, TODAY)).map((x) => x.id);
+    expect(order).toEqual(["high-overdue", "high-later", "med-today", "med-quiet", "low-overdue", "resolved-high"]);
+  });
+  it("is one of the sort choices and parses from the address", () => {
+    expect(parseTaskSort("priority")).toBe("priority");
   });
 });
 

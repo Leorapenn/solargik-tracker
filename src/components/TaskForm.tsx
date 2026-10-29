@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { saveNewTask, saveTask } from "@/server/actions/tasks";
 import type { ActionResult } from "@/lib/errors";
-import { MAX_CONTACT_NOTE, MAX_DETAILS, MAX_TOPIC, TASK_STATUSES, type TaskInput } from "@/lib/tasks";
+import { MAX_CONTACT_NOTE, MAX_DETAILS, MAX_TOPIC, TASK_PRIORITIES, TASK_STATUSES, type TaskInput } from "@/lib/tasks";
 import type { TaskView } from "@/server/services/tasks";
 import { DateField } from "@/components/DateField";
 import { NAVY, TEXT_MUTED, cardStyle, inputStyle, primaryButton, secondaryButton } from "@/lib/theme";
@@ -12,7 +12,7 @@ export type CustomerOption = { id: string; name: string };
 export type ProjectOption = { id: string; name: string; customerId: string };
 export type PersonOption = { id: string; name: string };
 
-const blank = (customerId: string): TaskInput => ({ customerId, projectId: "", topic: "", details: "", status: "OPEN", ownerId: "", lastContactAt: "", lastContactNote: "", nextFollowUp: "", sourceLink: "" });
+const blank = (customerId: string): TaskInput => ({ customerId, projectId: "", topic: "", details: "", status: "OPEN", priority: "MEDIUM", ownerId: "", lastContactAt: "", lastContactNote: "", nextFollowUp: "", sourceLink: "" });
 
 const fromTask = (t: TaskView): TaskInput => ({
   customerId: t.customerId,
@@ -20,6 +20,7 @@ const fromTask = (t: TaskView): TaskInput => ({
   topic: t.topic,
   details: t.details ?? "",
   status: t.status,
+  priority: t.priority,
   ownerId: t.ownerId ?? "",
   lastContactAt: t.lastContactAt ?? "",
   lastContactNote: t.lastContactNote ?? "",
@@ -119,6 +120,16 @@ export function TaskForm({
             {TASK_STATUSES.map((s) => (
               <option key={s.value} value={s.value}>
                 {s.label}
+              </option>
+            ))}
+          </select>,
+        )}
+        {field(
+          "Priority",
+          <select aria-label="Priority" value={data.priority || "MEDIUM"} onChange={(e) => set({ priority: e.target.value })} style={inputStyle}>
+            {TASK_PRIORITIES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
               </option>
             ))}
           </select>,

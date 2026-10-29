@@ -553,7 +553,8 @@ export async function approveWithTask(id: string, opts: { taskId?: string; outco
   if (first.count === 0) throw new UserError("That suggestion was already handled.");
   try {
     const emailDay = toDateInputValue(todayInAppTz(row.sourceReceivedAt ?? new Date()));
-    await addTaskUpdate(task.id, { date: emailDay, text, contact: true });
+    // the log entry keeps the email's link and subject (never its text), so the task's history shows the correspondence
+    await addTaskUpdate(task.id, { date: emailDay, text, contact: true, sourceLink: row.sourceLink ?? "", sourceSubject: row.sourceSubject ?? "" });
     const status = outcomeStatus(outcome);
     if (status && status !== task.status) await setTaskStatus(task.id, status);
     const note = `Task ${outcome === "RESOLVED" ? "resolved" : "updated"}: "${task.topic}". Open it on the Tasks tab.`;

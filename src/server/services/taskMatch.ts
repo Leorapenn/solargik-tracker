@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { toDateInputValue } from "@/lib/dates";
+import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { threadsByLink, type MatchableTask } from "@/lib/taskMatch";
+import type { TimelineEmail } from "@/lib/taskTimeline";
 import type { OpenTaskSource } from "@/lib/intakeDirectory";
 
 // The open tasks with the email chain each one started in. A task made from an email keeps that email's link; the
@@ -47,6 +48,48 @@ async function loadOpenTasks(): Promise<(OpenTaskChoice & OpenTaskSource)[]> {
       thread: t.display,
     };
   });
+}
+
+// The emails of each task's chain, for its history: the email the task was created from, and every other email of the same
+// conversation that produced a proposal (any status). Only the subject, the day and the link of each, never its text. Each
+// email appears once (by message id or link). A task made from an email whose proposal is not on file still gets that
+// email, by the task's own link. A task typed by hand has no chain.
+export async function loadTaskEmails(tasks: { id: string; sourceLink: string | null; createdOn: string }[]): Promise<Map<string, TimelineEmail[]>> {
+  const out = new Map<string, TimelineEmail[]>();
+  const links = [...new Set(tasks.map((t) => t.sourceLink).filter((l): l is string => Boolean(l)))];
+  if (links.length === 0) return out;
+
+  const origin = await prisma.suggestion.findMany({ where: { sourceLink: { in: links } }, select: { sourceLink: true, conversationId: true } });
+  const chainsByLink = new Map<string, Set<string>>();
+  for (const o of origin) {
+    if (!o.sourceLink || !o.conversationId) continue;
+    chainsByLink.set(o.sourceLink, (chainsByLink.get(o.sourceLink) ?? new Set()).add(o.conversationId));
+  }
+  const chains = [...new Set([...chainsByLink.values()].flatMap((s) => [...s]))];
+  const rows = await prisma.suggestion.findMany({
+    where: { OR: [{ sourceLink: { in: links } }, ...(chains.length ? [{ conversationId: { in: chains } }] : [])] },
+    orderBy: { createdAt: "asc" },
+    take: 3000,
+    select: { sourceLink: true, conversationId: true, sourceSubject: true, sourceReceivedAt: true, sourceMessageId: true, createdAt: true },
+  });
+
+  for (const t of tasks) {
+    if (!t.sourceLink) continue;
+    const mine = chainsByLink.get(t.sourceLink) ?? new Set<string>();
+    const seen = new Set<string>();
+    const emails: TimelineEmail[] = [];
+    for (const r of rows) {
+      if (!(r.sourceLink === t.sourceLink || (r.conversationId && mine.has(r.conversationId)))) continue;
+      const key = r.sourceMessageId ?? r.sourceLink ?? `${r.sourceSubject ?? ""}|${r.createdAt.toISOString()}`;
+      if (seen.has(key) || (r.sourceLink && seen.has(r.sourceLink))) continue;
+      seen.add(key);
+      if (r.sourceLink) seen.add(r.sourceLink);
+      emails.push({ key, day: toDateInputValue(todayInAppTz(r.sourceReceivedAt ?? r.createdAt)), subject: (r.sourceSubject ?? "").replace(/\s+/g, " ").trim() || "(no subject)", link: r.sourceLink });
+    }
+    if (!seen.has(t.sourceLink)) emails.push({ key: "origin", day: t.createdOn, subject: "The email the task was created from", link: t.sourceLink });
+    out.set(t.id, emails);
+  }
+  return out;
 }
 
 // For the Inbox cards: every open task with what is needed to match it to an email and to show it in a picker.

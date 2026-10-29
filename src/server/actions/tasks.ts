@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
 import type { TaskInput } from "@/lib/tasks";
-import { addTaskUpdate, closeCustomerTasks, createTask, deleteTask, markContactedToday, setTaskStatus, updateTask } from "@/server/services/tasks";
+import { addTaskUpdate, closeCustomerTasks, createTask, deleteTask, markContactedToday, setTaskPriority, setTaskStatus, updateTask } from "@/server/services/tasks";
 
 function refresh() {
   revalidatePath("/tasks");
@@ -36,6 +36,15 @@ export async function changeTaskStatus(id: string, status: string): Promise<Acti
   await requireActionAuth();
   return run(async () => {
     await setTaskStatus(id, status);
+    refresh();
+    return {};
+  });
+}
+
+export async function changeTaskPriority(id: string, priority: string): Promise<ActionResult> {
+  await requireActionAuth();
+  return run(async () => {
+    await setTaskPriority(id, priority);
     refresh();
     return {};
   });

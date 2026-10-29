@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
-import { MAX_UPDATE_TEXT, TASK_STATUSES, agoText, taskAttention } from "@/lib/tasks";
+import { changeTaskPriority, changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
+import { MAX_UPDATE_TEXT, TASK_PRIORITIES, TASK_STATUSES, agoText, taskAttention } from "@/lib/tasks";
+import { buildTimeline } from "@/lib/taskTimeline";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import type { TaskView } from "@/server/services/tasks";
 import { ColorSelect } from "@/components/ColorSelect";
@@ -47,7 +48,10 @@ export function TaskCard({
   const [next, setNext] = useState("");
   const attention = taskAttention({ status: task.status, nextFollowUp: task.nextFollowUp, lastContactAt: task.lastContactAt, createdOn: task.createdOn }, todayIso);
   const resolved = task.status === "RESOLVED";
-  const entries = showAll ? task.updates : task.updates.slice(0, 3);
+  // the whole history: the dated log plus the emails of the chain (subject and link only), newest first
+  const timeline = buildTimeline(task.updates, task.emails, task.sourceLink);
+  const entries = showAll ? timeline : timeline.slice(0, 4);
+  const emailCount = timeline.filter((i) => i.link).length;
 
   const go = (fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) =>
     startTransition(async () => {
@@ -78,6 +82,7 @@ export function TaskCard({
         {!open && attention && (
           <span style={{ background: ATTENTION[attention.level].bg, color: ATTENTION[attention.level].text, borderRadius: 999, padding: "1px 10px", fontSize: 12.5, fontWeight: 700 }}>{attention.text}</span>
         )}
+        <ColorSelect ariaLabel={`Priority of ${task.topic}`} value={task.priority} options={TASK_PRIORITIES} disabled={pending} onChange={(v) => v && go(() => changeTaskPriority(task.id, v))} />
         <ColorSelect ariaLabel={`Status of ${task.topic}`} value={task.status} options={TASK_STATUSES} disabled={pending} onChange={(v) => v && go(() => changeTaskStatus(task.id, v))} />
       </div>
 
@@ -123,17 +128,33 @@ export function TaskCard({
       {task.lastContactNote && <div style={{ fontSize: 13.5, overflowWrap: "anywhere" }}>{task.lastContactNote}</div>}
       {task.details && <div style={{ fontSize: 13.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere", color: "#333" }}>{task.details}</div>}
 
-      {task.updates.length > 0 && (
+      {timeline.length > 0 && (
         <div style={{ borderTop: `1px solid ${ROW_DIVIDER}`, paddingTop: 8, display: "flex", flexDirection: "column", gap: 4 }}>
-          {entries.map((u) => (
-            <div key={u.id} style={{ fontSize: 13, display: "flex", gap: 10 }}>
-              <span style={{ color: TEXT_MUTED, whiteSpace: "nowrap", minWidth: 92 }}>{fmt(u.date)}</span>
-              <span style={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>{u.text}</span>
+          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TEXT_MUTED }}>
+            History{emailCount > 0 ? ` (${emailCount} email${emailCount === 1 ? "" : "s"})` : ""}
+          </div>
+          {entries.map((i) => (
+            <div key={i.key} style={{ fontSize: 13, display: "flex", gap: 10 }}>
+              <span style={{ color: TEXT_MUTED, whiteSpace: "nowrap", minWidth: 92 }}>{i.date ? fmt(i.date) : "—"}</span>
+              <span style={{ overflowWrap: "anywhere", whiteSpace: "pre-wrap" }}>
+                {i.kind === "update" && i.text}
+                {i.link && (
+                  <span style={{ display: "block", color: TEXT_MUTED }}>
+                    <span aria-hidden="true">✉ </span>
+                    {i.subject ?? "Email"}
+                    {" · "}
+                    <a href={i.link} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700 }}>
+                      Open email
+                    </a>
+                  </span>
+                )}
+                {i.kind === "email" && !i.link && <span style={{ color: TEXT_MUTED }}>✉ {i.subject}</span>}
+              </span>
             </div>
           ))}
-          {task.updates.length > 3 && (
+          {timeline.length > 4 && (
             <button type="button" onClick={() => setShowAll((s) => !s)} style={{ alignSelf: "flex-start", border: "none", background: "transparent", color: NAVY, fontWeight: 700, fontSize: 13, cursor: "pointer", padding: 0 }}>
-              {showAll ? "Show fewer" : `Show all ${task.updates.length} entries`}
+              {showAll ? "Show fewer" : `Show the full history (${timeline.length} entries)`}
             </button>
           )}
         </div>

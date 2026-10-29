@@ -1,13 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
-import { cleanTask, cleanTaskUpdate, compareTasks, isTaskStatus, taskAttention, taskStatusChoice, type Attention, type CleanTask, type TaskInput } from "@/lib/tasks";
+import { cleanTask, cleanTaskUpdate, compareTasks, isTaskPriority, isTaskStatus, taskAttention, taskPriorityChoice, taskStatusChoice, type Attention, type CleanTask, type TaskInput } from "@/lib/tasks";
+import { cleanWebLink } from "@/lib/links";
+import type { TimelineEmail } from "@/lib/taskTimeline";
+import { loadTaskEmails } from "@/server/services/taskMatch";
 
 const iso = (d: Date | null) => (d ? toDateInputValue(d) : null);
 const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
 const todayIso = () => toDateInputValue(todayInAppTz());
 
-export type TaskUpdateView = { id: string; date: string; text: string };
+export type TaskUpdateView = { id: string; date: string; text: string; sourceLink: string | null; sourceSubject: string | null };
 export type TaskView = {
   id: string;
   customerId: string;
@@ -17,6 +20,7 @@ export type TaskView = {
   topic: string;
   details: string | null;
   status: string;
+  priority: string; // HIGH | MEDIUM | LOW
   ownerId: string | null;
   ownerName: string | null;
   lastContactAt: string | null;
@@ -26,6 +30,7 @@ export type TaskView = {
   sourceLink: string | null; // the email it was created from
   createdOn: string;
   updates: TaskUpdateView[]; // newest first
+  emails: TimelineEmail[]; // the emails of the chain the task started in (subject, day and link only)
 };
 
 const include = {
@@ -47,6 +52,7 @@ function toView(t: Row): TaskView {
     topic: t.topic,
     details: t.details,
     status: t.status,
+    priority: t.priority,
     ownerId: t.ownerId,
     ownerName: t.owner?.name ?? null,
     lastContactAt: iso(t.lastContactAt),
@@ -55,21 +61,35 @@ function toView(t: Row): TaskView {
     resolvedAt: iso(t.resolvedAt),
     sourceLink: t.sourceLink,
     createdOn: toDateInputValue(t.createdAt),
-    updates: t.updates.map((u) => ({ id: u.id, date: toDateInputValue(u.date), text: u.text })),
+    updates: t.updates.map((u) => ({ id: u.id, date: toDateInputValue(u.date), text: u.text, sourceLink: u.sourceLink, sourceSubject: u.sourceSubject })),
+    emails: [],
   };
+}
+
+// The views of some tasks, each with the emails of its chain (for the history). The email lookup never breaks a page: if it
+// fails the tasks are shown without the emails.
+async function toViews(rows: Row[]): Promise<TaskView[]> {
+  const views = rows.map(toView);
+  try {
+    const emails = await loadTaskEmails(views.map((v) => ({ id: v.id, sourceLink: v.sourceLink, createdOn: v.createdOn })));
+    for (const v of views) v.emails = emails.get(v.id) ?? [];
+  } catch {
+    /* the history then shows the log only */
+  }
+  return views;
 }
 
 export async function listTasks(): Promise<TaskView[]> {
   const rows = await prisma.task.findMany({ include });
   const today = todayIso();
-  return rows.map(toView).sort((a, b) => compareTasks(a, b, today) || a.customerName.localeCompare(b.customerName) || a.topic.localeCompare(b.topic));
+  return (await toViews(rows)).sort((a, b) => compareTasks(a, b, today) || a.customerName.localeCompare(b.customerName) || a.topic.localeCompare(b.topic));
 }
 
 // The customer's open tasks (for the customer page), most urgent first.
 export async function listOpenTasksForCustomer(customerId: string): Promise<TaskView[]> {
   const rows = await prisma.task.findMany({ where: { customerId, NOT: { status: "RESOLVED" } }, include });
   const today = todayIso();
-  return rows.map(toView).sort((a, b) => compareTasks(a, b, today));
+  return (await toViews(rows)).sort((a, b) => compareTasks(a, b, today));
 }
 
 // The open tasks tied to one project (for the project page), most urgent first. Tasks about the customer in general are not included.
@@ -77,7 +97,7 @@ export async function listOpenTasksForProject(projectId: string): Promise<TaskVi
   if (!projectId) return [];
   const rows = await prisma.task.findMany({ where: { projectId, NOT: { status: "RESOLVED" } }, include });
   const today = todayIso();
-  return rows.map(toView).sort((a, b) => compareTasks(a, b, today));
+  return (await toViews(rows)).sort((a, b) => compareTasks(a, b, today));
 }
 
 // Everything that needs attention now (for the bell): overdue, due today, or quiet. Most urgent first.
@@ -109,6 +129,7 @@ async function check(v: CleanTask) {
 }
 
 const statusLine = (status: string) => `Status changed to ${taskStatusChoice(status).label}`;
+const priorityLine = (priority: string) => `Priority changed to ${taskPriorityChoice(priority).label}`;
 
 export async function createTask(input: Partial<Record<keyof TaskInput, unknown>>): Promise<string> {
   const cleaned = cleanTask(input);
@@ -123,13 +144,15 @@ export async function createTask(input: Partial<Record<keyof TaskInput, unknown>
       topic: v.topic,
       details: v.details,
       status: v.status,
+      priority: v.priority,
       ownerId: v.ownerId,
       lastContactAt: day(v.lastContactAt),
       lastContactNote: v.lastContactNote,
       nextFollowUp: day(v.nextFollowUp),
       resolvedAt: v.status === "RESOLVED" ? day(today) : null,
       sourceLink: v.sourceLink,
-      updates: { create: [{ date: day(today)!, text: "Task created" }] },
+      // a task made from an email: its first entry points at that email
+      updates: { create: [{ date: day(today)!, text: "Task created", sourceLink: v.sourceLink }] },
     },
     select: { id: true },
   });
@@ -144,7 +167,7 @@ export async function updateTask(id: string, input: Partial<Record<keyof TaskInp
   const today = todayIso();
   await prisma.$transaction(
     async (tx) => {
-      const before = await tx.task.findUnique({ where: { id }, select: { status: true, resolvedAt: true } });
+      const before = await tx.task.findUnique({ where: { id }, select: { status: true, priority: true, resolvedAt: true } });
       if (!before) throw new UserError("That task no longer exists.");
       const resolving = v.status === "RESOLVED" && before.status !== "RESOLVED";
       await tx.task.update({
@@ -155,6 +178,7 @@ export async function updateTask(id: string, input: Partial<Record<keyof TaskInp
           topic: v.topic,
           details: v.details,
           status: v.status,
+          priority: v.priority,
           ownerId: v.ownerId,
           lastContactAt: day(v.lastContactAt),
           lastContactNote: v.lastContactNote,
@@ -165,6 +189,23 @@ export async function updateTask(id: string, input: Partial<Record<keyof TaskInp
         },
       });
       if (v.status !== before.status) await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: statusLine(v.status) } });
+      if (v.priority !== before.priority) await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: priorityLine(v.priority) } });
+    },
+    { timeout: 20000 },
+  );
+}
+
+// Changes only the priority (the dropdown on a task), with a line in the log.
+export async function setTaskPriority(id: string, priority: string): Promise<void> {
+  if (!isTaskPriority(priority)) throw new UserError("That priority doesn't exist.");
+  const today = todayIso();
+  await prisma.$transaction(
+    async (tx) => {
+      const before = await tx.task.findUnique({ where: { id }, select: { priority: true } });
+      if (!before) throw new UserError("That task no longer exists.");
+      if (before.priority === priority) return;
+      await tx.task.update({ where: { id }, data: { priority } });
+      await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: priorityLine(priority) } });
     },
     { timeout: 20000 },
   );
@@ -200,11 +241,15 @@ export async function closeCustomerTasks(customerId: string): Promise<number> {
 
 // Adds a dated entry to the log. When it is a correspondence with the customer (the default) it also becomes the
 // "last correspondence" (only if it is newer than the one recorded), and a new follow-up date can be set with it.
-export async function addTaskUpdate(id: string, input: { date?: unknown; text?: unknown; contact?: boolean; nextFollowUp?: unknown }): Promise<void> {
+export async function addTaskUpdate(id: string, input: { date?: unknown; text?: unknown; contact?: boolean; nextFollowUp?: unknown; sourceLink?: unknown; sourceSubject?: unknown }): Promise<void> {
   const today = todayIso();
   const cleaned = cleanTaskUpdate(input, today);
   if (!cleaned.ok) throw new UserError(cleaned.error);
   const { date, text } = cleaned.value;
+  // an entry that comes from an email keeps only its link and subject
+  const link = cleanWebLink(typeof input.sourceLink === "string" ? input.sourceLink : "");
+  if (!link.ok) throw new UserError(`The email link: ${link.error}`);
+  const sourceSubject = typeof input.sourceSubject === "string" ? input.sourceSubject.replace(/\s+/g, " ").trim().slice(0, 300) || null : null;
   let nextFollowUp: string | null | undefined;
   if (input.nextFollowUp !== undefined && input.nextFollowUp !== "") {
     const probe = cleanTask({ customerId: "x", topic: "x", nextFollowUp: input.nextFollowUp });
@@ -215,7 +260,7 @@ export async function addTaskUpdate(id: string, input: { date?: unknown; text?: 
     async (tx) => {
       const task = await tx.task.findUnique({ where: { id }, select: { lastContactAt: true, status: true } });
       if (!task) throw new UserError("That task no longer exists.");
-      await tx.taskUpdate.create({ data: { taskId: id, date: day(date)!, text } });
+      await tx.taskUpdate.create({ data: { taskId: id, date: day(date)!, text, sourceLink: link.value, sourceSubject: link.value ? sourceSubject : null } });
       const data: Record<string, unknown> = {};
       if (input.contact !== false && (!task.lastContactAt || iso(task.lastContactAt)! <= date)) {
         data.lastContactAt = day(date);

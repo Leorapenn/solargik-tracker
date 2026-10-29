@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { matchTasksToEmail } from "@/lib/taskMatch";
 import { approveSuggestion, approveWithTask, createSuggestions } from "./suggestions";
-import { createTask, listTasks, setTaskStatus } from "./tasks";
+import { buildTimeline } from "@/lib/taskTimeline";
+import { addTaskUpdate, createTask, listTasks, setTaskPriority, setTaskStatus, updateTask } from "./tasks";
 import { listOpenTasksForCards, openTasksByOwner } from "./taskMatch";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -112,6 +113,51 @@ describe("an email that answers an open task", () => {
     expect(task.lastContactAt).toBe("2026-10-28");
     expect(task.updates.map((u) => u.text)).toContain("Customer says they will send the signed layout by Friday.");
     expect(await prisma.suggestion.findUnique({ where: { id: row.id }, select: { status: true, projectId: true } })).toEqual({ status: "APPROVED", projectId });
+  });
+
+  it("keeps only the link and subject of the email on the log entry, and shows the chain's emails in the task's history", async () => {
+    const task = await view(taskId);
+    const answer = task.updates.find((u) => u.text.startsWith("Yechiel answered"))!;
+    expect(answer).toMatchObject({ sourceLink: `https://outlook.office365.com/owa/?ItemID=${RUN}-2`, sourceSubject: "Re: 367 Valfabbrica Initial layout" });
+    // the entry made when the task was created points at its email
+    expect(task.updates.find((u) => u.text === "Task created")!.sourceLink).toBe(LINK);
+    // the chain's emails: the one the task was created from, the answer, and the other reply of the chain that arrived as a
+    // proposal (one line each: subject, day, link; no text of any email)
+    const links = [LINK, `https://outlook.office365.com/owa/?ItemID=${RUN}-2`, `https://outlook.office365.com/owa/?ItemID=${RUN}-4`].sort();
+    expect(task.emails.map((e) => e.link).sort()).toEqual(links);
+    expect(task.emails.map((e) => e.subject).sort()).toEqual(["367 Valfabbrica Initial layout", "Re: 367 Valfabbrica Initial layout", "Re: 367 Valfabbrica Initial layout"]);
+    expect(task.emails.every((e) => Object.keys(e).sort().join() === "day,key,link,subject")).toBe(true);
+    // the whole history: the log entries plus the chain email no entry shows yet, each email once
+    const timeline = buildTimeline(task.updates, task.emails, task.sourceLink);
+    expect(timeline.filter((i) => i.link).map((i) => i.link).sort()).toEqual(links);
+    expect(timeline.filter((i) => i.kind === "email")).toHaveLength(1);
+    // a task typed by hand has no chain
+    expect((await view(otherTaskId)).emails).toEqual([]);
+    // a task with an email link that has no proposal on file still shows that email
+    const lonely = await createTask({ customerId, topic: `Lonely ${RUN}`, sourceLink: `https://outlook.office365.com/owa/?ItemID=${RUN}-lonely` });
+    expect((await view(lonely)).emails).toEqual([expect.objectContaining({ key: "origin", link: `https://outlook.office365.com/owa/?ItemID=${RUN}-lonely` })]);
+    // a log entry typed by hand may not carry anything but a web address
+    await expect(addTaskUpdate(otherTaskId, { text: "x", sourceLink: "javascript:alert(1)" })).rejects.toBeInstanceOf(UserError);
+  });
+
+  it("gives a task a priority (Medium by default), logs a change once, and rejects anything else", async () => {
+    expect((await view(otherTaskId)).priority).toBe("MEDIUM");
+    await setTaskPriority(otherTaskId, "HIGH");
+    await setTaskPriority(otherTaskId, "HIGH"); // no change: no second line
+    let task = await view(otherTaskId);
+    expect(task.priority).toBe("HIGH");
+    expect(task.updates.filter((u) => u.text === "Priority changed to High")).toHaveLength(1);
+    await expect(setTaskPriority(otherTaskId, "URGENT")).rejects.toBeInstanceOf(UserError);
+    await expect(setTaskPriority("no-such-task", "LOW")).rejects.toBeInstanceOf(UserError);
+    // editing the task can change it too (and logs it)
+    await updateTask(otherTaskId, { customerId, projectId, topic: task.topic, status: task.status, priority: "LOW" });
+    task = await view(otherTaskId);
+    expect(task.priority).toBe("LOW");
+    expect(task.updates.map((u) => u.text)).toContain("Priority changed to Low");
+    // a new task made with a priority keeps it; with none it is Medium
+    const made = await createTask({ customerId, topic: `Prioritised ${RUN}`, priority: "HIGH" });
+    expect((await view(made)).priority).toBe("HIGH");
+    await expect(createTask({ customerId, topic: "bad", priority: "SOON" })).rejects.toBeInstanceOf(UserError);
   });
 
   it("refuses what it should: a resolved task, an unknown outcome, no task, and kinds that are not notes", async () => {

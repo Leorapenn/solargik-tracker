@@ -421,6 +421,7 @@ model Task {
   nextFollowUp    DateTime?    @db.Date // when to chase again (the reminder)
   resolvedAt      DateTime?    @db.Date
   sourceLink      String? // link to the email the task was created from (an Inbox proposal); only the link is kept
+  priority        String       @default("MEDIUM") // HIGH | MEDIUM | LOW
   updates         TaskUpdate[]
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -437,6 +438,10 @@ model TaskUpdate {
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   date      DateTime @db.Date
   text      String
+  // When the entry comes from an email (an approved answer in the task's chain): the link to it and its subject. Only these
+  // two are kept, never the email's text.
+  sourceLink    String?
+  sourceSubject String?
   createdAt DateTime @default(now())
 
   @@index([taskId, date])

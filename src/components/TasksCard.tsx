@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { agoText, taskAttention, taskStatusChoice } from "@/lib/tasks";
+import { agoText, taskAttention, taskPriorityChoice, taskStatusChoice } from "@/lib/tasks";
 import type { TaskView } from "@/server/services/tasks";
 import { changeTaskStatus } from "@/server/actions/tasks";
 import { ChoicePill } from "@/components/ColorSelect";
@@ -96,6 +96,7 @@ export function TasksCard({
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <ChoicePill choice={taskStatusChoice(t.status)} />
+              <ChoicePill choice={taskPriorityChoice(t.priority)} />
               <button type="button" style={small} disabled={pending} onClick={() => setEditingId(t.id)}>
                 Edit
               </button>
