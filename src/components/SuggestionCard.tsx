@@ -71,6 +71,14 @@ export function SuggestionCard({
   const [taskIds, setTaskIds] = useState<string[]>(s.payload.kind === "TASK_UPDATE" ? (s.payload.taskIds ?? [s.payload.taskId]) : match?.taskId ? [match.taskId] : []);
   const toggleTask = (id: string) => setTaskIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
   const [outcome, setOutcome] = useState<string>(s.payload.kind === "TASK_UPDATE" ? s.payload.outcome : "RESOLVED");
+  // the NEXT follow-up date, set right here when the update does not resolve the task (empty = leave it as it is)
+  const [nextFollowUp, setNextFollowUp] = useState("");
+  const followUpField = outcome !== "RESOLVED" && (
+    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", fontSize: 13.5 }}>
+      Next follow-up
+      <DateField ariaLabel="Next follow-up date" value={nextFollowUp || null} placeholder="Optional" onCommit={(c) => setNextFollowUp(c.date ?? "")} />
+    </span>
+  );
   const taskButton = outcome === "RESOLVED" ? (taskIds.length > 1 ? `Resolve ${taskIds.length} tasks` : "Resolve task") : taskIds.length > 1 ? `Update ${taskIds.length} tasks` : "Update task";
   const taskChecks = (list: OpenTaskChoice[]) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -200,6 +208,7 @@ export function SuggestionCard({
                 </option>
               ))}
             </select>
+            {followUpField}
             <button
               type="button"
               style={primaryButton}
@@ -208,7 +217,7 @@ export function SuggestionCard({
               onClick={() =>
                 startTransition(async () => {
                   setMessage(null);
-                  const result = await approveForTask(s.id, taskIds, outcome, editing || text !== textPayload ? text : undefined);
+                  const result = await approveForTask(s.id, taskIds, outcome, editing || text !== textPayload ? text : undefined, nextFollowUp);
                   setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
                 })
               }
@@ -389,6 +398,7 @@ export function SuggestionCard({
                   </option>
                 ))}
               </select>
+              {followUpField}
             </>
           )}
           {!isNewProject && !isTaskProposal && !isTaskUpdate && <select aria-label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} style={{ ...inputStyle, maxWidth: 280, borderColor: projectId || !needsProject ? undefined : "#F0C069" }}>
@@ -438,7 +448,7 @@ export function SuggestionCard({
               onClick={() =>
                 startTransition(async () => {
                   setMessage(null);
-                  const result = await approveForTask(s.id, taskIds, outcome, editing || text !== textPayload ? text : undefined);
+                  const result = await approveForTask(s.id, taskIds, outcome, editing || text !== textPayload ? text : undefined, nextFollowUp);
                   setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
                 })
               }

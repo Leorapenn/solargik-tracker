@@ -4,7 +4,7 @@ import { UserError } from "@/lib/errors";
 import { matchTasksToEmail } from "@/lib/taskMatch";
 import { approveSuggestion, approveWithTask, createSuggestions } from "./suggestions";
 import { buildTimeline } from "@/lib/taskTimeline";
-import { addTaskUpdate, createTask, listTasks, setTaskPriority, setTaskStatus, updateTask } from "./tasks";
+import { addTaskUpdate, createTask, listTasks, setTaskFollowUp, setTaskPriority, setTaskStatus, updateTask } from "./tasks";
 import { listOpenTasksForCards, openTasksByOwner } from "./taskMatch";
 
 const RUN = `test-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -209,6 +209,41 @@ describe("an email that answers an open task", () => {
     expect((await view(c)).updates.map((u) => u.text)).toEqual(["Task created"]); // nothing was written by the refused tries
     await approveWithTask(noteRow.id, { taskIds: [c, d], outcome: "WAITING_CUSTOMER" });
     for (const id of [c, d]) expect(await view(id)).toMatchObject({ status: "WAITING_CUSTOMER", lastContactAt: "2026-10-28" });
+  });
+
+  it("sets the next follow-up date on its own (no log text), and from the Inbox card when the update does not resolve the task", async () => {
+    const t = await createTask({ customerId, projectId, topic: `Chase me ${RUN}`, lastContactAt: "2026-10-20", nextFollowUp: "2026-10-22" });
+    // quick setter: only the date changes, one log line, correspondence untouched
+    await setTaskFollowUp(t, "2026-11-10");
+    let task = await view(t);
+    expect(task).toMatchObject({ nextFollowUp: "2026-11-10", lastContactAt: "2026-10-20" });
+    expect(task.updates.map((u) => u.text)).toContain("Next follow-up set for 10 Nov 2026");
+    await setTaskFollowUp(t, "2026-11-10"); // the same date: no second line
+    expect((await view(t)).updates.filter((u) => u.text.startsWith("Next follow-up set"))).toHaveLength(1);
+    await setTaskFollowUp(t, "");
+    task = await view(t);
+    expect(task.nextFollowUp).toBeNull();
+    expect(task.updates.map((u) => u.text)).toContain("Follow-up date removed");
+    await expect(setTaskFollowUp(t, "2026-02-31")).rejects.toBeInstanceOf(UserError);
+    await expect(setTaskFollowUp("no-such-task", "2026-11-10")).rejects.toBeInstanceOf(UserError);
+    await setTaskStatus(t, "RESOLVED");
+    await expect(setTaskFollowUp(t, "2026-11-10")).rejects.toBeInstanceOf(UserError); // a resolved task has none
+
+    // approving an update with a new follow-up date: logged, counted as correspondence, the date set on every ticked task
+    const a = await createTask({ customerId, projectId, topic: `First chase ${RUN}`, nextFollowUp: "2026-10-21" });
+    const b = await createTask({ customerId, projectId, topic: `Second chase ${RUN}` });
+    await createSuggestions([proposal(12, { kind: "CORRESPONDENCE_NOTE", text: "Yoni chased the customer again; no answer yet." })]);
+    const row = (await created(12))!;
+    await approveWithTask(row.id, { taskIds: [a, b], outcome: "WAITING_CUSTOMER", nextFollowUp: "2026-11-05" });
+    for (const id of [a, b]) expect(await view(id)).toMatchObject({ status: "WAITING_CUSTOMER", nextFollowUp: "2026-11-05", lastContactAt: "2026-10-28" });
+
+    // a bad date is refused before anything is claimed; resolving ignores the date (a resolved task has none)
+    await createSuggestions([proposal(13, { kind: "CORRESPONDENCE_NOTE", text: "Customer replied." })]);
+    const row2 = (await created(13))!;
+    await expect(approveWithTask(row2.id, { taskIds: [a], outcome: "LOG", nextFollowUp: "not a date" })).rejects.toBeInstanceOf(UserError);
+    expect((await prisma.suggestion.findUniqueOrThrow({ where: { id: row2.id } })).status).toBe("PENDING");
+    await approveWithTask(row2.id, { taskIds: [a], outcome: "RESOLVED", nextFollowUp: "2026-12-01" });
+    expect(await view(a)).toMatchObject({ status: "RESOLVED", nextFollowUp: null });
   });
 
   it("refuses what it should: a resolved task, an unknown outcome, no task, and kinds that are not notes", async () => {

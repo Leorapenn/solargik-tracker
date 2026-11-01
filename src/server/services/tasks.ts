@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
-import { toDateInputValue, todayInAppTz } from "@/lib/dates";
+import { formatDate, parseDateInput, toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { cleanTask, cleanTaskUpdate, compareTasks, isTaskPriority, isTaskStatus, taskAttention, taskPriorityChoice, taskStatusChoice, type Attention, type CleanTask, type TaskInput } from "@/lib/tasks";
 import { cleanWebLink } from "@/lib/links";
 import { deadlineLocal, deadlineStatus, formatDeadline, parseDeadlineLocal, type DeadlineLevel } from "@/lib/deadline";
@@ -241,6 +241,26 @@ export async function setTaskPriority(id: string, priority: string): Promise<voi
       if (before.priority === priority) return;
       await tx.task.update({ where: { id }, data: { priority } });
       await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: priorityLine(priority) } });
+    },
+    { timeout: 20000 },
+  );
+}
+
+// Sets (or, with an empty value, removes) the NEXT follow-up date on its own: no log text needed. It is the quick way to say "chase
+// again on this day" after a follow-up was done. Logged as one line so the history shows it. A resolved task has none.
+export async function setTaskFollowUp(id: string, value: unknown): Promise<void> {
+  const probe = cleanTask({ customerId: "x", topic: "x", nextFollowUp: value ?? "" });
+  if (!probe.ok) throw new UserError(probe.error);
+  const next = probe.value.nextFollowUp;
+  const today = todayIso();
+  await prisma.$transaction(
+    async (tx) => {
+      const before = await tx.task.findUnique({ where: { id }, select: { status: true, nextFollowUp: true } });
+      if (!before) throw new UserError("That task no longer exists.");
+      if (before.status === "RESOLVED") throw new UserError("A resolved task has no follow-up date. Reopen it first.");
+      if (iso(before.nextFollowUp) === next) return;
+      await tx.task.update({ where: { id }, data: { nextFollowUp: day(next) } });
+      await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: next ? `Next follow-up set for ${formatDate(parseDateInput(next))}` : "Follow-up date removed" } });
     },
     { timeout: 20000 },
   );

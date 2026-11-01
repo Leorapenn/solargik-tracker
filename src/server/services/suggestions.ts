@@ -550,7 +550,7 @@ export async function approveSuggestionAsTask(id: string, input: Partial<Record<
 // can't log it twice, and every task is checked before anything is written (they must exist, be open and be one customer's).
 // If one fails half-way the proposal stays approved with a note of what was and wasn't done (re-approving would log twice);
 // if the first fails it goes back to pending. Nothing else about the tasks changes.
-export async function approveWithTask(id: string, opts: { taskId?: string; taskIds?: string[]; outcome?: string; text?: string }): Promise<string> {
+export async function approveWithTask(id: string, opts: { taskId?: string; taskIds?: string[]; outcome?: string; text?: string; nextFollowUp?: string }): Promise<string> {
   const row = await prisma.suggestion.findUnique({ where: { id } });
   if (!row) throw new UserError("That suggestion no longer exists.");
   if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
@@ -567,6 +567,11 @@ export async function approveWithTask(id: string, opts: { taskId?: string; taskI
   if (!cleaned.ok) throw new UserError(cleaned.error);
   if (!cleaned.value) throw new UserError("The text can't be empty. Reject the suggestion instead.");
   const text = cleaned.value.slice(0, MAX_UPDATE_TEXT);
+  // a bad follow-up date is refused BEFORE anything is claimed or written
+  if (opts.nextFollowUp) {
+    const probe = cleanTask({ customerId: "x", topic: "x", nextFollowUp: opts.nextFollowUp });
+    if (!probe.ok) throw new UserError(probe.error);
+  }
 
   const found = await prisma.task.findMany({ where: { id: { in: wanted } }, select: { id: true, topic: true, status: true, customerId: true, projectId: true } });
   const tasks = wanted.map((w) => found.find((t) => t.id === w));
@@ -579,13 +584,15 @@ export async function approveWithTask(id: string, opts: { taskId?: string; taskI
   const claimed = await prisma.suggestion.updateMany({ where: { id, status: "PENDING" }, data: { status: "APPROVED", reviewedAt: new Date() } });
   if (claimed.count === 0) throw new UserError("That suggestion was already handled.");
   const emailDay = toDateInputValue(todayInAppTz(row.sourceReceivedAt ?? new Date()));
+  const nextFollowUp = outcome !== "RESOLVED" && typeof opts.nextFollowUp === "string" ? opts.nextFollowUp.trim() : "";
   const status = outcomeStatus(outcome);
   const verb = outcome === "RESOLVED" ? "resolved" : "updated";
   const done: string[] = [];
   try {
     for (const task of picked) {
       // the log entry keeps the email's link and subject (never its text), so the task's history shows the correspondence
-      await addTaskUpdate(task.id, { date: emailDay, text, contact: true, sourceLink: row.sourceLink ?? "", sourceSubject: row.sourceSubject ?? "" });
+      // the reviewer can set the NEXT follow-up date right here (empty = leave it as it is); a resolved task has none
+      await addTaskUpdate(task.id, { date: emailDay, text, contact: true, sourceLink: row.sourceLink ?? "", sourceSubject: row.sourceSubject ?? "", ...(nextFollowUp ? { nextFollowUp } : {}) });
       if (status && status !== task.status) await setTaskStatus(task.id, status);
       done.push(task.topic);
     }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { changeTaskPriority, changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
+import { changeTaskFollowUp, changeTaskPriority, changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
 import { MAX_UPDATE_TEXT, TASK_PRIORITIES, TASK_STATUSES, agoText, followUpDone, taskAttention } from "@/lib/tasks";
 import { buildTimeline } from "@/lib/taskTimeline";
 import { formatDate, parseDateInput } from "@/lib/dates";
@@ -116,17 +116,20 @@ export function TaskCard({
             {task.lastContactAt ? `${agoText(task.lastContactAt, todayIso)} (${fmt(task.lastContactAt)})` : "none yet"}
           </span>
         </span>
-        {!resolved && followDone && task.nextFollowUp && task.lastContactAt && (
-          <span title={`The follow-up date was ${fmt(task.nextFollowUp)}; correspondence since then counts as the follow-up. Set a new date with Edit or Log update.`}>
-            Follow up: <span style={{ color: "#047857", fontWeight: 700 }}>done, chased {fmt(task.lastContactAt)}</span> <span style={{ color: TEXT_MUTED }}>(it was due {fmt(task.nextFollowUp)})</span> · next follow-up: <span style={{ color: "#1A1A1A" }}>not set</span>
-          </span>
-        )}
-        {!resolved && !followDone && (
-          <span>
-            Follow up:{" "}
-            <span style={{ color: task.nextFollowUp && task.nextFollowUp <= todayIso ? "#8C1D18" : "#1A1A1A", fontWeight: task.nextFollowUp && task.nextFollowUp <= todayIso ? 700 : 400 }}>
-              {task.nextFollowUp ? `${fmt(task.nextFollowUp)} (${agoText(task.nextFollowUp, todayIso)})` : "not set"}
-            </span>
+        {!resolved && (
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }} title={followDone ? `The follow-up date was ${fmt(task.nextFollowUp!)}; correspondence since then counts as the follow-up.` : undefined}>
+            {followDone && task.nextFollowUp && task.lastContactAt ? (
+              <span>
+                Follow up: <span style={{ color: "#047857", fontWeight: 700 }}>done, chased {fmt(task.lastContactAt)}</span> <span style={{ color: TEXT_MUTED }}>(it was due {fmt(task.nextFollowUp)})</span> · next:
+              </span>
+            ) : (
+              <span>Follow up:</span>
+            )}
+            {/* the next follow-up date on its own: type it or pick it, no log text needed (Clear removes it) */}
+            <DateField ariaLabel={`Next follow-up date of ${task.topic}`} value={followDone ? null : task.nextFollowUp} placeholder="Set a date" disabled={pending} onCommit={(c) => go(() => changeTaskFollowUp(task.id, c.date ?? ""))} />
+            {!followDone && task.nextFollowUp && (
+              <span style={{ color: task.nextFollowUp <= todayIso ? "#8C1D18" : TEXT_MUTED, fontWeight: task.nextFollowUp <= todayIso ? 700 : 400 }}>{agoText(task.nextFollowUp, todayIso)}</span>
+            )}
           </span>
         )}
         {resolved && task.resolvedAt && <span style={{ color: "#047857", fontWeight: 700 }}>Resolved {fmt(task.resolvedAt)}</span>}
