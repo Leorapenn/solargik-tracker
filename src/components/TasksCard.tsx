@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { agoText, taskAttention, taskPriorityChoice, taskStatusChoice } from "@/lib/tasks";
+import { agoText, openFollowUp, taskAttention, taskPriorityChoice, taskStatusChoice } from "@/lib/tasks";
 import type { TaskView } from "@/server/services/tasks";
 import { changeTaskStatus } from "@/server/actions/tasks";
 import { ChoicePill } from "@/components/ColorSelect";
@@ -91,7 +91,7 @@ export function TasksCard({
             <div style={{ fontSize: 13, color: TEXT_MUTED }}>
               {showProject ? `${t.projectName ?? "The customer in general"}` : ""}
               {t.lastContactAt ? `${showProject ? " · " : ""}last correspondence ${agoText(t.lastContactAt, todayIso)}` : ""}
-              {t.nextFollowUp ? `${showProject || t.lastContactAt ? " · " : ""}follow up ${agoText(t.nextFollowUp, todayIso)}` : ""}
+              {openFollowUp(t) ? `${showProject || t.lastContactAt ? " · " : ""}follow up ${agoText(openFollowUp(t)!, todayIso)}` : ""}
               {attention ? ` · ${attention.text}` : ""}
             </div>
             {t.deadline && (

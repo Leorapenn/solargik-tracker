@@ -27,6 +27,7 @@ export async function loadDigestTasks(): Promise<DigestTask[]> {
       priority: true,
       deadline: true,
       nextFollowUp: true,
+      lastContactAt: true,
       customer: { select: { name: true } },
       project: { select: { name: true } },
       owner: { select: { name: true, email: true, active: true } },
@@ -44,6 +45,7 @@ export async function loadDigestTasks(): Promise<DigestTask[]> {
     ownerActive: r.owner?.active ?? false,
     deadline: r.deadline,
     nextFollowUp: r.nextFollowUp ? r.nextFollowUp.toISOString().slice(0, 10) : null,
+    lastContactAt: r.lastContactAt ? r.lastContactAt.toISOString().slice(0, 10) : null,
   }));
 }
 

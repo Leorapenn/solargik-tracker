@@ -10,7 +10,9 @@ import {
   compareForSort,
   compareTasks,
   daysBetween,
+  followUpDone,
   matchesFilter,
+  openFollowUp,
   parseTaskFilter,
   parseTaskSort,
   TASK_PRIORITIES,
@@ -42,8 +44,9 @@ describe("days and 'ago' text", () => {
 
 describe("taskAttention (the reminders)", () => {
   it("is overdue once the follow-up date has passed, due today on the day", () => {
-    expect(taskAttention(t({ nextFollowUp: "2026-10-16" }), TODAY)).toEqual({ level: "overdue", days: 3, text: "Follow-up was due 3 days ago" });
-    expect(taskAttention(t({ nextFollowUp: "2026-10-18" }), TODAY)).toEqual({ level: "overdue", days: 1, text: "Follow-up was due yesterday" });
+    // (the last correspondence is before the follow-up date: nothing has been done about it)
+    expect(taskAttention(t({ nextFollowUp: "2026-10-16", lastContactAt: "2026-10-01" }), TODAY)).toEqual({ level: "overdue", days: 3, text: "Follow-up was due 3 days ago" });
+    expect(taskAttention(t({ nextFollowUp: "2026-10-18", lastContactAt: "2026-10-01" }), TODAY)).toEqual({ level: "overdue", days: 1, text: "Follow-up was due yesterday" });
     expect(taskAttention(t({ nextFollowUp: TODAY }), TODAY)).toEqual({ level: "today", days: 0, text: "Follow-up due today" });
   });
   it("needs nothing while a follow-up is scheduled for later, however long ago the last contact was", () => {
@@ -69,8 +72,8 @@ describe("compareTasks (most urgent first)", () => {
       { id: "calm-later", ...t({ nextFollowUp: "2026-10-30" }) },
       { id: "quiet-10", ...t({ lastContactAt: "2026-10-09" }) },
       { id: "today", ...t({ nextFollowUp: TODAY }) },
-      { id: "overdue-1", ...t({ nextFollowUp: "2026-10-18" }) },
-      { id: "overdue-5", ...t({ nextFollowUp: "2026-10-14" }) },
+      { id: "overdue-1", ...t({ nextFollowUp: "2026-10-18", lastContactAt: "2026-10-01" }) },
+      { id: "overdue-5", ...t({ nextFollowUp: "2026-10-14", lastContactAt: "2026-10-01" }) },
       { id: "quiet-8", ...t({ lastContactAt: "2026-10-11" }) },
       { id: "calm-soon", ...t({ nextFollowUp: "2026-10-21" }) },
     ];
@@ -222,7 +225,7 @@ describe("sorting the tasks (?sort=)", () => {
     { id: "resolved", ...t({ status: "RESOLVED", nextFollowUp: "2026-10-01" }) },
     { id: "none-old", ...t({ nextFollowUp: null, createdOn: "2026-09-01", lastContactAt: "2026-10-18" }) },
     { id: "later", ...t({ nextFollowUp: "2026-11-05", createdOn: "2026-10-12" }) },
-    { id: "overdue", ...t({ nextFollowUp: "2026-10-10", createdOn: "2026-10-02" }) },
+    { id: "overdue", ...t({ nextFollowUp: "2026-10-10", createdOn: "2026-10-02", lastContactAt: "2026-10-01" }) },
     { id: "soon", ...t({ nextFollowUp: "2026-10-21", createdOn: "2026-10-18" }) },
     { id: "today", ...t({ nextFollowUp: TODAY, createdOn: "2026-10-15" }) },
     { id: "none-new", ...t({ nextFollowUp: null, createdOn: "2026-10-17", lastContactAt: "2026-10-18" }) },
@@ -245,6 +248,34 @@ describe("sorting the tasks (?sort=)", () => {
   });
 });
 
+describe("a follow-up that has been done", () => {
+  // the real case: follow-up date 21 Oct, chased on 29 Oct, nobody moved the date
+  const chased = t({ nextFollowUp: "2026-10-12", lastContactAt: "2026-10-17", createdOn: "2026-10-05" });
+  it("is done once there is correspondence on or after the follow-up date, whether or not the date was moved", () => {
+    expect(followUpDone({ nextFollowUp: "2026-10-12", lastContactAt: "2026-10-17" })).toBe(true);
+    expect(followUpDone({ nextFollowUp: "2026-10-12", lastContactAt: "2026-10-12" })).toBe(true); // the same day counts
+    expect(followUpDone({ nextFollowUp: "2026-10-12", lastContactAt: "2026-10-11" })).toBe(false); // contact before the date: still to do
+    expect(followUpDone({ nextFollowUp: "2026-10-12", lastContactAt: null })).toBe(false);
+    expect(followUpDone({ nextFollowUp: null, lastContactAt: "2026-10-17" })).toBe(false);
+    expect(openFollowUp({ nextFollowUp: "2026-10-12", lastContactAt: "2026-10-17" })).toBeNull();
+    expect(openFollowUp({ nextFollowUp: "2026-10-22", lastContactAt: "2026-10-17" })).toBe("2026-10-22");
+  });
+  it("is not overdue any more: only the 'no contact for N days' rule watches it", () => {
+    expect(taskAttention(chased, "2026-10-19")).toBeNull(); // chased 2 days ago, nothing to do yet
+    expect(taskAttention(chased, "2026-10-24")).toMatchObject({ level: "quiet", days: 7, text: "No contact for 7 days" });
+    // a new follow-up date after the contact is an open reminder again
+    expect(taskAttention({ ...chased, nextFollowUp: "2026-10-18" }, "2026-10-19")).toMatchObject({ level: "overdue", days: 1 });
+    // a follow-up date that has not come yet is left alone as before
+    expect(taskAttention({ ...chased, nextFollowUp: "2026-10-30" }, "2026-10-19")).toBeNull();
+  });
+  it("sorts a task with a done follow-up as one without a follow-up date, and does not match 'needs attention' while it was just chased", () => {
+    const overdue = t({ nextFollowUp: "2026-10-12", lastContactAt: "2026-10-01" }); // contact BEFORE the date: really overdue
+    expect(compareTasks(overdue, chased, "2026-10-19")).toBeLessThan(0);
+    expect(matchesFilter(chased, "attention", "2026-10-19")).toBe(false);
+    expect(matchesFilter(overdue, "attention", "2026-10-19")).toBe(true);
+  });
+});
+
 describe("task priority", () => {
   it("has High, Medium and Low; a task is Medium unless set; nothing else is accepted", () => {
     expect(TASK_PRIORITIES.map((p) => p.value)).toEqual(["HIGH", "MEDIUM", "LOW"]);
@@ -262,10 +293,10 @@ describe("task priority", () => {
   const p = (id: string, priority: string, over: Partial<TaskTimes> = {}) => ({ id, priority, ...t(over) });
   const list = [
     p("resolved-high", "HIGH", { status: "RESOLVED" }),
-    p("low-overdue", "LOW", { nextFollowUp: "2026-10-01" }),
+    p("low-overdue", "LOW", { nextFollowUp: "2026-10-01", lastContactAt: "2026-09-20" }),
     p("med-quiet", "MEDIUM"),
     p("high-later", "HIGH", { nextFollowUp: "2026-11-20" }),
-    p("high-overdue", "HIGH", { nextFollowUp: "2026-10-05" }),
+    p("high-overdue", "HIGH", { nextFollowUp: "2026-10-05", lastContactAt: "2026-09-20" }),
     p("med-today", "MEDIUM", { nextFollowUp: TODAY }),
   ];
   it("sorts High first, then Medium, then Low; the most urgent first inside a priority; resolved last", () => {

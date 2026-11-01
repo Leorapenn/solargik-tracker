@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { changeTaskPriority, changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
-import { MAX_UPDATE_TEXT, TASK_PRIORITIES, TASK_STATUSES, agoText, taskAttention } from "@/lib/tasks";
+import { MAX_UPDATE_TEXT, TASK_PRIORITIES, TASK_STATUSES, agoText, followUpDone, taskAttention } from "@/lib/tasks";
 import { buildTimeline } from "@/lib/taskTimeline";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import type { TaskView } from "@/server/services/tasks";
@@ -56,6 +56,8 @@ export function TaskCard({
   const [next, setNext] = useState("");
   const attention = taskAttention({ status: task.status, nextFollowUp: task.nextFollowUp, lastContactAt: task.lastContactAt, createdOn: task.createdOn }, todayIso);
   const resolved = task.status === "RESOLVED";
+  // correspondence on or after the follow-up date means it was followed up (see followUpDone)
+  const followDone = followUpDone({ nextFollowUp: task.nextFollowUp, lastContactAt: task.lastContactAt });
   // the whole history: the dated log plus the emails of the chain (subject and link only), newest first
   const timeline = buildTimeline(task.updates, task.emails, task.sourceLink);
   const entries = showAll ? timeline : timeline.slice(0, 4);
@@ -114,7 +116,12 @@ export function TaskCard({
             {task.lastContactAt ? `${agoText(task.lastContactAt, todayIso)} (${fmt(task.lastContactAt)})` : "none yet"}
           </span>
         </span>
-        {!resolved && (
+        {!resolved && followDone && task.nextFollowUp && task.lastContactAt && (
+          <span title={`The follow-up date was ${fmt(task.nextFollowUp)}; correspondence since then counts as the follow-up. Set a new date with Edit or Log update.`}>
+            Follow up: <span style={{ color: "#047857", fontWeight: 700 }}>done, chased {fmt(task.lastContactAt)}</span> <span style={{ color: TEXT_MUTED }}>(it was due {fmt(task.nextFollowUp)})</span> · next follow-up: <span style={{ color: "#1A1A1A" }}>not set</span>
+          </span>
+        )}
+        {!resolved && !followDone && (
           <span>
             Follow up:{" "}
             <span style={{ color: task.nextFollowUp && task.nextFollowUp <= todayIso ? "#8C1D18" : "#1A1A1A", fontWeight: task.nextFollowUp && task.nextFollowUp <= todayIso ? 700 : 400 }}>

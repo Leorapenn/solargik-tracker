@@ -62,12 +62,23 @@ export type TaskTimes = {
 };
 export type Attention = { level: "overdue" | "today" | "quiet"; days: number; text: string };
 
-// Overdue / due today: the follow-up date has come. Quiet: no follow-up date in the future and no contact for STALE_DAYS
+// A follow-up is DONE once there has been correspondence with the customer on or after its date (a "Contacted today", a logged
+// reply, an approved email answer: anything that sets the last correspondence). Chasing is what the reminder asked for, so a
+// follow-up date that is behind the last correspondence is not overdue, whether or not anyone moved it: the date stays as typed,
+// the task simply has no open follow-up until a new date is set (the "quiet" rule then watches how long it has been).
+export function followUpDone(t: { nextFollowUp: string | null; lastContactAt: string | null }): boolean {
+  return Boolean(t.nextFollowUp && t.lastContactAt && t.lastContactAt >= t.nextFollowUp);
+}
+// The follow-up date that is still waiting (null when none is set, or when it has been done).
+export const openFollowUp = (t: { nextFollowUp: string | null; lastContactAt: string | null }): string | null => (followUpDone(t) ? null : t.nextFollowUp);
+
+// Overdue / due today: an open follow-up date has come. Quiet: no open follow-up date in the future and no contact for STALE_DAYS
 // (counted from the last correspondence, or from the day the task was created). A resolved task never needs attention.
 export function taskAttention(t: TaskTimes, todayIso: string): Attention | null {
   if (t.status === "RESOLVED") return null;
-  if (t.nextFollowUp) {
-    const d = daysBetween(t.nextFollowUp, todayIso);
+  const followUp = openFollowUp(t);
+  if (followUp) {
+    const d = daysBetween(followUp, todayIso);
     if (d > 0) return { level: "overdue", days: d, text: `Follow-up was due ${d === 1 ? "yesterday" : `${d} days ago`}` };
     if (d === 0) return { level: "today", days: 0, text: "Follow-up due today" };
     return null; // a follow-up is scheduled for later
@@ -90,8 +101,8 @@ export function compareTasks(a: TaskTimes, b: TaskTimes, todayIso: string): numb
   const rb = bb ? LEVEL_RANK[bb.level] : 3;
   if (ra !== rb) return ra - rb;
   if (aa && bb && aa.days !== bb.days) return bb.days - aa.days;
-  const fa = a.nextFollowUp ?? "9999-12-31";
-  const fb = b.nextFollowUp ?? "9999-12-31";
+  const fa = openFollowUp(a) ?? "9999-12-31";
+  const fb = openFollowUp(b) ?? "9999-12-31";
   if (fa !== fb) return fa < fb ? -1 : 1;
   const ca = a.lastContactAt ?? a.createdOn;
   const cb = b.lastContactAt ?? b.createdOn;
@@ -316,8 +327,8 @@ export function compareForSort<T extends TaskTimes & { customerName?: string; pr
     const byName = (a.customerName ?? "").localeCompare(b.customerName ?? "", undefined, { sensitivity: "base" });
     if (byName !== 0) return byName;
   } else if (sort === "upcoming") {
-    const fa = a.nextFollowUp ?? "9999-12-31";
-    const fb = b.nextFollowUp ?? "9999-12-31";
+    const fa = openFollowUp(a) ?? "9999-12-31";
+    const fb = openFollowUp(b) ?? "9999-12-31";
     if (fa !== fb) return fa < fb ? -1 : 1;
   } else if (a.createdOn !== b.createdOn) {
     return a.createdOn < b.createdOn ? 1 : -1;

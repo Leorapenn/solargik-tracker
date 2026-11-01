@@ -1,6 +1,6 @@
 import { deadlineParts, deadlineStatus, formatDeadline } from "@/lib/deadline";
 import { formatDate, parseDateInput } from "@/lib/dates";
-import { daysBetween, taskPriorityChoice } from "@/lib/tasks";
+import { daysBetween, openFollowUp, taskPriorityChoice } from "@/lib/tasks";
 
 // The two emails to the owners of tasks: every morning what is due that day, and every week what is coming up. Built from the
 // open tasks only, per recipient. A task with no owner, or whose owner has no email address in People, goes to the fallback
@@ -20,6 +20,7 @@ export type DigestTask = {
   ownerActive: boolean;
   deadline: Date | null;
   nextFollowUp: string | null; // YYYY-MM-DD
+  lastContactAt: string | null; // YYYY-MM-DD: a follow-up date on or before it has been done
 };
 
 export type DigestItem = { task: DigestTask; what: "deadline" | "followup"; when: string; detail: string };
@@ -64,10 +65,12 @@ export function buildDigests(tasks: DigestTask[], kind: DigestKind, now: Date, f
         entries.push({ to, note, section: "deadlines", sort: task.deadline.toISOString(), item: { task, what: "deadline", when: formatDeadline(task.deadline), detail: s.text } });
       }
     }
-    if (task.nextFollowUp && task.nextFollowUp <= end) {
-      const gap = daysBetween(task.nextFollowUp, today);
+    // a follow-up that was already done (correspondence on or after its date) is not listed
+    const followUp = openFollowUp(task);
+    if (followUp && followUp <= end) {
+      const gap = daysBetween(followUp, today);
       const detail = gap > 0 ? `${gap} day${gap === 1 ? "" : "s"} overdue` : gap === 0 ? "due today" : `in ${-gap} day${gap === -1 ? "" : "s"}`;
-      entries.push({ to, note, section: "followups", sort: task.nextFollowUp, item: { task, what: "followup", when: fmt(task.nextFollowUp), detail } });
+      entries.push({ to, note, section: "followups", sort: followUp, item: { task, what: "followup", when: fmt(followUp), detail } });
     }
   }
 

@@ -17,6 +17,7 @@ const task = (over: Partial<DigestTask> & { id: string }): DigestTask => ({
   ownerActive: true,
   deadline: null,
   nextFollowUp: null,
+  lastContactAt: null,
   ...over,
 });
 const titles = (d: { sections: { title: string; items: unknown[] }[] }) => d.sections.map((s) => `${s.title}:${s.items.length}`);
@@ -51,6 +52,12 @@ describe("the morning email (daily)", () => {
     expect(digests[0].sections[0].items[0].detail).toBe("Overdue by 15 hours"); // 24 Oct 17:00 was still summer time (UTC+3)
     expect(digests[0].sections[1].items[0].detail).toBe("10 hours left");
     expect(digests[0].sections[2].items.map((i) => i.detail)).toEqual(["3 days overdue", "due today"]);
+  });
+  it("leaves out a follow-up that was already done (correspondence on or after its date)", () => {
+    const done = [task({ id: "chased", nextFollowUp: "2026-10-20", lastContactAt: "2026-10-23" }), task({ id: "late", nextFollowUp: "2026-10-20", lastContactAt: "2026-10-19" })];
+    const [d] = buildDigests(done, "daily", NOW, LEORA).digests;
+    expect(d.sections.find((s) => s.key === "followups")!.items.map((i) => i.task.id)).toEqual(["late"]);
+    expect(buildDigests([done[0]], "daily", NOW, LEORA).digests).toEqual([]);
   });
   it("sends nothing to an owner with nothing to act on", () => {
     expect(buildDigests([task({ id: "x", deadline: at("2026-11-20T10:00") })], "daily", NOW, LEORA).digests).toEqual([]);
