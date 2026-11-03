@@ -160,8 +160,8 @@ export function TaskForm({
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
         {field("Last correspondence", <DateField ariaLabel="Last correspondence date" value={data.lastContactAt || null} onCommit={(c) => set({ lastContactAt: c.date ?? "" })} />)}
         {field(
-          "About it (one line)",
-          <input aria-label="About the last correspondence" value={data.lastContactNote} maxLength={MAX_CONTACT_NOTE} placeholder="e.g. They replied, trying to set a call" onChange={(e) => set({ lastContactNote: e.target.value })} style={{ ...inputStyle, width: 340 }} />,
+          "What happened (one line)",
+          <input aria-label="What happened in the last correspondence" value={data.lastContactNote} maxLength={MAX_CONTACT_NOTE} placeholder="e.g. They replied, trying to set a call" onChange={(e) => set({ lastContactNote: e.target.value })} style={{ ...inputStyle, width: 340 }} />,
         )}
         {field("Follow up on", <DateField ariaLabel="Follow-up date" value={data.nextFollowUp || null} onCommit={(c) => set({ nextFollowUp: c.date ?? "" })} />)}
         {field(

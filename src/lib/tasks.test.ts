@@ -22,6 +22,7 @@ import {
   taskPriorityChoice,
   taskPriorityRank,
   taskPrefillFromSuggestion,
+  shortContext,
   matchOwner,
   taskFromActionItem,
   type TaskTimes,
@@ -143,25 +144,37 @@ describe("taskPrefillFromSuggestion (the Create task button on an Inbox proposal
     sourceReceivedAt: "2026-10-12T08:30:00.000Z",
     sourceLink: "https://outlook.office365.com/owa/?ItemID=abc",
   };
-  it("fills the customer, project, topic, the day of the email and the link, but never the email text", () => {
+  it("fills the customer, project, topic, the day of the email and the link; with no text to say what happened, the details name the email and 'What happened' stays empty", () => {
     const p = taskPrefillFromSuggestion(s, "cust1", "proj1");
-    expect(p).toMatchObject({
-      customerId: "cust1",
-      projectId: "proj1",
-      topic: s.summary,
-      lastContactAt: "2026-10-12",
-      lastContactNote: "Email from Hadassa Gabay “RE: 333 Vascigliano”",
-      sourceLink: s.sourceLink,
-    });
-    expect(p.details).toBe("Created from an Inbox proposal (Change order). Email from Hadassa Gabay “RE: 333 Vascigliano”.");
+    expect(p).toMatchObject({ customerId: "cust1", projectId: "proj1", topic: s.summary, lastContactAt: "2026-10-12", lastContactNote: "", sourceLink: s.sourceLink });
+    expect(p.details).toBe("From an Inbox proposal (Change order).\nEmail from Hadassa Gabay “RE: 333 Vascigliano”.");
     // what it fills in must be a valid task as it stands
     expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
+  });
+  it("says what happened: 'What happened' is the first sentence of the proposal's text, short, and the details hold the whole text and the email", () => {
+    const text = "iAccess (Saif Al-Omari, 2 Nov) answered Viamar: receive the pylons as fast as possible, site hours 7:30-16:30, they can unload from a curtainside truck. With the address given on 30 Oct, all four questions are answered.";
+    const p = taskPrefillFromSuggestion({ ...s, summary: "360: iAccess answered Viamar's last questions", sourceFrom: "amit@solargik.com", sourceSubject: "Fw: Delivery goods", text }, "c", "p");
+    expect(p.lastContactNote!.length).toBeLessThanOrEqual(100);
+    expect(p.lastContactNote!.startsWith("iAccess (Saif Al-Omari, 2 Nov) answered Viamar: receive the pylons")).toBe(true);
+    expect(p.lastContactNote!.endsWith("…")).toBe(true); // cut at a word
+    expect(p.lastContactNote).not.toMatch(/amit@solargik|Fw:/); // who sent it belongs in the details, not in "What happened"
+    expect(p.details).toBe(`${text}\nEmail from amit@solargik.com “Fw: Delivery goods”.`);
+    expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
+  });
+  it("shortContext: the first sentence when it is short enough, never a line that only repeats the topic", () => {
+    expect(shortContext("Customer will send the signed layout by Friday. Nothing else.")).toBe("Customer will send the signed layout by Friday.");
+    expect(shortContext("OK. Customer will send the signed layout by Friday, as agreed on the call.").startsWith("OK. Customer will send")).toBe(true); // a tiny first sentence is not enough
+    expect(shortContext("  ")).toBe("");
+    expect(shortContext(null)).toBe("");
+    expect(shortContext("x".repeat(300)).length).toBeLessThanOrEqual(100);
+    const p = taskPrefillFromSuggestion({ ...s, summary: "Customer will send the signed layout by Friday.", text: "Customer will send the signed layout by Friday." }, "c", "");
+    expect(p.lastContactNote).toBe("");
   });
   it("copes with a proposal that has no source details, no date and a very long summary", () => {
     const p = taskPrefillFromSuggestion({ summary: "x".repeat(300), kindText: "Note", sourceFrom: null, sourceSubject: null, sourceReceivedAt: null, sourceLink: null }, "c", "");
     expect(p.topic!.length).toBeLessThanOrEqual(MAX_TOPIC);
     expect(p.topic!.endsWith("…")).toBe(true);
-    expect(p).toMatchObject({ projectId: "", lastContactAt: "", lastContactNote: "", sourceLink: "", details: "Created from an Inbox proposal (Note)." });
+    expect(p).toMatchObject({ projectId: "", lastContactAt: "", lastContactNote: "", sourceLink: "", details: "From an Inbox proposal (Note)." });
     expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
   });
 });
@@ -210,6 +223,9 @@ describe("taskFromActionItem (an approved action item becomes a task)", () => {
     expect(p.details).toContain(a.text);
     expect(p.details).toContain("For: Leora Penn");
     expect(p.details).toContain("Due: as soon as possible");
+    expect(p.details).toContain("From the email: from tamirp@solargik.com “FW: Initial layout for BLUMBERG”.");
+    // "What happened" is what the email asked, in one short line (not who sent it)
+    expect(p.lastContactNote).toBe("Solargik to schedule the kickoff meeting for the new iAccess Blumberg project as soon as possible.");
     expect(cleanTask({ ...p, status: "OPEN" }).ok).toBe(true);
   });
   it("turns a real date into the follow-up date, and does not guess one from words", () => {

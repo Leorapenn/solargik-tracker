@@ -520,7 +520,7 @@ export function SuggestionCard({
                   s.projectId ?? "",
                   people,
                 )
-              : taskPrefillFromSuggestion(s, projects.find((x) => x.id === projectId)?.customerId ?? (customerId || s.customerId || ""), projectId)
+              : taskPrefillFromSuggestion({ ...s, text: "text" in s.payload ? s.payload.text : s.description }, projects.find((x) => x.id === projectId)?.customerId ?? (customerId || s.customerId || ""), projectId)
           }
           submit={isTaskProposal && pending ? (data) => approveAsTask(s.id, data) : undefined}
           submitLabel={isTaskProposal && pending ? "Create task" : undefined}

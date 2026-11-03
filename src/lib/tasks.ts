@@ -193,8 +193,9 @@ export function cleanTask(input: Partial<Record<keyof TaskInput, unknown>>): Res
 }
 
 // What the "Create task" button on an Inbox proposal fills in: the customer and project of the proposal, its one-line
-// summary as the topic, the day of the email as the last correspondence (with who sent it and its subject, which are
-// not the email's text), and the link to the email. Nothing is saved until the person presses Add task.
+// summary as the topic, the day of the email as the last correspondence, the link to the email, and WHAT THE EMAIL SAID:
+// "What happened" is the first sentence of the proposal's own text (cut short, never the email's text), and the details hold
+// that whole text plus who sent the email and its subject. Nothing is saved until the person presses Add task.
 export type PrefillSource = {
   summary: string;
   kindText: string;
@@ -202,18 +203,39 @@ export type PrefillSource = {
   sourceSubject: string | null;
   sourceReceivedAt: string | null; // ISO date or date-time
   sourceLink: string | null;
+  // the proposal's own words about what the email says (a note's text, an update's text, a description of the change)
+  text?: string | null;
 };
+
+// The first sentence of a text as one short line (about 100 characters, cut at a word): what the "What happened" box shows.
+export function shortContext(text: string | null | undefined, max = 100): string {
+  const t = oneLine(text);
+  if (!t) return "";
+  const sentence = /^.+?[.!?](?=\s|$)/.exec(t)?.[0] ?? t;
+  const base = sentence.length >= 25 ? sentence : t; // a very short first sentence ("OK.") is not enough: use more
+  if (base.length <= max) return base;
+  const cut = base.slice(0, max - 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > 40 ? cut.slice(0, at) : cut).trimEnd().replace(/[,;:]$/, "")}…`;
+}
+
+// "from Amit <amit@solargik.com> “Fw: Delivery goods”" as it appears in the details.
+const emailPhrase = (s: PrefillSource) => [s.sourceFrom && `from ${s.sourceFrom}`, s.sourceSubject && `“${s.sourceSubject}”`].filter(Boolean).join(" ");
+
 export function taskPrefillFromSuggestion(s: PrefillSource, customerId: string, projectId: string): Partial<TaskInput> {
   const day = s.sourceReceivedAt && /^\d{4}-\d{2}-\d{2}/.test(s.sourceReceivedAt) ? s.sourceReceivedAt.slice(0, 10) : "";
-  const email = [s.sourceFrom && `from ${s.sourceFrom}`, s.sourceSubject && `“${s.sourceSubject}”`].filter(Boolean).join(" ");
+  const email = emailPhrase(s);
   const topic = oneLine(s.summary);
+  const what = block(s.text);
+  const context = shortContext(what);
   return {
     customerId,
     projectId,
     topic: topic.length > MAX_TOPIC ? `${topic.slice(0, MAX_TOPIC - 1).trimEnd()}…` : topic,
-    details: `Created from an Inbox proposal (${s.kindText}).${email ? ` Email ${email}.` : ""}`.slice(0, MAX_DETAILS),
+    details: [what || `From an Inbox proposal (${s.kindText}).`, email ? `Email ${email}.` : ""].filter(Boolean).join("\n").slice(0, MAX_DETAILS),
     lastContactAt: validDate(day) ? day : "",
-    lastContactNote: email ? `Email ${email}`.slice(0, MAX_CONTACT_NOTE) : "",
+    // nothing when it would only repeat the topic
+    lastContactNote: context && context !== topic ? context.slice(0, MAX_CONTACT_NOTE) : "",
     sourceLink: s.sourceLink ?? "",
   };
 }
@@ -244,11 +266,12 @@ export function taskFromActionItem(a: ActionItemSource, customerId: string, proj
   const base = taskPrefillFromSuggestion(a, customerId, projectId);
   const by = oneLine(a.by);
   const isDate = validDate(by);
+  const email = emailPhrase(a);
   const lines = [
     block(a.text),
     oneLine(a.who) ? `For: ${oneLine(a.who)}` : "",
     by && !isDate ? `Due: ${by}` : "",
-    base.lastContactNote ? `From the email: ${base.lastContactNote.replace(/^Email /, "")}.` : "",
+    email ? `From the email: ${email}.` : "",
   ].filter(Boolean);
   return {
     ...base,
