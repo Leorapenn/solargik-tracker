@@ -23,6 +23,7 @@ import {
   type ProfileInput,
 } from "@/lib/projectProfile";
 import { CUSTOMER_TYPES } from "@/lib/customerType";
+import { mapLink } from "@/lib/siteInfo";
 import { ChoicePill, ColorSelect } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
 import { FileLinkField } from "@/components/FileLinkField";
@@ -194,6 +195,26 @@ export function ProjectProfileCard({
       { wide: opts.long },
     );
 
+  // A short text that is shown with a link beside it (call, email, map) when read-only.
+  const linkedText = (key: keyof ProfileInput, label: string, href: (value: string) => string | null, linkLabel?: string) =>
+    field(
+      label,
+      editing ? (
+        <input aria-label={label} value={form[key]} maxLength={SHORT_TEXT_MAX} onChange={(e) => set(key, e.target.value)} style={{ ...inputStyle, width: "100%", ...mark(key) }} />
+      ) : view[key] ? (
+        <span style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+          <span>{view[key]}</span>
+          {href(view[key]) && (
+            <a href={href(view[key])!} target={linkLabel ? "_blank" : undefined} rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700, fontSize: 13 }}>
+              {linkLabel ?? (key === "siteContactEmail" ? "Email" : "Call")}
+            </a>
+          )}
+        </span>
+      ) : (
+        <span style={{ color: TEXT_MUTED }}>—</span>
+      ),
+    );
+
   const date = (key: keyof ProfileInput, label: string) =>
     field(
       label,
@@ -287,8 +308,6 @@ export function ProjectProfileCard({
           {linkedDate("clientKickoff", "Client kickoff")}
           {date("ntpDate", "NTP date")}
           {text("projectType", "Type")}
-          {text("shippingAddress", "Shipping address", { long: true })}
-          {text("deliveryAddress", "Delivery address (site)", { long: true })}
           {field(
             "Contract file",
             editing ? (
@@ -365,6 +384,20 @@ export function ProjectProfileCard({
             ),
             { wide: true },
           )}
+        </>,
+      )}
+
+      {section(
+        "Site information",
+        <>
+          {text("shippingAddress", "Shipping address", { long: true })}
+          {text("deliveryAddress", "Delivery address (site)", { long: true })}
+          {text("siteContactName", "Site contact name")}
+          {linkedText("siteContactPhone", "Site contact phone", (v) => `tel:${v.replace(/[^\d+]/g, "")}`)}
+          {linkedText("siteContactEmail", "Site contact email", (v) => `mailto:${v}`)}
+          {text("siteHours", "Site working hours")}
+          {text("siteAccess", "Unloading and access (crane, forklift, truck size, gate, restrictions)", { long: true })}
+          {linkedText("siteCoordinates", "GPS coordinates (latitude, longitude)", (v) => mapLink(v), "Open map")}
         </>,
       )}
 

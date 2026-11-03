@@ -224,9 +224,16 @@ model ProjectProfile {
   ntpDate              DateTime?
   projectType          String?
   contractLink         String? // link to the contract file (e.g. SharePoint)
+  // Site information (2026-11-03): where the goods go and how to get in. The two addresses belong to this section too.
   shippingAddress      String?
   deliveryAddress      String?
-  contractType         String? // EPC / TRACKER_SUPPLY / PILOT (see src/lib/projectProfile.ts); blank by default
+  siteContactName      String?
+  siteContactPhone     String?
+  siteContactEmail     String?
+  siteHours            String? // working / delivery hours on site
+  siteAccess           String? // unloading and access (crane, forklift, truck size, gate, restrictions)
+  siteCoordinates      String? // "lat, lon" in decimal degrees (see src/lib/siteInfo.ts)
+  contractType        String? // EPC / TRACKER_SUPPLY / PILOT (see src/lib/projectProfile.ts); blank by default
   // The customer type of this deal (EPC / DEVELOPER / ... see src/lib/customerType.ts); it can differ between projects of one customer.
   customerType         String?
 

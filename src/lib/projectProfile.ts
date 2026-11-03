@@ -1,6 +1,8 @@
 import type { StageStatus } from "@prisma/client";
 import { CUSTOMER_TYPES } from "@/lib/customerType";
 import { cleanFileLink } from "@/lib/uploads";
+import { checkPhone } from "@/lib/contacts";
+import { checkSiteEmail, formatCoordinates, parseCoordinates } from "@/lib/siteInfo";
 
 // The project profile: dropdown options (all colored), what each field accepts, and the values that are
 // shown from existing sub-stages instead of being stored again.
@@ -62,6 +64,12 @@ export type ProfileInput = {
   projectType: string;
   shippingAddress: string;
   deliveryAddress: string;
+  siteContactName: string;
+  siteContactPhone: string;
+  siteContactEmail: string;
+  siteHours: string;
+  siteAccess: string;
+  siteCoordinates: string;
   contractLink: string;
   projectEngineerId: string;
   designNotes: string;
@@ -87,6 +95,12 @@ export const EMPTY_PROFILE: ProfileInput = {
   projectType: "",
   shippingAddress: "",
   deliveryAddress: "",
+  siteContactName: "",
+  siteContactPhone: "",
+  siteContactEmail: "",
+  siteHours: "",
+  siteAccess: "",
+  siteCoordinates: "",
   contractLink: "",
   projectEngineerId: "",
   designNotes: "",
@@ -102,7 +116,7 @@ export const LONG_TEXT_MAX = 4000;
 export const SHORT_TEXT_MAX = 200;
 
 export type CleanProfile = {
-  text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "incoterms" | "soma" | "projectType" | "designNotes" | "shippingAddress" | "deliveryAddress", string | null>;
+  text: Record<"deliveryExpectations" | "supplyTerms" | "supplyObligations" | "incoterms" | "soma" | "projectType" | "designNotes" | "shippingAddress" | "deliveryAddress" | "siteContactName" | "siteContactPhone" | "siteContactEmail" | "siteHours" | "siteAccess" | "siteCoordinates", string | null>;
   dates: Record<"pileDrivingStart" | "ntpDate" | "designQuestionnaireReceived" | "initialLayoutSent", string | null>;
   choices: Record<ChoiceField, string | null>;
   contractLink: string | null;
@@ -125,15 +139,15 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
   };
 
   const result: CleanProfile = {
-    text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, incoterms: null, soma: null, projectType: null, designNotes: null, shippingAddress: null, deliveryAddress: null },
+    text: { deliveryExpectations: null, supplyTerms: null, supplyObligations: null, incoterms: null, soma: null, projectType: null, designNotes: null, shippingAddress: null, deliveryAddress: null, siteContactName: null, siteContactPhone: null, siteContactEmail: null, siteHours: null, siteAccess: null, siteCoordinates: null },
     dates: { pileDrivingStart: null, ntpDate: null, designQuestionnaireReceived: null, initialLayoutSent: null },
     choices: { contractType: null, customerType: null, soilTest: null, designInfoStatus: null, geotechStatus: null, genioCivileStatus: null, bomStatus: null },
     contractLink: null,
     projectEngineerId: null,
   };
 
-  const longText = { deliveryExpectations: "Delivery expectations", supplyTerms: "Supply terms", supplyObligations: "Supply obligations", designNotes: "Design notes", shippingAddress: "Shipping address", deliveryAddress: "Delivery address" } as const;
-  const shortText = { incoterms: "Incoterms", soma: "SOMA", projectType: "Type" } as const;
+  const longText = { deliveryExpectations: "Delivery expectations", supplyTerms: "Supply terms", supplyObligations: "Supply obligations", designNotes: "Design notes", shippingAddress: "Shipping address", deliveryAddress: "Delivery address", siteAccess: "Unloading and access" } as const;
+  const shortText = { incoterms: "Incoterms", soma: "SOMA", projectType: "Type", siteContactName: "Site contact name", siteHours: "Site working hours" } as const;
   for (const [key, label] of Object.entries(longText)) {
     const v = text(key as keyof ProfileInput, label, LONG_TEXT_MAX);
     if (v instanceof Error) return { ok: false, error: v.message };
@@ -144,6 +158,16 @@ export function cleanProfile(input: Partial<Record<keyof ProfileInput, unknown>>
     if (v instanceof Error) return { ok: false, error: v.message };
     result.text[key as keyof typeof shortText] = v;
   }
+
+  const phone = checkPhone(str("siteContactPhone"));
+  if (!phone.ok) return { ok: false, error: phone.error };
+  result.text.siteContactPhone = phone.value;
+  const email = checkSiteEmail(str("siteContactEmail"));
+  if (!email.ok) return { ok: false, error: email.error };
+  result.text.siteContactEmail = email.value;
+  const gps = parseCoordinates(str("siteCoordinates"));
+  if (!gps.ok) return { ok: false, error: gps.error };
+  result.text.siteCoordinates = gps.value ? formatCoordinates(gps.value) : null;
 
   const dateLabels = {
     pileDrivingStart: "Customer ideal pile driving start",

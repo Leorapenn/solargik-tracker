@@ -38,6 +38,12 @@ const FIELD_LABELS: Record<keyof ProfileInput, string> = {
   projectType: "type",
   shippingAddress: "shipping address",
   deliveryAddress: "delivery address",
+  siteContactName: "site contact name",
+  siteContactPhone: "site contact phone",
+  siteContactEmail: "site contact email",
+  siteHours: "site working hours",
+  siteAccess: "unloading and access",
+  siteCoordinates: "GPS coordinates",
   contractLink: "contract link",
   projectEngineerId: "project engineer",
   designNotes: "design notes",
@@ -49,7 +55,7 @@ const FIELD_LABELS: Record<keyof ProfileInput, string> = {
   bomStatus: "BOM",
 };
 // the profile fields monday.com has no column for
-const NO_SOURCE: (keyof ProfileInput)[] = ["incoterms", "shippingAddress", "deliveryAddress"];
+const NO_SOURCE: (keyof ProfileInput)[] = ["incoterms", "shippingAddress", "deliveryAddress", "siteContactName", "siteContactPhone", "siteContactEmail", "siteHours", "siteAccess", "siteCoordinates"];
 
 const short = (v: string, n = 46) => (v.length > n ? `${v.slice(0, n - 1)}…` : v).replace(/\s+/g, " ");
 
