@@ -84,16 +84,21 @@ describe("buildWeeklyEmail", () => {
       name: "257-Barge 2",
       customer: "Revalue <b>",
       lifecycle: "ACTIVE",
+      stage: "Design",
       summary: { text: "In progress: Design (1 of 5 items done).", manual: false },
       entries: [{ level: "Item", phase: "01 Design", item: "Layout", status: "IN_PROGRESS", owner: "Dan", text: "Sent <script>x</script>\nwaiting", date: "2026-10-01" }],
+      emails: [{ id: "e1", kind: "CORRESPONDENCE_NOTE", label: "Email", summary: "Customer asked <i>why</i>", subject: "Layout <b>subject</b>", link: "https://outlook.office.com/mail/1", date: "2026-10-02" }],
     },
   ];
   const range = { from: "2026-09-27", to: "2026-10-03" };
 
   it("builds the subject, an escaped body and a CSV attachment", () => {
     const mail = buildWeeklyEmail(range, projects, [], "https://example.com/");
-    expect(mail.subject).toBe("Solargik weekly updates, 27 Sep 2026 – 03 Oct 2026 (1 update)");
+    expect(mail.subject).toBe("Solargik weekly updates, 27 Sep 2026 – 03 Oct 2026 (2 updates)");
     expect(mail.html).toContain("257-Barge 2");
+    expect(mail.html).toContain("<h2 style=\"margin:26px 0 0;color:#142A5C;border-bottom:2px solid #E8801A;padding-bottom:3px\">Design</h2>"); // grouped by stage
+    expect(mail.html).toContain("Customer asked &lt;i&gt;why&lt;/i&gt;"); // an email update, escaped
+    expect(mail.html).toContain('<a href="https://outlook.office.com/mail/1"><strong>Layout &lt;b&gt;subject&lt;/b&gt;</strong></a>'); // the subject is the link to the email
     expect(mail.html).toContain("&lt;script&gt;");
     expect(mail.html).not.toContain("<script>");
     expect(mail.html).toContain("Revalue &lt;b&gt;");
@@ -102,7 +107,7 @@ describe("buildWeeklyEmail", () => {
   });
   it("says so when there are no updates", () => {
     const mail = buildWeeklyEmail(range, [], [], "https://example.com");
-    expect(mail.html).toContain("No phase or sub-phase updates");
+    expect(mail.html).toContain("No updates are dated in this period");
     expect(mail.subject).toContain("(0 updates)");
   });
   it("escapes html", () => {

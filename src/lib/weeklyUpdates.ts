@@ -55,7 +55,7 @@ export function presetOf(range: DateRange, today: Date): RangePreset | null {
 export type ExportRow = {
   project: string;
   customer: string;
-  level: "Phase" | "Item";
+  level: "Phase" | "Item" | "Email";
   phase: string;
   item: string;
   status: string;
