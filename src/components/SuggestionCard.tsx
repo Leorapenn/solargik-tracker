@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { approve, approveAsTask, approveForTask, reject } from "@/server/actions/suggestions";
+import { approve, approveAsNote, approveAsTask, approveForTask, reject } from "@/server/actions/suggestions";
 import type { SuggestionView } from "@/server/services/suggestions";
 import type { OpenTaskChoice } from "@/server/services/taskMatch";
 import { TASK_OUTCOMES, matchTasksToEmail } from "@/lib/taskMatch";
@@ -175,6 +175,7 @@ export function SuggestionCard({
       <div style={{ fontSize: 14.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
         <span style={{ color: TEXT_MUTED }}>{pending ? "If approved: " : "Proposed: "}</span>
         {editing ? null : s.description}
+        {pending && s.itemNow && <span style={{ color: TEXT_MUTED }}>{` (now: ${s.itemNow})`}</span>}
       </div>
       {editing && (
         <textarea
@@ -471,6 +472,23 @@ export function SuggestionCard({
           >
             {busy ? "Working…" : "Approve"}
           </button>
+          )}
+          {(p.kind === "STATUS_CHANGE" || p.kind === "ITEM_UPDATE" || p.kind === "PHASE_UPDATE") && (
+            <button
+              type="button"
+              style={secondaryButton}
+              disabled={busy || !projectId}
+              title="If the suggestion is wrong: keeps it as correspondence on the project page, and changes nothing on the item."
+              onClick={() =>
+                startTransition(async () => {
+                  setMessage(null);
+                  const result = await approveAsNote(s.id, projectId || null);
+                  setMessage(result.ok ? { ok: true, text: result.note } : { ok: false, text: result.error });
+                })
+              }
+            >
+              Add as correspondence instead
+            </button>
           )}
           <button
             type="button"

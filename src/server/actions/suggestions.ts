@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireActionAuth } from "@/lib/auth";
 import { run, type ActionResult } from "@/lib/errors";
-import { CHANGE_ORDER_EDIT_KEYS, approveSuggestion, approveSuggestionAsTask, approveWithTask, rejectSuggestion, type CardEdits } from "@/server/services/suggestions";
+import { CHANGE_ORDER_EDIT_KEYS, approveAsCorrespondence, approveSuggestion, approveSuggestionAsTask, approveWithTask, rejectSuggestion, type CardEdits } from "@/server/services/suggestions";
 import type { TaskInput } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS } from "@/lib/newProject";
 
@@ -30,6 +30,16 @@ export async function approve(id: string, overrides: { projectId?: string | null
     }
     const customerId = typeof overrides.customerId === "string" ? overrides.customerId : overrides.customerId === null ? null : undefined;
     const note = await approveSuggestion(id, { projectId: overrides.projectId, customerId, text: overrides.text, ...(overrides.fields ? { fields } : {}) });
+    refresh();
+    return { note };
+  });
+}
+
+// The agent guessed wrong about a status change or an update: keep it as correspondence only (nothing on the item changes).
+export async function approveAsNote(id: string, projectId?: string | null): Promise<ActionResult<{ note: string }>> {
+  await requireActionAuth();
+  return run(async () => {
+    const note = await approveAsCorrespondence(id, typeof projectId === "string" ? { projectId } : {});
     refresh();
     return { note };
   });

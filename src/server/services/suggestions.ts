@@ -122,6 +122,8 @@ export type SuggestionView = {
   confidence: Confidence | null;
   status: string;
   resultNote: string | null;
+  // a pending status change: what the item is now ("Not started", "Done"...), so the reviewer sees what approving would change (null when unknown)
+  itemNow: string | null;
   createdAt: string;
 };
 
@@ -132,9 +134,20 @@ export async function listSuggestions(status: "PENDING" | "APPROVED" | "REJECTED
     take: limit,
     include: { project: { select: { name: true } }, customer: { select: { name: true } } },
   });
+  // what a pending status change would change: the item's status right now (one small lookup per such card)
+  const itemNow = new Map<string, string | null>();
+  for (const r of rows) {
+    const p = r.payload as unknown as Payload;
+    if (status !== "PENDING" || p.kind !== "STATUS_CHANGE" || !r.projectId) continue;
+    const items = await prisma.subStage.findMany({ where: { phase: { projectId: r.projectId, ...(p.phase ? { name: p.phase } : {}) } }, select: { name: true, status: true } });
+    const exact = items.filter((i) => same(i.name, p.item));
+    const found = exact.length > 0 ? exact : items.filter((i) => i.name.toLowerCase().includes(p.item.toLowerCase()));
+    itemNow.set(r.id, found.length === 1 ? (found[0].status === "NOT_APPLICABLE" ? "N/A" : (ITEM_STATUS_LABELS[found[0].status as keyof typeof ITEM_STATUS_LABELS] ?? found[0].status)) : null);
+  }
   return rows.map((r) => {
     const payload = r.payload as unknown as Payload;
     return {
+      itemNow: itemNow.get(r.id) ?? null,
       id: r.id,
       kind: r.kind as SuggestionKind,
       kindText: KIND_LABELS[r.kind as SuggestionKind] ?? r.kind,
@@ -529,6 +542,29 @@ export async function approveSuggestion(id: string, overrides: { projectId?: str
   const claimed = await prisma.suggestion.updateMany({
     where: { id, status: "PENDING" },
     data: { status: "APPROVED", reviewedAt: new Date(), resultNote: note, projectId: projectId ?? null, customerId: customer?.id ?? null, payload: payload as unknown as Prisma.InputJsonObject },
+  });
+  if (claimed.count === 0) throw new UserError("That suggestion was already handled.");
+  return note;
+}
+
+// When the agent guessed wrong about a status change or an update: approve the proposal as plain CORRESPONDENCE instead, with its one-line
+// summary as the text. Nothing on the item or phase changes; the note shows on the project's Correspondence card. Only a proposal that
+// would change an item or phase can be turned into one this way.
+export async function approveAsCorrespondence(id: string, overrides: { projectId?: string | null } = {}): Promise<string> {
+  const row = await prisma.suggestion.findUnique({ where: { id } });
+  if (!row) throw new UserError("That suggestion no longer exists.");
+  if (row.status !== "PENDING") throw new UserError("That suggestion was already handled.");
+  const payload = row.payload as unknown as Payload;
+  if (payload.kind !== "STATUS_CHANGE" && payload.kind !== "ITEM_UPDATE" && payload.kind !== "PHASE_UPDATE") throw new UserError("Only a status change or an update can be saved as correspondence.");
+  const projectId = overrides.projectId === undefined ? row.projectId : overrides.projectId;
+  const customerId = projectId ? ((await prisma.project.findUnique({ where: { id: projectId }, select: { customerId: true } }))?.customerId ?? null) : row.customerId;
+  const text = cleanStatusText(row.summary);
+  if (!text.ok || !text.value) throw new UserError("This proposal has no text to keep. Reject it instead.");
+  const note = "Saved as correspondence only: nothing on the item changed.";
+  const note2: Payload = { kind: "CORRESPONDENCE_NOTE", text: text.value };
+  const claimed = await prisma.suggestion.updateMany({
+    where: { id, status: "PENDING" },
+    data: { kind: "CORRESPONDENCE_NOTE", status: "APPROVED", reviewedAt: new Date(), resultNote: note, projectId: projectId ?? null, customerId, payload: note2 as unknown as Prisma.InputJsonObject },
   });
   if (claimed.count === 0) throw new UserError("That suggestion was already handled.");
   return note;
