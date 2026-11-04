@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { UserError } from "@/lib/errors";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { DATE_KEYS, MAX_SHIPMENTS, cleanShipment, findShipment, sortShipments, type CleanShipment, type ShipmentInput } from "@/lib/shipments";
+import type { ShipmentFile } from "@/lib/shipmentFromMonday";
 
 const iso = (d: Date | null) => (d ? toDateInputValue(d) : null);
 const day = (v: string | null) => (v ? new Date(`${v}T00:00:00.000Z`) : null);
@@ -27,9 +28,20 @@ export type ShipmentView = {
   deliveredAt: string | null;
   notes: string | null;
   sourceLink: string | null;
+  // from the monday.com shipping board (see src/lib/shipmentFromMonday.ts): its link, who ships it and how, and its Files column as links
+  mondayUrl: string | null;
+  shipper: string | null;
+  shippingMethod: string | null;
+  files: ShipmentFile[];
 };
 
 type Row = Awaited<ReturnType<typeof prisma.shipment.findMany>>[number];
+
+// The stored Files column ([{ name, url }], written only by the import) as a safe list.
+export function filesOf(json: unknown): ShipmentFile[] {
+  if (!Array.isArray(json)) return [];
+  return json.flatMap((f) => (f && typeof f === "object" && typeof (f as ShipmentFile).name === "string" && typeof (f as ShipmentFile).url === "string" && /^https:\/\//.test((f as ShipmentFile).url) ? [{ name: (f as ShipmentFile).name, url: (f as ShipmentFile).url }] : []));
+}
 
 const toView = (s: Row): ShipmentView => ({
   id: s.id,
@@ -51,6 +63,10 @@ const toView = (s: Row): ShipmentView => ({
   deliveredAt: iso(s.deliveredAt),
   notes: s.notes,
   sourceLink: s.sourceLink,
+  mondayUrl: s.mondayUrl,
+  shipper: s.shipper,
+  shippingMethod: s.shippingMethod,
+  files: filesOf(s.files),
 });
 
 // A project's shipments: the ones still on their way first (nearest first), delivered ones last.
@@ -60,6 +76,7 @@ export async function listShipments(projectId: string): Promise<ShipmentView[]> 
   return sortShipments(rows.map(toView));
 }
 
+export const shipmentData = (v: CleanShipment) => data(v);
 const data = (v: CleanShipment) => ({
   reference: v.reference,
   goods: v.goods,

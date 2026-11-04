@@ -196,6 +196,14 @@ model Shipment {
   notes           String?
   // the last email this came from (a link only)
   sourceLink      String?
+  // From the monday.com "International Shipping V02" board (read-only import, 2026-11-04): the item it came from (a re-run links to
+  // it instead of adding a second), the link to it, who ships it, how (20' HC, LCL, flatbed...) and its Files column as links
+  // [{ name, url }] (the files stay on monday.com, nothing is copied).
+  mondayItemId    String?   @unique
+  mondayUrl       String?
+  shipper         String?
+  shippingMethod  String?
+  files           Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

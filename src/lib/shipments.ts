@@ -5,11 +5,19 @@ import type { Choice } from "@/lib/projectProfile";
 
 export const SHIPMENT_STATUSES: Choice[] = [
   { value: "BOOKED", label: "Booked", bg: "#E4E6EC", text: "#4A4F5C" },
+  // the delivery has to be agreed with the receiver (date, address, access) before it can be planned
+  { value: "PENDING_COORDINATION", label: "Pending coordination", bg: "#FEF0D6", text: "#8A5300" },
   { value: "IN_TRANSIT", label: "At sea", bg: "#DCE8FB", text: "#1D4F9F" },
   { value: "AT_PORT", label: "At the port", bg: "#E6DEF8", text: "#4B2E99" },
   { value: "CUSTOMS", label: "In customs", bg: "#FEF0D6", text: "#8A5300" },
+  // arrived at a warehouse (Solargik's in Salerno or Eshtaol, or the forwarder's), not yet at the site
+  { value: "AT_WAREHOUSE", label: "At the warehouse", bg: "#FDE3CF", text: "#9A4B00" },
   { value: "DELIVERY_PLANNED", label: "Delivery planned", bg: "#D6F0F3", text: "#0E6B77" },
+  // arrived at the site, the signed proof of delivery has not come back yet
+  { value: "AWAITING_POD", label: "Waiting for POD", bg: "#DDF3E6", text: "#0B6B45" },
   { value: "DELIVERED", label: "Delivered", bg: "#D8F5E3", text: "#047857" },
+  // it cannot go on (the reason goes in the note); a customs hold is the customs state "Held" instead
+  { value: "STUCK", label: "Stuck", bg: "#FCE0DD", text: "#8C1D18" },
 ];
 export const CUSTOMS_STATUSES: Choice[] = [
   { value: "NOT_STARTED", label: "Not started", bg: "#E4E6EC", text: "#4A4F5C" },
@@ -22,7 +30,7 @@ export const isCustomsStatus = (v: unknown): v is string => CUSTOMS_STATUSES.som
 export const shipmentStatusChoice = (v: string): Choice => SHIPMENT_STATUSES.find((s) => s.value === v) ?? SHIPMENT_STATUSES[0];
 export const customsStatusChoice = (v: string): Choice => CUSTOMS_STATUSES.find((s) => s.value === v) ?? CUSTOMS_STATUSES[0];
 
-export const MAX_SHIPMENTS = 40;
+export const MAX_SHIPMENTS = 200;
 export const MAX_CONTAINERS = 60;
 export const MAX_NOTES = 1000;
 
@@ -88,7 +96,7 @@ export const DATE_KEYS = ["etd", "eta", "arrivedAt", "customsClearedAt", "delive
 export const DATE_LABELS: Record<(typeof DATE_KEYS)[number], string> = {
   etd: "Sails (ETD)",
   eta: "Expected at the port (ETA)",
-  arrivedAt: "Arrived at the port",
+  arrivedAt: "Arrived (port or warehouse)",
   customsClearedAt: "Customs cleared",
   deliveryDate: "Delivery to the site (planned)",
   deliveredAt: "Delivered",

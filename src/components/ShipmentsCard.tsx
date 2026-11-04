@@ -77,6 +77,8 @@ export function ShipmentsCard({ projectId, shipments }: { projectId: string; shi
               {s.vessel && <span>Vessel: {s.vessel}</span>}
               {(s.portOfLoading || s.portOfDischarge) && <span>{s.portOfLoading ?? "?"} → {s.portOfDischarge ?? "?"}</span>}
               {s.containers.length > 0 && <span title={s.containers.join(", ")}>Containers ({s.containers.length}): {s.containers.join(", ")}</span>}
+              {s.shipper && <span>Shipper: {s.shipper}</span>}
+              {s.shippingMethod && <span>{s.shippingMethod}</span>}
             </div>
             {dates.length > 0 && (
               <div style={{ fontSize: 13.5, display: "flex", gap: "2px 16px", flexWrap: "wrap" }}>
@@ -88,7 +90,27 @@ export function ShipmentsCard({ projectId, shipments }: { projectId: string; shi
               </div>
             )}
             {s.notes && <div style={{ fontSize: 13.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{s.notes}</div>}
+            {s.files.length > 0 && (
+              <details style={{ fontSize: 13.5 }}>
+                <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700 }}>
+                  Documents ({s.files.length})
+                </summary>
+                <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "6px 0 2px 14px" }}>
+                  {s.files.map((f) => (
+                    <a key={f.url} href={f.url} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, overflowWrap: "anywhere" }}>
+                      {f.name}
+                    </a>
+                  ))}
+                  <span style={{ color: TEXT_MUTED, fontSize: 12.5 }}>The files are in monday.com: sign in there to open them.</span>
+                </div>
+              </details>
+            )}
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              {s.mondayUrl && (
+                <a href={s.mondayUrl} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700, fontSize: 13 }}>
+                  Open in monday.com
+                </a>
+              )}
               {s.sourceLink && (
                 <a href={s.sourceLink} target="_blank" rel="noopener noreferrer" style={{ color: NAVY, fontWeight: 700, fontSize: 13 }}>
                   Open the last email
