@@ -40,6 +40,18 @@ export type TaskView = {
   emails: TimelineEmail[]; // the emails of the chain the task started in (subject, day and link only)
 };
 
+// What a STAFF member is sent of a task: its text, status, owner and dates, without the links into the mailbox (the email it was made
+// from, the emails of its chain, the email behind a log line) and without the link to the project page they cannot open.
+export function staffView(t: TaskView): TaskView {
+  return {
+    ...t,
+    projectId: null,
+    sourceLink: null,
+    emails: [],
+    updates: t.updates.map((u) => ({ ...u, sourceLink: null, sourceSubject: null })),
+  };
+}
+
 const include = {
   customer: { select: { name: true } },
   project: { select: { name: true } },
@@ -261,6 +273,27 @@ export async function setTaskFollowUp(id: string, value: unknown): Promise<void>
       if (iso(before.nextFollowUp) === next) return;
       await tx.task.update({ where: { id }, data: { nextFollowUp: day(next) } });
       await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text: next ? `Next follow-up set for ${formatDate(parseDateInput(next))}` : "Follow-up date removed" } });
+    },
+    { timeout: 20000 },
+  );
+}
+
+// Sets (or, with an empty value, removes) the DEADLINE (day and time, Israel time, "YYYY-MM-DDTHH:MM") on its own, with a line in the log
+// like any other change. This and the follow-up date are the dates staff may change on their tasks.
+export async function setTaskDeadline(id: string, value: unknown): Promise<void> {
+  const probe = cleanTask({ customerId: "x", topic: "x", deadline: value ?? "" });
+  if (!probe.ok) throw new UserError(probe.error);
+  const next = probe.value.deadline ? parseDeadlineLocal(probe.value.deadline) : null;
+  const today = todayIso();
+  await prisma.$transaction(
+    async (tx) => {
+      const before = await tx.task.findUnique({ where: { id }, select: { status: true, deadline: true } });
+      if (!before) throw new UserError("That task no longer exists.");
+      if (before.status === "RESOLVED") throw new UserError("A resolved task has no deadline to change. Reopen it first.");
+      if ((next?.getTime() ?? null) === (before.deadline?.getTime() ?? null)) return;
+      await tx.task.update({ where: { id }, data: { deadline: next } });
+      const text = !next ? "Deadline removed" : before.deadline ? `Deadline changed to ${formatDeadline(next)}` : `Deadline set to ${formatDeadline(next)}`;
+      await tx.taskUpdate.create({ data: { taskId: id, date: day(today)!, text } });
     },
     { timeout: 20000 },
   );

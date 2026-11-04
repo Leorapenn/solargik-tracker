@@ -1,4 +1,4 @@
-import { hasSession } from "@/lib/auth";
+import { currentRole } from "@/lib/auth";
 import { listReminders, type TaskReminder } from "@/server/services/tasks";
 import { NotificationsBell } from "@/components/NotificationsBell";
 
@@ -7,7 +7,7 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 export async function TaskBell() {
   let items: TaskReminder[] = [];
   try {
-    if (!(await hasSession())) return null;
+    if (!(await currentRole())) return null; // managers and staff both see their reminders
     items = await listReminders();
   } catch {
     items = [];

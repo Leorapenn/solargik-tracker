@@ -18,9 +18,11 @@ const LINKS = [
 ];
 
 // `bell` is the notifications bell (a server component passed in from the layout).
-export function NavBar({ bell }: { bell?: ReactNode }) {
+export function NavBar({ bell, staff = false }: { bell?: ReactNode; staff?: boolean }) {
   const pathname = usePathname();
   const onLogin = pathname === "/login";
+  // staff have the Tasks tab only, and no search over customers and projects
+  const links = staff ? LINKS.filter((l) => l.href === "/tasks") : LINKS;
 
   return (
     <nav
@@ -45,7 +47,7 @@ export function NavBar({ bell }: { bell?: ReactNode }) {
         </div>
         {!onLogin && (
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {LINKS.map((link) => {
+            {links.map((link) => {
               const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
@@ -73,6 +75,7 @@ export function NavBar({ bell }: { bell?: ReactNode }) {
       {!onLogin && (
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {bell}
+          {!staff && (
           <form action="/search" method="get" role="search">
             <label
               htmlFor="q"
@@ -100,6 +103,7 @@ export function NavBar({ bell }: { bell?: ReactNode }) {
               }}
             />
           </form>
+          )}
           <form action={logout}>
             <button
               type="submit"
@@ -118,7 +122,7 @@ export function NavBar({ bell }: { bell?: ReactNode }) {
             </button>
           </form>
           <div
-            title="Leora Penn"
+            title={staff ? "Staff" : "Leora Penn"}
             style={{
               width: 44,
               height: 44,
@@ -132,7 +136,7 @@ export function NavBar({ bell }: { bell?: ReactNode }) {
               justifyContent: "center",
             }}
           >
-            LP
+            {staff ? "ST" : "LP"}
           </div>
         </div>
       )}

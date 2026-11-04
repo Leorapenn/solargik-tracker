@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { changeTaskFollowUp, changeTaskPriority, changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
+import { changeTaskDeadline, changeTaskFollowUp, changeTaskPriority, changeTaskStatus, contactedToday, logTaskUpdate, removeTask } from "@/server/actions/tasks";
 import { MAX_UPDATE_TEXT, TASK_PRIORITIES, TASK_STATUSES, agoText, followUpDone, taskAttention } from "@/lib/tasks";
 import { buildTimeline } from "@/lib/taskTimeline";
 import { formatDate, parseDateInput } from "@/lib/dates";
@@ -30,19 +30,22 @@ export const DEADLINE_STYLE = {
 } as const;
 
 // One task: the topic, status, project, owner, the last correspondence and the next follow-up, with the log of dated
-// entries and the quick actions (contacted today, log an update, edit, delete).
+// entries and the quick actions (contacted today, log an update, edit, delete). For STAFF (the second password) the card has the
+// status, the two dates, "Contacted today" and "Log update" only: no owner, priority, edit or delete (the actions refuse them too).
 export function TaskCard({
   task,
   todayIso,
   customers,
   projects,
   people,
+  staff = false,
 }: {
   task: TaskView;
   todayIso: string;
   customers: CustomerOption[];
   projects: ProjectOption[];
   people: PersonOption[];
+  staff?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +74,11 @@ export function TaskCard({
       else setError(r.error ?? "That didn't work.");
     });
 
-  if (editing) return <TaskForm task={task} customers={customers} projects={projects} people={people} onDone={() => setEditing(false)} />;
+  // the deadline as "YYYY-MM-DDTHH:MM" (Israel time): the day and the time are set on their own; a new day keeps the time (17:00 when new)
+  const deadlineLocal = task.deadline?.local ?? "";
+  const setDeadline = (value: string) => go(() => changeTaskDeadline(task.id, value));
+
+  if (editing && !staff) return <TaskForm task={task} customers={customers} projects={projects} people={people} onDone={() => setEditing(false)} />;
 
   return (
     <div id={task.id} style={{ ...cardStyle, padding: "14px 20px", display: "flex", flexDirection: "column", gap: 10, opacity: resolved ? 0.8 : 1 }}>
@@ -92,7 +99,7 @@ export function TaskCard({
         {!open && attention && (
           <span style={{ background: ATTENTION[attention.level].bg, color: ATTENTION[attention.level].text, borderRadius: 999, padding: "1px 10px", fontSize: 12.5, fontWeight: 700 }}>{attention.text}</span>
         )}
-        <ColorSelect ariaLabel={`Priority of ${task.topic}`} value={task.priority} options={TASK_PRIORITIES} disabled={pending} onChange={(v) => v && go(() => changeTaskPriority(task.id, v))} />
+        <ColorSelect ariaLabel={`Priority of ${task.topic}`} value={task.priority} options={TASK_PRIORITIES} disabled={pending || staff} onChange={(v) => v && go(() => changeTaskPriority(task.id, v))} />
         <ColorSelect ariaLabel={`Status of ${task.topic}`} value={task.status} options={TASK_STATUSES} disabled={pending} onChange={(v) => v && go(() => changeTaskStatus(task.id, v))} />
       </div>
 
@@ -105,6 +112,8 @@ export function TaskCard({
             <Link href={`/projects/${task.projectId}`} style={{ color: NAVY, fontWeight: 700 }}>
               {task.projectName}
             </Link>
+          ) : task.projectName ? (
+            <span style={{ color: NAVY, fontWeight: 700 }}>{task.projectName}</span>
           ) : (
             <span>The customer in general</span>
           )}
@@ -140,6 +149,30 @@ export function TaskCard({
               <span style={{ marginLeft: 8, background: DEADLINE_STYLE[task.deadline.level].bg, color: DEADLINE_STYLE[task.deadline.level].text, borderRadius: 999, padding: "1px 10px", fontSize: 12.5, fontWeight: 700 }}>
                 {task.deadline.remaining}
               </span>
+            )}
+          </span>
+        )}
+        {!resolved && (
+          <span style={{ display: "inline-flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span>{task.deadline ? "Change the deadline:" : "Deadline:"}</span>
+            {/* the day and the time of the deadline on their own, no form needed (Clear removes it) */}
+            <DateField
+              ariaLabel={`Deadline date of ${task.topic}`}
+              value={deadlineLocal ? deadlineLocal.slice(0, 10) : null}
+              placeholder="Set a date"
+              disabled={pending}
+              onCommit={(c) => setDeadline(c.date ? `${c.date}T${deadlineLocal ? deadlineLocal.slice(11) : "17:00"}` : "")}
+            />
+            {deadlineLocal && (
+              <input
+                type="time"
+                aria-label={`Deadline time of ${task.topic}`}
+                defaultValue={deadlineLocal.slice(11)}
+                key={deadlineLocal}
+                disabled={pending}
+                onBlur={(e) => e.target.value && e.target.value !== deadlineLocal.slice(11) && setDeadline(`${deadlineLocal.slice(0, 10)}T${e.target.value}`)}
+                style={{ ...inputStyle, width: 110 }}
+              />
             )}
           </span>
         )}
@@ -228,19 +261,23 @@ export function TaskCard({
         <button type="button" disabled={pending} style={small} onClick={() => setLogging((l) => !l)}>
           Log update
         </button>
-        <button type="button" disabled={pending} style={small} onClick={() => setEditing(true)}>
-          Edit
-        </button>
-        <button
-          type="button"
-          disabled={pending}
-          style={{ ...small, color: "#8C1D18" }}
-          onClick={() => {
-            if (window.confirm(`Delete the task "${task.topic}" and its log? This can't be undone.`)) go(() => removeTask(task.id));
-          }}
-        >
-          Delete
-        </button>
+        {!staff && (
+          <>
+            <button type="button" disabled={pending} style={small} onClick={() => setEditing(true)}>
+              Edit
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              style={{ ...small, color: "#8C1D18" }}
+              onClick={() => {
+                if (window.confirm(`Delete the task "${task.topic}" and its log? This can't be undone.`)) go(() => removeTask(task.id));
+              }}
+            >
+              Delete
+            </button>
+          </>
+        )}
         {error && (
           <span role="alert" style={{ color: "#8C1D18", fontSize: 13 }}>
             {error}
