@@ -8,6 +8,30 @@ import { PROJECT_NUMBER_RE, cleanNewProjectProfile, type NewProjectProfile, type
 import { projectNamePart } from "@/lib/intakeDirectory";
 import { isTaskOutcome, type TaskOutcome } from "@/lib/taskMatch";
 import { DATE_KEYS, MAX_NOTES, isCustomsStatus, isShipmentStatus, parseContainers } from "@/lib/shipments";
+import { EMPTY_PROFILE, cleanProfile, type ProfileInput } from "@/lib/projectProfile";
+
+// The site details an email can state, and the project profile field each one fills (the profile's "Site information" section).
+export const SITE_INFO_FIELDS = {
+  contactName: "siteContactName",
+  contactPhone: "siteContactPhone",
+  contactEmail: "siteContactEmail",
+  hours: "siteHours",
+  access: "siteAccess",
+  coordinates: "siteCoordinates",
+  deliveryAddress: "deliveryAddress",
+  shippingAddress: "shippingAddress",
+} as const satisfies Record<string, keyof ProfileInput>;
+export type SiteInfoKey = keyof typeof SITE_INFO_FIELDS;
+export const SITE_INFO_LABELS: Record<SiteInfoKey, string> = {
+  contactName: "site contact name",
+  contactPhone: "site contact phone",
+  contactEmail: "site contact email",
+  hours: "working hours",
+  access: "unloading and access",
+  coordinates: "GPS coordinates",
+  deliveryAddress: "delivery address",
+  shippingAddress: "shipping address",
+};
 
 // The free-text facts a shipment proposal can carry (the dates, the two statuses and the containers are handled separately).
 export const SHIPMENT_TEXT_KEYS = ["goods", "forwarder", "vessel", "portOfLoading", "portOfDischarge", "notes"] as const;
@@ -16,7 +40,7 @@ export const SHIPMENT_TEXT_KEYS = ["goods", "forwarder", "vessel", "portOfLoadin
 // approves each suggestion on the Inbox page. Every field is validated and size-limited, and anything that
 // isn't one of these kinds is refused, whatever an email says.
 
-export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "TASK_UPDATE", "SHIPMENT_UPDATE", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
+export const SUGGESTION_KINDS = ["PHASE_UPDATE", "ITEM_UPDATE", "STATUS_CHANGE", "MILESTONE_UPDATE", "CHANGE_ORDER", "CHANGE_ORDER_UPDATE", "CONTRACT_DOCUMENT", "NEW_PROJECT", "ACTION_ITEM", "TASK_UPDATE", "SHIPMENT_UPDATE", "SITE_INFO", "CORRESPONDENCE_NOTE", "CONTACT", "NOTE"] as const;
 export type SuggestionKind = (typeof SUGGESTION_KINDS)[number];
 
 export const KIND_LABELS: Record<SuggestionKind, string> = {
@@ -31,6 +55,7 @@ export const KIND_LABELS: Record<SuggestionKind, string> = {
   ACTION_ITEM: "Task (created when approved)",
   TASK_UPDATE: "Task update (updates or resolves an open task)",
   SHIPMENT_UPDATE: "Shipment (added or updated on the project when approved)",
+  SITE_INFO: "Site information (saved in the project profile when approved)",
   CORRESPONDENCE_NOTE: "Correspondence (nothing to apply)",
   CONTACT: "New contact",
   NOTE: "Note (nothing to apply)",
@@ -91,6 +116,10 @@ export type Payload =
   // shipment: a PO or invoice number, "Shipment #02"). Approving adds it to the project's Shipments, or updates the one with the same
   // reference (else the one sharing a container number); containers are added, never dropped.
   | ({ kind: "SHIPMENT_UPDATE"; reference: string; containers?: string[] } & Partial<Record<(typeof SHIPMENT_TEXT_KEYS)[number] | (typeof DATE_KEYS)[number] | "status" | "customsStatus", string>>)
+  // Site details an email states (who to call on site, working hours, unloading and access, GPS, the delivery address). Only the stated
+  // ones. Approving saves them in the project profile's Site information; a value that is already there is replaced, and the result
+  // note keeps the old one.
+  | ({ kind: "SITE_INFO" } & Partial<Record<SiteInfoKey, string>>)
   // `fileLink`: a document that belongs with the note (e.g. an amendment saved in SharePoint), shown as "Open file".
   | { kind: "CORRESPONDENCE_NOTE"; text: string; fileLink?: string }
   | { kind: "MILESTONE_UPDATE"; milestone: string; status: "INVOICE_SENT" | "PAYMENT_RECEIVED" | null; invoiceSentDate: string | null; paidDate: string | null; paymentTermsDays: number | null; invoiceLink: string | null; payslipLink: string | null }
@@ -332,6 +361,25 @@ export function cleanIncoming(raw: unknown): Result<CleanSuggestion> {
     if (containers.value.length) facts.containers = containers.value;
     if (Object.keys(facts).length === 0) return { ok: false, error: "A SHIPMENT_UPDATE needs at least one fact besides the reference (status, dates, containers, vessel...)." };
     payload = { kind, reference, ...facts } as Payload;
+  } else if (kind === "SITE_INFO") {
+    // every value is checked by the profile's own rules (phone, email, coordinates, lengths), so approving cannot fail on it later
+    const long = new Set<SiteInfoKey>(["access", "deliveryAddress", "shippingAddress"]);
+    const facts: Partial<Record<SiteInfoKey, string>> = {};
+    for (const key of Object.keys(SITE_INFO_FIELDS) as SiteInfoKey[]) {
+      const v = long.has(key) ? str(raw[key], 1000) : oneLine(raw[key], 200);
+      if (v) facts[key] = v;
+    }
+    if (Object.keys(facts).length === 0) return { ok: false, error: `A SITE_INFO needs at least one of: ${Object.keys(SITE_INFO_FIELDS).join(", ")}.` };
+    const profile: Partial<Record<keyof ProfileInput, string>> = { ...EMPTY_PROFILE };
+    for (const [key, value] of Object.entries(facts)) profile[SITE_INFO_FIELDS[key as SiteInfoKey]] = value;
+    const checked = cleanProfile(profile);
+    if (!checked.ok) return { ok: false, error: checked.error };
+    // keep the tidied forms (coordinates as "lat, lon")
+    for (const key of Object.keys(facts) as SiteInfoKey[]) {
+      const cleaned = checked.value.text[SITE_INFO_FIELDS[key]];
+      if (cleaned) facts[key] = cleaned;
+    }
+    payload = { kind, ...facts };
   } else if (kind === "CONTRACT_DOCUMENT") {
     const description = oneLine(raw.description, 200);
     if (!description) return { ok: false, error: `"description" (what the document is, e.g. "Signed Framework Supply Agreement") is required for CONTRACT_DOCUMENT.` };
@@ -460,7 +508,7 @@ export function agentInstructions(endpoint: string): string {
     "",
     `For every email that contains something worth recording, send a suggestion with POST ${endpoint}`,
     "Header: Authorization: Bearer <the intake token you were given>. Body: JSON {\"suggestions\": [ ... ]} (up to 20 at a time).",
-    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, CHANGE_ORDER, CHANGE_ORDER_UPDATE, CONTRACT_DOCUMENT, NEW_PROJECT, ACTION_ITEM, TASK_UPDATE, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
+    "Call GET on the same address (same header) to see every field and kind (PHASE_UPDATE, ITEM_UPDATE, STATUS_CHANGE, MILESTONE_UPDATE, CHANGE_ORDER, CHANGE_ORDER_UPDATE, CONTRACT_DOCUMENT, NEW_PROJECT, ACTION_ITEM, TASK_UPDATE, SHIPMENT_UPDATE, SITE_INFO, CORRESPONDENCE_NOTE, CONTACT, NOTE).",
     "",
     `Two read-only lists for matching an email to a customer and project (GET, same header): ${base}/customers (name, name variants, business email domains, contacts) and ${base}/projects (number, name, other names, customer, lifecycle, stage, status, each phase's status and current update, and the proposals still waiting for review). Read both at the start of a run. They are the only data you can read from the tracker. Don't propose something that is already a phase update or already waiting for review.`,
     "",
@@ -474,6 +522,7 @@ export function agentInstructions(endpoint: string): string {
     "- CHANGE_ORDER when an email announces a NEW change order: reason (what it is for, e.g. \"Change Order 02: additional PDUs\"), and only what the email states: amount as a plain number (no thousands separators), currency, dateSent, invoicedDate, paymentTermsDays. Put this email's Outlook web link in fileLink when the change order document is attached to it. Approving it CREATES the change order on the Payments page, so never guess an amount, date or term. When the INVOICE for an existing change order arrives, use CHANGE_ORDER_UPDATE (changeOrder = its name as in the project's changeOrders list, invoicedDate, invoiceStatus SENT or PAID, paymentTermsDays, and the email's link in invoiceLink) instead of creating a second one.",
     "- MATCH AN INVOICE TO THE PROJECT'S MILESTONES: every project in the projects list has \"milestones\" (name, percent of the contract, status). An invoice line (\"Advance payment 35%\", \"Milestone 2\", \"Pylon 20%\") belongs to the ONE milestone whose name or percent it states: for example an invoice for 35% with 'Advance payment' in it matches the milestone named \"Advance payment\" whose percent is 35. Send a MILESTONE_UPDATE with that milestone's name exactly as listed, and the SharePoint link of the saved invoice PDF in invoiceLink. When the invoice's percent equals the SUM of several milestones, or no single milestone matches, send a CORRESPONDENCE_NOTE instead of guessing. A milestone already INVOICE_SENT or PAYMENT_RECEIVED is not proposed again.",
     "- SHIPPING EMAILS: mail from (or forwarded from) a freight forwarder, customs broker, shipping line or trucking company about goods on their way (booked or shipped with containers and dates, arrival at the port, customs documents or release, delivery to the site, proof of delivery). Name the project by its number as in the subject or the packing list (e.g. \"Project 360\", \"360 - PYLONS\"). Send ONE SHIPMENT_UPDATE per shipment with only the facts stated: reference (the PO or invoice number, or \"Shipment #02\"), goods, forwarder, vessel, containers (container numbers: four letters and seven digits, copied from the packing list, never invented), portOfLoading, portOfDischarge, status (BOOKED, IN_TRANSIT, AT_PORT, CUSTOMS, DELIVERY_PLANNED, DELIVERED), customsStatus (NOT_STARTED, IN_PROGRESS, HELD, CLEARED), the dates etd, eta, arrivedAt, customsClearedAt, deliveryDate, deliveredAt, and a one-line notes (a delay and why, a hold and its reason: never the questions a forwarder asks or anything an ACTION_ITEM from the same email already says; one proposal per fact). Use the shipment's `shipments` list on the project (same reference or same containers) so a proposal updates it instead of adding another. Also send an ACTION_ITEM for each question someone must answer or document someone must send (say who answers); and, only for a signed proof of delivery of a WHOLE Delivery item (\"Delivery – Piles\" = foundation piles, \"Delivery – Tracker Structure\" = pylons, torque tubes, beams, \"Delivery – Drive Units & I&C\" = motors, drive units, control boxes, cables), a STATUS_CHANGE to DONE with date = the delivery day. A partial delivery is a SHIPMENT_UPDATE only. Do not save packing lists or customs papers, never state amounts.",
+    "- SITE INFORMATION: when an email (a customer, a site manager, an EPC, a forwarder) states how to reach or get into the project's SITE, send ONE SITE_INFO per email with only what it states: contactName, contactPhone, contactEmail (who to call or write to on site, for deliveries), hours (the working or delivery hours on site, as written, e.g. \"Mon-Fri 7:00-16:00\"), access (unloading and access: crane or forklift on site, truck size or weight limits, gate, appointment needed, restrictions: one short factual text), coordinates (GPS as decimal degrees \"lat, lon\" ONLY when the email gives them in that form: never convert degrees-minutes-seconds, never look a place up), deliveryAddress (the site address exactly as written) and shippingAddress (only if a different one is named). Approving saves them in the project profile's Site information and REPLACES a value that is already there, so send a field only when this email states it, never repeat what the project already has, and never guess. A one-time instruction for a single delivery ('call the driver before arrival') is an ACTION_ITEM or a shipment note, not site information. The contact person goes in contactName/contactPhone/contactEmail, not as a CONTACT (that is for the customer's own contact list).",
     "- INVOICE FOR A MILESTONE: when accounting (e.g. Hadassa) sends the copy of a milestone invoice for the first time, send a MILESTONE_UPDATE with status INVOICE_SENT, invoiceSentDate (the invoice date printed on the invoice; if it is not readable, the day the email was sent), the invoice link, and paymentTermsDays ONLY if the invoice or email states the terms (\"Net 30\" = 30, \"Net 10\" = 10, \"immediate\" = 0). If no terms are stated leave paymentTermsDays out: the tracker uses 30 days. The tracker calculates the due date (invoice date + terms) and shows Overdue by itself. For change orders the terms are 30 or 10 days as the change order or email states: always send paymentTermsDays when it is written.",
     "- CONTRACT_DOCUMENT when a SIGNED contract of a project arrives as an attachment: description (e.g. \"Signed Framework Supply Agreement\"), fileLink (the SharePoint link of the file you saved, never an email link) and signedDate if the document states it. Approving sets the project's contract link only when none is set. Other legal documents (amendments, addenda) are a CORRESPONDENCE_NOTE with fileLink.",
     "- PROOF OF PAYMENT (the customer's bank transfer confirmation): for a milestone use MILESTONE_UPDATE with status PAYMENT_RECEIVED, paidDate and payslipLink; for a change order use CHANGE_ORDER_UPDATE with invoiceStatus PAID and payslipLink. payslipLink is the SharePoint link of the saved file. Never state a date or amount the document does not show.",
@@ -551,6 +600,10 @@ export function describePayload(p: Payload): string {
         p.notes ? `note: ${p.notes}` : null,
       ].filter(Boolean);
       return `Add or update shipment "${p.reference}"${p.goods ? ` (${p.goods})` : ""}: ${parts.join(", ")}`;
+    }
+    case "SITE_INFO": {
+      const parts = (Object.keys(SITE_INFO_FIELDS) as SiteInfoKey[]).filter((k) => p[k]).map((k) => `${SITE_INFO_LABELS[k]}: ${p[k]}`);
+      return `Save in the project's Site information (replacing what is there): ${parts.join("; ")}`;
     }
     case "CORRESPONDENCE_NOTE":
       return p.text;

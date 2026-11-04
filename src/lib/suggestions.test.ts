@@ -157,6 +157,23 @@ describe("cleanIncoming: status changes, action items, correspondence, confidenc
     expect(error({ kind: "SHIPMENT_UPDATE", reference: "A", eta: "09/11/2026" })).toMatch(/eta/);
   });
 
+  it("accepts site information with only the stated details, tidies them like the profile does, and refuses bad ones and an empty one", () => {
+    const p = ok({
+      kind: "SITE_INFO", contactName: "  Mr. Seiffert ", contactPhone: "+49 30 1234567", contactEmail: "seiffert@site.de",
+      hours: "Mon-Fri 7:00-16:00", access: "Truck up to 40 t, forklift on site", coordinates: "52.52 13.405", deliveryAddress: "Hauptstr. 1, Blumberg",
+    }).payload;
+    expect(p).toEqual({
+      kind: "SITE_INFO", contactName: "Mr. Seiffert", contactPhone: "+49 30 1234567", contactEmail: "seiffert@site.de",
+      hours: "Mon-Fri 7:00-16:00", access: "Truck up to 40 t, forklift on site", coordinates: "52.52, 13.405", deliveryAddress: "Hauptstr. 1, Blumberg",
+    });
+    expect(describePayload(ok({ kind: "SITE_INFO", hours: "Mon-Fri 7-16" }).payload)).toBe("Save in the project's Site information (replacing what is there): working hours: Mon-Fri 7-16");
+    expect(error({ kind: "SITE_INFO" })).toMatch(/at least one/);
+    expect(error({ kind: "SITE_INFO", contactPhone: "call me" })).toMatch(/phone/i);
+    expect(error({ kind: "SITE_INFO", contactEmail: "nope" })).toMatch(/email/i);
+    expect(error({ kind: "SITE_INFO", coordinates: `45°27'51"N 9°11'24"E` })).toMatch(/GPS/);
+    expect(error({ kind: "SITE_INFO", coordinates: "95, 10" })).toMatch(/latitude/);
+  });
+
   it("accepts one task update for several tasks (taskIds), the first being the taskId, with no duplicates and at most ten", () => {
     const base = { kind: "TASK_UPDATE", text: "Answered both questions.", outcome: "RESOLVED" };
     const many = ok({ ...base, taskIds: ["cmgx1abcd0001aaa", "cmgx1abcd0002bbb", "cmgx1abcd0001aaa"] }).payload;

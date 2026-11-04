@@ -50,6 +50,24 @@ export async function getContractSigningDate(projectId: string): Promise<string 
   return p?.contractSigningDate ? toDateInputValue(p.contractSigningDate) : null;
 }
 
+// What an approved SITE_INFO proposal says: the stated site details are laid over the profile (the rest of it is kept as it is) and
+// saved through the normal validation. A value that is replaced is named in the note with its old text, so nothing is lost silently.
+export async function applySiteInfo(projectId: string, facts: Partial<Record<keyof ProfileInput, string>>, labels: Partial<Record<keyof ProfileInput, string>>): Promise<string> {
+  const current = await getProfile(projectId);
+  const changed: string[] = [];
+  const replaced: string[] = [];
+  const next: ProfileInput = { ...current };
+  for (const [key, value] of Object.entries(facts) as [keyof ProfileInput, string][]) {
+    if (!value || current[key] === value) continue;
+    if (current[key]) replaced.push(`${labels[key] ?? key} was "${current[key].replace(/\s+/g, " ").slice(0, 120)}"`);
+    next[key] = value;
+    changed.push(labels[key] ?? key);
+  }
+  if (changed.length === 0) return "The project's Site information already had all of this.";
+  await saveProfile(projectId, next);
+  return `Site information saved (${changed.join(", ")}).${replaced.length ? ` Replaced: ${replaced.join("; ")}.` : ""}`;
+}
+
 export async function saveProfile(projectId: string, input: Partial<Record<keyof ProfileInput, unknown>>): Promise<void> {
   const cleaned = cleanProfile(input);
   if (!cleaned.ok) throw new UserError(cleaned.error);

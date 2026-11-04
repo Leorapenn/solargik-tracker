@@ -7,14 +7,15 @@ import { cleanWebLink } from "@/lib/links";
 import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/payments";
 import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
-import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, MAX_TASKS_PER_UPDATE, TASK_RESULT_PREFIX, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SuggestionKind } from "@/lib/suggestions";
+import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, MAX_TASKS_PER_UPDATE, SITE_INFO_FIELDS, SITE_INFO_LABELS, TASK_RESULT_PREFIX, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SiteInfoKey, type SuggestionKind } from "@/lib/suggestions";
+import type { ProfileInput } from "@/lib/projectProfile";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 import { patchSubStages } from "@/server/services/subStages";
 import { createProject } from "@/server/services/createProject";
 import { addTaskUpdate, createTask, setTaskStatus } from "@/server/services/tasks";
 import { MAX_UPDATE_TEXT, cleanTask, taskFromActionItem, type TaskInput } from "@/lib/tasks";
 import { NEW_PROJECT_EDIT_KEYS, NEW_PROJECT_PROFILE_KEYS, newProjectName, projectClash, type NewProjectEdits } from "@/lib/newProject";
-import { saveProfile } from "@/server/services/projectProfile";
+import { applySiteInfo, saveProfile } from "@/server/services/projectProfile";
 import { applyShipmentProposal, type ShipmentProposal } from "@/server/services/shipments";
 
 // ---- intake: what an outside reader sends ----
@@ -204,6 +205,20 @@ async function applyPayload(payload: Payload, projectId: string | null, sourceLi
     const { kind: ignored, ...proposal } = payload;
     void ignored;
     return applyShipmentProposal(projectId, proposal as ShipmentProposal, sourceLink);
+  }
+
+  // site details: laid over the project profile's Site information (see applySiteInfo)
+  if (payload.kind === "SITE_INFO") {
+    const facts: Partial<Record<keyof ProfileInput, string>> = {};
+    const labels: Partial<Record<keyof ProfileInput, string>> = {};
+    for (const key of Object.keys(SITE_INFO_FIELDS) as SiteInfoKey[]) {
+      const value = payload[key];
+      if (value) {
+        facts[SITE_INFO_FIELDS[key]] = value;
+        labels[SITE_INFO_FIELDS[key]] = SITE_INFO_LABELS[key];
+      }
+    }
+    return applySiteInfo(projectId, facts, labels);
   }
 
   if (payload.kind === "PHASE_UPDATE") {
