@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { logout } from "@/server/actions/auth";
+import { STAFF_PATHS } from "@/lib/roles";
 import { NAVY, ORANGE } from "@/lib/theme";
 
 const LINKS = [
   { href: "/customers", label: "Customers" },
   { href: "/projects", label: "Projects" },
   { href: "/phases", label: "Phases" },
+  { href: "/overview", label: "Overview" },
   { href: "/payments", label: "Payments" },
   { href: "/updates", label: "Updates" },
   { href: "/tasks", label: "Tasks" },
@@ -21,8 +23,8 @@ const LINKS = [
 export function NavBar({ bell, staff = false }: { bell?: ReactNode; staff?: boolean }) {
   const pathname = usePathname();
   const onLogin = pathname === "/login";
-  // staff have the Tasks tab only, and no search over customers and projects
-  const links = staff ? LINKS.filter((l) => l.href === "/tasks") : LINKS;
+  // staff have the tabs of the pages they may open (Tasks and Overview), and no search over customers and projects
+  const links = staff ? LINKS.filter((l) => (STAFF_PATHS as readonly string[]).includes(l.href)) : LINKS;
 
   return (
     <nav

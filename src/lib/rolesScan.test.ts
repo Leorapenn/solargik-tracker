@@ -61,7 +61,7 @@ describe("server actions", () => {
 describe("pages", () => {
   const pages = files.filter((p) => p.endsWith("page.tsx"));
 
-  it("every page except the login and the redirecting home checks the role; only the Tasks page lets staff in", () => {
+  it("every page except the login and the redirecting home checks the role; only the Tasks page and the read-only Overview let staff in", () => {
     const open: string[] = [];
     for (const page of pages) {
       const text = readFileSync(page, "utf8");
@@ -72,7 +72,7 @@ describe("pages", () => {
       expect({ name, checked: any || manager }).toEqual({ name, checked: true });
       if (any) open.push(name);
     }
-    expect(open).toEqual(["app/tasks/page.tsx"]);
+    expect(open.sort()).toEqual(["app/overview/page.tsx", "app/tasks/page.tsx"]);
   });
 });
 
@@ -100,6 +100,6 @@ describe("route handlers", () => {
   it("the role helpers that let staff in are used only where intended", () => {
     const users = (name: string) => files.filter((p) => !rel(p).endsWith("lib/auth.ts") && new RegExp(name).test(readFileSync(p, "utf8"))).map(rel).sort();
     expect(users("requireStaffAction")).toEqual(["server/actions/tasks.ts"]);
-    expect(users("requireAnyPageAuth")).toEqual(["app/tasks/page.tsx"]);
+    expect(users("requireAnyPageAuth")).toEqual(["app/overview/page.tsx", "app/tasks/page.tsx"]);
   });
 });

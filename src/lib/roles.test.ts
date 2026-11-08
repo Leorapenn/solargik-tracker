@@ -82,10 +82,12 @@ describe("sessions with two roles", () => {
 });
 
 describe("what staff may open", () => {
-  it("only the Tasks page, with or without a trailing slash", () => {
+  it("only the Tasks page and the Overview, with or without a trailing slash", () => {
     expect(staffMayVisit("/tasks")).toBe(true);
     expect(staffMayVisit("/tasks/")).toBe(true);
-    for (const path of ["/", "/customers", "/customers/abc", "/projects", "/projects/abc", "/phases", "/payments", "/payments/abc", "/updates", "/updates/export", "/updates/agenda", "/inbox", "/people", "/import", "/search", "/tasks/digest", "/tasks/anything", "/api/files/upload", "/api/files/x.pdf", "/tasksx", "/actions"]) {
+    expect(staffMayVisit("/overview")).toBe(true);
+    expect(staffMayVisit("/overview/")).toBe(true);
+    for (const path of ["/", "/overview/x", "/overviewx", "/customers", "/customers/abc", "/projects", "/projects/abc", "/phases", "/payments", "/payments/abc", "/updates", "/updates/export", "/updates/agenda", "/inbox", "/people", "/import", "/search", "/tasks/digest", "/tasks/anything", "/api/files/upload", "/api/files/x.pdf", "/tasksx", "/actions"]) {
       expect(staffMayVisit(path)).toBe(false);
     }
   });
@@ -93,6 +95,7 @@ describe("what staff may open", () => {
   it("after signing in staff land on the Tasks page, or on the task page they asked for", () => {
     expect(staffLanding("")).toBe(STAFF_HOME);
     expect(staffLanding("/tasks?filter=attention")).toBe("/tasks?filter=attention");
+    expect(staffLanding("/overview?dept=SUPPLY")).toBe("/overview?dept=SUPPLY");
     expect(staffLanding("/payments")).toBe(STAFF_HOME);
     expect(staffLanding("/tasks/digest")).toBe(STAFF_HOME);
     expect(staffLanding("//evil.example.com")).toBe(STAFF_HOME);

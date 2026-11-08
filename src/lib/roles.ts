@@ -1,9 +1,10 @@
-// What each role may open. Managers: everything. Staff: only the Tasks page (where they mark their tasks done, add an update or
-// change a date; src/server/actions/tasks.ts lists the few actions they may run, and every other action refuses them).
+// What each role may open. Managers: everything. Staff: the Tasks page (where they mark their tasks done, add an update or
+// change a date; src/server/actions/tasks.ts lists the few actions they may run, and every other action refuses them) and the
+// read-only department Overview (quick numbers and bars: no money, contracts or files).
 // Everything not listed here is closed to staff: a new page is manager-only until it is added on purpose.
 
-// Staff may open exactly these addresses (the Tasks page, with its filters in the query), nothing under them.
-export const STAFF_PATHS = ["/tasks"] as const;
+// Staff may open exactly these addresses (with their filters in the query), nothing under them.
+export const STAFF_PATHS = ["/tasks", "/overview"] as const;
 
 export const STAFF_HOME = "/tasks";
 
