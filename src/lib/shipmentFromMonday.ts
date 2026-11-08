@@ -140,6 +140,10 @@ export function shipmentFromMonday(item: MondayShipmentItem, todayIso: string): 
 
   const input: Partial<ShipmentInput> = { reference };
   let status = mapped?.status ?? "BOOKED";
+  // monday.com leaves the label "Arrive to the WH" on a shipment long after it arrived: what people fill in is the arrival date. A
+  // shipment at a warehouse with an arrival date that has passed is Delivered, on that day (Leora, 2026-11-08). Without an arrival
+  // date, or with one still ahead, it is At the warehouse.
+  if (status === "AT_WAREHOUSE" && arrival && arrival <= todayIso) status = "DELIVERED";
   const noteLines: string[] = [];
   if (!mapped) {
     const why = label ? `status "${label}" is not one of 360's stages` : "no status";

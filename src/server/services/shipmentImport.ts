@@ -37,6 +37,8 @@ function fillEmpty(existing: ShipmentView, imp: ShipmentImport): { merged: Recor
   const filled: string[] = [];
   for (const key of FILL_KEYS) {
     const v = imp.input[key];
+    // a delivery day goes only on a shipment that is Delivered (one planned or at the port keeps its own status and dates)
+    if (key === "deliveredAt" && existing.status !== "DELIVERED") continue;
     if (v && !merged[key]) {
       merged[key] = v as string;
       filled.push(key);

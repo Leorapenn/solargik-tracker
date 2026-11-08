@@ -56,10 +56,23 @@ describe("shipmentFromMonday", () => {
     expect(cleanShipment(s.input, TODAY).ok).toBe(true);
   });
 
-  it("arriving at a warehouse is its own stage, with the arrival day as the day it arrived", () => {
+  it("a shipment at a warehouse whose arrival day has passed is Delivered on that day (the label is left stale on monday.com)", () => {
     for (const label of ["Arrive to the WH", "Arrived-Warehouse", "In WH-Clients area", "In inventory"]) {
       const s = shipmentFromMonday(item({ status: label }), TODAY);
-      expect(s.input).toMatchObject({ status: "AT_WAREHOUSE", arrivedAt: "2026-07-01" });
+      expect(s.input).toMatchObject({ status: "DELIVERED", deliveredAt: "2026-07-01" });
+      expect(s.input.arrivedAt).toBeUndefined();
+      expect(s.issues).toEqual([]);
+      expect(cleanShipment(s.input, TODAY).ok).toBe(true);
+    }
+    // the day itself counts; tomorrow does not
+    expect(shipmentFromMonday(item({ status: "Arrive to the WH", arrival: TODAY }), TODAY).input.status).toBe("DELIVERED");
+  });
+
+  it("at a warehouse with no arrival day, or one still ahead, it stays At the warehouse", () => {
+    for (const arrival of ["", "2026-12-01"]) {
+      const s = shipmentFromMonday(item({ status: "Arrive to the WH", arrival }), TODAY);
+      expect(s.input.status).toBe("AT_WAREHOUSE");
+      expect(s.input.arrivedAt).toBeUndefined();
       expect(s.input.deliveredAt).toBeUndefined();
       expect(cleanShipment(s.input, TODAY).ok).toBe(true);
     }
@@ -78,7 +91,7 @@ describe("shipmentFromMonday", () => {
   });
 
   it("never invents an arrival: a future arrival day is not a fact", () => {
-    const s = shipmentFromMonday(item({ status: "Arrive to the WH", arrival: "2026-12-01" }), TODAY);
+    const s = shipmentFromMonday(item({ status: "Customs (Italy)", arrival: "2026-12-01" }), TODAY);
     expect(s.input.arrivedAt).toBeUndefined();
     expect(cleanShipment(s.input, TODAY).ok).toBe(true);
   });
