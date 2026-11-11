@@ -287,6 +287,21 @@ export default async function ProjectDetailPage({
           );
         })}
       </div>
+
+      {/* The suggestion card asks a manager for a decision, so it stays visible; it only appears when there is one. */}
+      <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
+
+      {/* The items table comes right after the phase cards; the status updates and the reference cards follow it. */}
+      <SubStageTable
+        rows={sortedRows}
+        people={people}
+        sort={sort}
+        basePath={`/projects/${project.id}`}
+        params={query}
+        todayIso={todayIso}
+        totalCount={allRows.length}
+      />
+
       {/* the status update card is narrower now; the approved notes and action items from emails sit beside it */}
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start", marginTop: 4 }}>
       <details open style={{ flex: "3 1 440px", minWidth: 0 }}>
@@ -343,9 +358,7 @@ export default async function ProjectDetailPage({
         />
       </details>
       </div>
-      {/* The reference cards below start closed so the items table is not pushed far down the page; the suggestion card stays visible because it asks for a decision. */}
-      <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
-
+      {/* The reference cards below start closed. */}
       <details style={{ marginTop: 4 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Project profile</summary>
         <ProjectProfileCard
@@ -398,29 +411,6 @@ export default async function ProjectDetailPage({
         ).map((l) => ({ ...l, leftText: l.daysLeft === null || !l.expiresOn ? null : describeLeft(l.daysLeft, todayIso, l.expiresOn) }))}
       />
       </details>
-
-      <details style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -6 }}>
-        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 600 }}>
-          How phases and dates work
-          {departments.length > 0 && ` (cards show only the ${departments.map(departmentLabel).join(" / ")} items)`}
-        </summary>
-        <p style={{ margin: "6px 0 0", maxWidth: 820 }}>
-          Phase status, dates and owners update automatically from the items below: a phase is Done when all its items
-          are, Blocked if any is blocked, In progress once any has started. Start and completed dates are recorded
-          automatically when an item&apos;s status changes, and every change is kept in a history log. Phases
-          don&apos;t wait for each other.
-        </p>
-      </details>
-
-      <SubStageTable
-        rows={sortedRows}
-        people={people}
-        sort={sort}
-        basePath={`/projects/${project.id}`}
-        params={query}
-        todayIso={todayIso}
-        totalCount={allRows.length}
-      />
     </main>
   );
 }
