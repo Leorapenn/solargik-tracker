@@ -1,4 +1,5 @@
 import type { Choice } from "@/lib/projectProfile";
+import { DELIVERY_ITEMS } from "@/lib/shipmentCategory";
 
 // Shipments: one record per shipment of a project's goods, from booking to delivery on the site. Pure rules and validation; the
 // storage is in src/server/services/shipments.ts. Facts only (names, container numbers, dates, a short note): no documents.
@@ -71,6 +72,10 @@ export type ShipmentInput = {
   deliveryDate: string;
   deliveredAt: string;
   notes: string;
+  // the Supply Delivery sub-stages the goods belong to, and whether it is the completion shipment (the card sends them; a proposal from
+  // an email does not, and then they are left as they are)
+  categories?: string[];
+  completionShipment?: boolean;
 };
 
 export type CleanShipment = {
@@ -90,6 +95,8 @@ export type CleanShipment = {
   deliveryDate: string | null;
   deliveredAt: string | null;
   notes: string | null;
+  categories?: string[]; // only present when the input carried them
+  completionShipment?: boolean;
 };
 
 export const DATE_KEYS = ["etd", "eta", "arrivedAt", "customsClearedAt", "deliveryDate", "deliveredAt"] as const;
@@ -132,9 +139,17 @@ export function cleanShipment(input: Partial<Record<keyof ShipmentInput, unknown
   const notes = str(input.notes).replace(/\r\n?/g, "\n").trim();
   if (notes.length > MAX_NOTES) return { ok: false, error: `The note can be at most ${MAX_NOTES} characters.` };
   const orNull = (v: string) => v || null;
+  // the Delivery sub-stages: only the three known ones, once each, in their usual order
+  let categories: string[] | undefined;
+  if (input.categories !== undefined) {
+    if (!Array.isArray(input.categories)) return { ok: false, error: "The Delivery sub-stages must be a list." };
+    categories = DELIVERY_ITEMS.filter((c) => (input.categories as unknown[]).includes(c));
+  }
   return {
     ok: true,
     value: {
+      ...(categories !== undefined ? { categories } : {}),
+      ...(input.completionShipment !== undefined ? { completionShipment: input.completionShipment === true } : {}),
       reference,
       goods: orNull(oneLine(input.goods, 200)),
       forwarder: orNull(oneLine(input.forwarder, 120)),

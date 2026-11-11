@@ -204,6 +204,11 @@ model Shipment {
   shipper         String?
   shippingMethod  String?
   files           Json?
+  // Which Supply "Delivery" sub-stages these goods belong to (PILES / TRACKER_STRUCTURE / DRIVE_UNITS_IC, see src/lib/shipmentCategory.ts),
+  // read from the packing list or set by hand, and whether monday.com flags it as a completion shipment (the last shipment of an item).
+  // With these, 360 suggests a Delivery sub-stage as Done once all its shipments are delivered (src/lib/deliveryProposal.ts).
+  categories         String[] @default([])
+  completionShipment Boolean  @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

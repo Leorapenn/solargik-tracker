@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { removeProjectShipment, saveProjectShipment } from "@/server/actions/shipments";
 import type { ShipmentView } from "@/server/services/shipments";
 import { CUSTOMS_STATUSES, DATE_KEYS, DATE_LABELS, SHIPMENT_STATUSES, customsStatusChoice, shipmentStatusChoice, type ShipmentInput } from "@/lib/shipments";
+import { DELIVERY_ITEMS, DELIVERY_ITEM_NAMES } from "@/lib/shipmentCategory";
 import { formatDate, parseDateInput } from "@/lib/dates";
 import { ChoicePill } from "@/components/ColorSelect";
 import { DateField } from "@/components/DateField";
@@ -12,12 +13,13 @@ import { NAVY, ORANGE, ROW_DIVIDER, TEXT_MUTED, cardStyle, inputStyle, primaryBu
 const fmt = (iso: string | null) => (iso ? formatDate(parseDateInput(iso)) : null);
 const small = { ...secondaryButton, padding: "4px 12px", fontSize: 13 } as const;
 
-const blank: ShipmentInput = { reference: "", goods: "", forwarder: "", vessel: "", containers: "", portOfLoading: "", portOfDischarge: "", status: "BOOKED", customsStatus: "NOT_STARTED", etd: "", eta: "", arrivedAt: "", customsClearedAt: "", deliveryDate: "", deliveredAt: "", notes: "" };
+const blank: ShipmentInput = { reference: "", goods: "", forwarder: "", vessel: "", containers: "", portOfLoading: "", portOfDischarge: "", status: "BOOKED", customsStatus: "NOT_STARTED", etd: "", eta: "", arrivedAt: "", customsClearedAt: "", deliveryDate: "", deliveredAt: "", notes: "", categories: [], completionShipment: false };
 
 const toInput = (s: ShipmentView): ShipmentInput => ({
   reference: s.reference, goods: s.goods ?? "", forwarder: s.forwarder ?? "", vessel: s.vessel ?? "", containers: s.containers.join(", "),
   portOfLoading: s.portOfLoading ?? "", portOfDischarge: s.portOfDischarge ?? "", status: s.status, customsStatus: s.customsStatus,
   etd: s.etd ?? "", eta: s.eta ?? "", arrivedAt: s.arrivedAt ?? "", customsClearedAt: s.customsClearedAt ?? "", deliveryDate: s.deliveryDate ?? "", deliveredAt: s.deliveredAt ?? "", notes: s.notes ?? "",
+  categories: s.categories, completionShipment: s.completionShipment,
 });
 
 const field = (label: string, child: React.ReactNode, width?: number | string) => (
@@ -69,6 +71,17 @@ export function ShipmentsCard({ projectId, shipments }: { projectId: string; shi
               <strong style={{ color: NAVY, fontSize: 15 }}>{s.reference}</strong>
               <span style={{ color: TEXT_MUTED, fontSize: 13.5 }}>{[s.goods, s.forwarder && `via ${s.forwarder}`].filter(Boolean).join(" · ")}</span>
               <ChoicePill choice={shipmentStatusChoice(s.status)} />
+              {/* which Supply Delivery sub-stages the goods belong to, and whether it is the last shipment of an item */}
+              {s.categories.map((c) => (
+                <span key={c} title="The Supply sub-stage these goods belong to" style={{ background: "#EEF2FB", color: NAVY, borderRadius: 999, padding: "1px 9px", fontSize: 12, fontWeight: 700 }}>
+                  {DELIVERY_ITEM_NAMES[c as keyof typeof DELIVERY_ITEM_NAMES]?.replace("Delivery – ", "") ?? c}
+                </span>
+              ))}
+              {s.completionShipment && (
+                <span title="The last shipment of an item: when it and the other shipments of these goods are delivered, 360 suggests the sub-stage as Done" style={{ background: "#FEF0D6", color: "#8A5300", borderRadius: 999, padding: "1px 9px", fontSize: 12, fontWeight: 700 }}>
+                  Completion shipment
+                </span>
+              )}
               <span style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 12.5, color: TEXT_MUTED }}>
                 Customs <ChoicePill choice={customsStatusChoice(s.customsStatus)} />
               </span>
@@ -167,6 +180,19 @@ export function ShipmentsCard({ projectId, shipments }: { projectId: string; shi
             {DATE_KEYS.map((k) => (
               <div key={k}>{field(DATE_LABELS[k], <DateField ariaLabel={DATE_LABELS[k]} value={form.data[k] || null} onCommit={(c) => set({ [k]: c.date ?? "" })} />)}</div>
             ))}
+          </div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", fontSize: 13.5 }}>
+            <span style={{ fontWeight: 700, color: TEXT_MUTED, fontSize: 11.5, letterSpacing: "0.06em", textTransform: "uppercase" }}>Supply sub-stages of these goods</span>
+            {DELIVERY_ITEMS.map((k) => (
+              <label key={k} style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer" }}>
+                <input type="checkbox" checked={(form.data.categories ?? []).includes(k)} onChange={(e) => set({ categories: e.target.checked ? [...(form.data.categories ?? []), k] : (form.data.categories ?? []).filter((x) => x !== k) })} />
+                {DELIVERY_ITEM_NAMES[k].replace("Delivery – ", "")}
+              </label>
+            ))}
+            <label style={{ display: "inline-flex", gap: 6, alignItems: "center", cursor: "pointer" }} title="The last shipment of an item">
+              <input type="checkbox" checked={form.data.completionShipment === true} onChange={(e) => set({ completionShipment: e.target.checked })} />
+              Completion shipment
+            </label>
           </div>
           {field("Note", <textarea aria-label="Note" rows={2} value={form.data.notes} maxLength={1000} onChange={(e) => set({ notes: e.target.value })} style={{ ...inputStyle, width: "100%", boxSizing: "border-box", font: "inherit", resize: "vertical" }} />)}
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>

@@ -51,6 +51,11 @@ export function sharepointLink(projectFolder: string, shipmentFolder: string, fi
 
 export const isSharepointLink = (url: string) => /^https:\/\/[^/]+\.sharepoint\.com\//i.test(url);
 
+// Which of a shipment's files may say what the goods are: spreadsheets and PDFs that are not a bill of lading, a certificate, a proof of
+// delivery, a customs paper or a freight / bank document (those say nothing about the goods, and their words could mislead).
+const NOT_GOODS = /\b(hbl|mbl|obd|coo|eur1|pod|dgd|fbl|dn|verify)\b|bill of lad|marin|certificate|customs|freight|insurance|swift|exp dec|israeli|^image\b|photo/i;
+export const isGoodsDocument = (name: string): boolean => /\.(xlsx|pdf)$/i.test(name) && !NOT_GOODS.test(name.replace(/[_.-]/g, " "));
+
 // The monday.com asset id inside a file address ".../resources/3008913672/name.pdf", or null.
 export const assetIdOf = (url: string): string | null => /\/resources\/(\d+)\//.exec(url)?.[1] ?? null;
 

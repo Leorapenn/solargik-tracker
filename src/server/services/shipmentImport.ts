@@ -24,16 +24,19 @@ export type ImportPlan = {
   unmatchedItems: number; // items of the board whose project number could not be told (a range group without a number in the name...)
 };
 
-const FILL_KEYS: (keyof ShipmentInput)[] = ["goods", "vessel", "portOfLoading", "portOfDischarge", "etd", "eta", "arrivedAt", "customsClearedAt", "deliveryDate", "deliveredAt", "notes"];
+const FILL_KEYS: (keyof TextInput)[] = ["goods", "vessel", "portOfLoading", "portOfDischarge", "etd", "eta", "arrivedAt", "customsClearedAt", "deliveryDate", "deliveredAt", "notes"];
 
-const toInput = (s: ShipmentView): Record<keyof ShipmentInput, string> => ({
+// the text fields the import fills (the Delivery sub-stages and the completion flag are handled apart)
+type TextInput = Record<Exclude<keyof ShipmentInput, "categories" | "completionShipment">, string>;
+
+const toInput = (s: ShipmentView): TextInput => ({
   reference: s.reference, goods: s.goods ?? "", forwarder: s.forwarder ?? "", vessel: s.vessel ?? "", containers: s.containers.join(", "),
   portOfLoading: s.portOfLoading ?? "", portOfDischarge: s.portOfDischarge ?? "", status: s.status, customsStatus: s.customsStatus,
   etd: s.etd ?? "", eta: s.eta ?? "", arrivedAt: s.arrivedAt ?? "", customsClearedAt: s.customsClearedAt ?? "", deliveryDate: s.deliveryDate ?? "", deliveredAt: s.deliveredAt ?? "", notes: s.notes ?? "",
 });
 
 // What monday.com adds to a shipment that already exists: only the fields that are still EMPTY (containers are added, never dropped).
-function fillEmpty(existing: ShipmentView, imp: ShipmentImport): { merged: Record<keyof ShipmentInput, string>; filled: string[] } {
+function fillEmpty(existing: ShipmentView, imp: ShipmentImport): { merged: TextInput; filled: string[] } {
   const merged = toInput(existing);
   const filled: string[] = [];
   for (const key of FILL_KEYS) {
@@ -143,7 +146,7 @@ export async function applyShipmentImport(plan: ImportPlan): Promise<{ created: 
           if (a.kind === "skip") {
             result.skipped++;
           } else if (a.kind === "create") {
-            await tx.shipment.create({ data: { projectId: p.projectId, ...shipmentData(a.clean), mondayItemId: a.imp.mondayItemId, ...mondayFields(a.imp) } });
+            await tx.shipment.create({ data: { projectId: p.projectId, ...shipmentData(a.clean), mondayItemId: a.imp.mondayItemId, completionShipment: a.imp.completionShipment, ...mondayFields(a.imp) } });
             result.created++;
           } else {
             // an existing shipment: its empty fields are filled, its links refreshed; what is typed or proposed is kept
@@ -153,6 +156,8 @@ export async function applyShipmentImport(plan: ImportPlan): Promise<{ created: 
                 ...(a.clean ? shipmentData(a.clean) : {}),
                 ...(a.kind === "link" ? { mondayItemId: a.imp.mondayItemId } : {}),
                 mondayUrl: a.imp.mondayUrl,
+                // monday.com flags it as the last shipment of an item: set, never taken back (a person may have set it by hand)
+                ...(a.imp.completionShipment ? { completionShipment: true } : {}),
                 shipper: a.imp.shipper ?? undefined,
                 shippingMethod: a.imp.shippingMethod ?? undefined,
                 files: a.imp.files as unknown as Prisma.InputJsonValue,

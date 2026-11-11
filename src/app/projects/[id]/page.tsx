@@ -39,6 +39,8 @@ import { listProjectCorrespondence } from "@/server/services/correspondence";
 import { listOpenTasksForProject } from "@/server/services/tasks";
 import { listShipments } from "@/server/services/shipments";
 import { ShipmentsCard } from "@/components/ShipmentsCard";
+import { DeliverySuggestions } from "@/components/DeliverySuggestions";
+import { getDeliveryProposals } from "@/server/services/deliveryProposals";
 import { TasksCard } from "@/components/TasksCard";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle } from "@/lib/theme";
 
@@ -60,7 +62,7 @@ export default async function ProjectDetailPage({
   const { id } = await params;
   const query = await searchParams;
 
-  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence, openTasks, shipments] = await Promise.all([
+  const [project, people, flagSuggestions, profile, payments, contractSigned, correspondence, openTasks, shipments, deliveryProposals] = await Promise.all([
     prisma.project.findUnique({
       where: { id },
       include: {
@@ -82,6 +84,7 @@ export default async function ProjectDetailPage({
     listProjectCorrespondence(id),
     listOpenTasksForProject(id).catch(() => []),
     listShipments(id).catch(() => []), // the shipments never break the page
+    getDeliveryProposals(id).catch(() => []), // neither do the suggested Delivery sub-stages
   ]);
 
   if (!project) notFound();
@@ -366,6 +369,7 @@ export default async function ProjectDetailPage({
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
           Shipments{shipments.length > 0 ? ` (${shipments.length})` : ""}
         </summary>
+        <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
         <ShipmentsCard projectId={project.id} shipments={shipments} />
       </details>
 

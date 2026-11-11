@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assetIdOf, fitName, isSharepointLink, mergeFiles, safeName, sharepointLink, uniqueName } from "./shipmentFiles";
+import { assetIdOf, fitName, isGoodsDocument, isSharepointLink, mergeFiles, safeName, sharepointLink, uniqueName } from "./shipmentFiles";
 
 describe("file and folder names", () => {
   it("makes a name safe for Windows and SharePoint, keeping what is readable", () => {
@@ -29,6 +29,15 @@ describe("file and folder names", () => {
     expect(uniqueName("a.pdf", (n) => taken.has(n))).toBe("a (3).pdf");
     expect(uniqueName("c.pdf", (n) => taken.has(n))).toBe("c.pdf");
     expect(uniqueName("b", (n) => taken.has(n))).toBe("b (2)");
+  });
+});
+
+describe("which files may describe the goods", () => {
+  it("takes packing lists, invoices and shipping documents in xlsx or pdf", () => {
+    for (const n of ["PACKING LIST-AS03260622.xlsx", "360-PRJ_Shipping_Pack_PL20260906-3 (6).pdf", "INVOICE & PACKINGLIST（PRJ 360).pdf", "of26180shippingdocuments-1.pdf", "PRJ360_Shipment02_LCL_Genoa_Germany_Final.xlsx", "26BC317-BCJSK2026013-PO26000253 (1).pdf"]) expect(isGoodsDocument(n)).toBe(true);
+  });
+  it("leaves out bills of lading, certificates, proofs of delivery, customs and photos", () => {
+    for (const n of ["HBL_UNC368744.pdf", "SHATRS00001 OBD HBL.pdf", "MarinCertificate_20260909.pdf", "COO for PRJ360.pdf", "POD (3).jpg", "POD 1781680413.pdf", "draft eur1.jpg", "EXP_DEC_26014797837129.pdf", "Israeli DOCS (25).pdf", "USD DN 177MZSZSS402800.pdf", "image.png", "photos.zip"]) expect(isGoodsDocument(n)).toBe(false);
   });
 });
 

@@ -30,6 +30,20 @@ type Asset = { id: string; name: string; file_extension: string; file_size: numb
 const SKIP_WITH_KEY_ONLY = /^\.?(jpe?g|png|gif|heic|webp|zip|rar|7z)$/i;
 const mb = (n: number) => `${(n / 1048576).toFixed(1)} MB`;
 
+// A network hiccup (monday.com or the file address) is tried again a few times before the file or shipment is given up and reported.
+async function retry<T>(label: string, fn: () => Promise<T>, tries = 4): Promise<T> {
+  let last: unknown;
+  for (let i = 1; i <= tries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      last = error;
+      await new Promise((r) => setTimeout(r, 1500 * i));
+    }
+  }
+  throw new Error(`${label}: ${last instanceof Error ? last.message : String(last)}`);
+}
+
 const EXEC = process.env.EXECUTION_DIR ?? join(process.env.USERPROFILE ?? "", "OneDrive - Solargik", "Projects - EXECUTION");
 
 // The project's folder in the synced library: the one its SharePoint link names, else the only folder that starts with its number.
@@ -78,7 +92,13 @@ async function main() {
         if (files.length) console.log(`  ${shipment.reference.slice(0, 40).padEnd(40)} ${files.length} file(s) already in SharePoint`);
         continue;
       }
-      const data = await mondayQuery<{ items: { assets: Asset[] }[] }>(`query { items(ids:[${shipment.mondayItemId}]) { assets { id name file_extension file_size public_url } } }`);
+      let data: { items: { assets: Asset[] }[] };
+      try {
+        data = await retry(`${shipment.reference}`, () => mondayQuery<{ items: { assets: Asset[] }[] }>(`query { items(ids:[${shipment.mondayItemId}]) { assets { id name file_extension file_size public_url } } }`));
+      } catch (error) {
+        problems.push(`${shipment.reference}: monday.com did not answer (${error instanceof Error ? error.message : error}): left for the next run`);
+        continue;
+      }
       const assets = new Map((data.items[0]?.assets ?? []).map((a) => [a.id, a]));
       const shipmentFolder = safeName(shipment.reference, "shipment").slice(0, 45).trim();
       const dir = join(EXEC, folder, SHIPMENT_FOLDER, SHIPMENT_SUBFOLDER, shipmentFolder);
@@ -106,14 +126,20 @@ async function main() {
           const target = join(dir, name);
           if (!existsSync(target)) {
             mkdirSync(dir, { recursive: true });
-            const res = await fetch(asset.public_url);
-            if (!res.ok) {
-              problems.push(`${shipment.reference}: ${asset.name} could not be downloaded (${res.status}): link kept`);
+            let bytesRead: Buffer | null = null;
+            try {
+              bytesRead = await retry(asset.name, async () => {
+                const res = await fetch(asset.public_url);
+                if (!res.ok) throw new Error(`status ${res.status}`);
+                return Buffer.from(await res.arrayBuffer());
+              });
+            } catch (error) {
+              problems.push(`${shipment.reference}: ${asset.name} could not be downloaded (${error instanceof Error ? error.message : error}): link kept`);
               next.push(f);
               continue;
             }
             const part = `${target}.part`;
-            writeFileSync(part, Buffer.from(await res.arrayBuffer()));
+            writeFileSync(part, bytesRead);
             renameSync(part, target);
             saved++;
           }

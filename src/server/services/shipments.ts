@@ -33,6 +33,9 @@ export type ShipmentView = {
   shipper: string | null;
   shippingMethod: string | null;
   files: ShipmentFile[];
+  // the Supply Delivery sub-stages the goods belong to, and whether it is the completion shipment (src/lib/deliveryProposal.ts)
+  categories: string[];
+  completionShipment: boolean;
 };
 
 type Row = Awaited<ReturnType<typeof prisma.shipment.findMany>>[number];
@@ -72,6 +75,8 @@ const toView = (s: Row): ShipmentView => ({
   shipper: s.shipper,
   shippingMethod: s.shippingMethod,
   files: filesOf(s.files),
+  categories: s.categories,
+  completionShipment: s.completionShipment,
 });
 
 // A project's shipments: the ones still on their way first (nearest first), delivered ones last.
@@ -99,6 +104,9 @@ const data = (v: CleanShipment) => ({
   deliveryDate: day(v.deliveryDate),
   deliveredAt: day(v.deliveredAt),
   notes: v.notes,
+  // only when the input carried them (the card does; an email proposal does not)
+  ...(v.categories !== undefined ? { categories: v.categories } : {}),
+  ...(v.completionShipment !== undefined ? { completionShipment: v.completionShipment } : {}),
 });
 
 async function requireProject(projectId: string) {

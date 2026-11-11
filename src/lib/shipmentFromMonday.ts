@@ -19,6 +19,7 @@ export const MONDAY_SHIPPING_COLUMNS = {
   shipper: "text94__1",
   method: "label__1",
   what: "long_text__1",
+  completion: "color_mkp54n0j", // "Completion Shipment label": Yes = the last shipment of an item
 } as const;
 
 export type MondayShipmentItem = { id: string; name: string; group: { id: string; title: string }; values: Partial<Record<keyof typeof MONDAY_SHIPPING_COLUMNS, string | null>> };
@@ -107,6 +108,7 @@ export type ShipmentImport = {
   shipper: string | null;
   shippingMethod: string | null;
   files: ShipmentFile[];
+  completionShipment: boolean; // monday.com says this is the last shipment of an item
   issues: string[]; // what could not be taken over, for the report
 };
 
@@ -187,6 +189,7 @@ export function shipmentFromMonday(item: MondayShipmentItem, todayIso: string): 
     shipper: one(v.shipper, 120) || null,
     shippingMethod: one(v.method, 60) || null,
     files,
+    completionShipment: one(v.completion, 10).toLowerCase() === "yes",
     issues,
   };
 }
