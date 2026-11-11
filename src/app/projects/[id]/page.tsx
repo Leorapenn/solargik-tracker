@@ -30,7 +30,8 @@ import { departmentLabel } from "@/lib/departments";
 import { LIFECYCLE_NOTES, LIFECYCLE_STYLES } from "@/lib/lifecycle";
 import { rollupPhase } from "@/lib/phaseRollup";
 import { formatDate, toDateInputValue, todayInAppTz } from "@/lib/dates";
-import { parseSort, sortRows } from "@/lib/sort";
+import { hrefWith, parseSort, sortRows } from "@/lib/sort";
+import { PROJECT_TABS, isProjectTab, type ProjectTab } from "@/lib/projectTabs";
 import { projectSummary } from "@/lib/statusUpdate";
 import { PhaseUpdate } from "@/components/PhaseUpdate";
 import { ProjectSummary } from "@/components/ProjectSummary";
@@ -42,7 +43,7 @@ import { ShipmentsCard } from "@/components/ShipmentsCard";
 import { DeliverySuggestions } from "@/components/DeliverySuggestions";
 import { getDeliveryProposals } from "@/server/services/deliveryProposals";
 import { TasksCard } from "@/components/TasksCard";
-import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle } from "@/lib/theme";
+import { NAVY, ROW_DIVIDER, TEXT_MUTED, cardStyle, pageStyle, pageTitleStyle, secondaryButton } from "@/lib/theme";
 
 export const dynamic = "force-dynamic";
 // Reading a contract with Claude (a Server Action used on this page) can take a while.
@@ -160,6 +161,13 @@ export default async function ProjectDetailPage({
   const sort = parseSort(query, Object.keys(accessors), { key: "phase", dir: "asc" });
   const sortedRows = sortRows(rows, accessors, sort);
 
+  // The page is split into tabs (the address says which: ?tab=). It opens on the profile. A sort or filter of the items table in the
+  // address, without a tab, means the table's tab (a saved view carries no tab).
+  const rawTab = Array.isArray(query.tab) ? query.tab[0] : query.tab;
+  const tab: ProjectTab = isProjectTab(rawTab) ? rawTab : Object.keys(query).some((k) => k !== "tab") ? "phases" : "profile";
+  const base = `/projects/${project.id}`;
+  const badges: Partial<Record<ProjectTab, number>> = { updates: openTasks.length, shipments: deliveryProposals.length };
+
   return (
     <main style={pageStyle}>
       <div style={{ fontSize: 13, color: TEXT_MUTED }}>
@@ -243,18 +251,72 @@ export default async function ProjectDetailPage({
         <FlagsEditor compact kind="project" id={project.id} name={project.name} flags={project.flags} colors={parseFlagColors(project.flagColors)} notes={parseFlagNotes(project.flagNotes)} suggestions={flagSuggestions} />
       </div>
 
-      <div style={{ marginTop: -4 }}>
-        <SharePointLink projectId={project.id} link={project.sharepointLink} />
-      </div>
+      <nav aria-label="Project sections" style={{ display: "flex", gap: 4, flexWrap: "wrap", borderBottom: `1px solid ${ROW_DIVIDER}` }}>
+        {PROJECT_TABS.map((t) => {
+          const active = t.key === tab;
+          const badge = badges[t.key] ?? 0;
+          return (
+            <Link
+              key={t.key}
+              href={hrefWith(base, query, { tab: t.key })}
+              aria-current={active ? "page" : undefined}
+              style={{
+                padding: "10px 16px",
+                fontSize: 14.5,
+                fontWeight: active ? 700 : 600,
+                color: active ? NAVY : TEXT_MUTED,
+                textDecoration: "none",
+                borderBottom: `3px solid ${active ? NAVY : "transparent"}`,
+                marginBottom: -1,
+              }}
+            >
+              {t.label}
+              {badge > 0 && (
+                <span style={{ marginLeft: 8, background: "#F59E0B", color: "#fff", borderRadius: 999, fontSize: 12, fontWeight: 700, padding: "1px 7px" }}>{badge}</span>
+              )}
+            </Link>
+          );
+        })}
+      </nav>
 
-      <div style={{ marginTop: -4 }}>
-        <CustomerManager
-          projectId={project.id}
-          current={{ name: project.customerManagerName ?? "", email: project.customerManagerEmail ?? "", phone: project.customerManagerPhone ?? "" }}
-          contacts={customerPeople}
-        />
-      </div>
+      {tab === "profile" && (
+        <>
+          <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <SharePointLink projectId={project.id} link={project.sharepointLink} />
+            <CustomerManager
+              projectId={project.id}
+              current={{ name: project.customerManagerName ?? "", email: project.customerManagerEmail ?? "", phone: project.customerManagerPhone ?? "" }}
+              contacts={customerPeople}
+            />
+          </div>
+          <ProjectProfileCard
+            projectId={project.id}
+            initial={profile}
+            people={people}
+            contractReading={Boolean(process.env.ANTHROPIC_API_KEY)}
+            uploadMode={uploadMode()}
+            contractSigned={contractSigned}
+            linked={linkedValues(
+              project.phases.flatMap((phase) =>
+                phase.subStages.map((s) => ({
+                  phaseName: phase.name,
+                  name: s.name,
+                  status: s.status,
+                  completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null,
+                })),
+              ),
+            )}
+          />
+          <div>
+            <Link href={hrefWith(base, {}, { tab: "phases" })} style={{ ...secondaryButton, textDecoration: "none", display: "inline-block" }}>
+              Go to phases and items →
+            </Link>
+          </div>
+        </>
+      )}
 
+      {tab === "phases" && (
+        <>
       <div
         style={{
           display: "grid",
@@ -288,10 +350,6 @@ export default async function ProjectDetailPage({
         })}
       </div>
 
-      {/* The suggestion card asks a manager for a decision, so it stays visible; it only appears when there is one. */}
-      <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
-
-      {/* The items table comes right after the phase cards; the status updates and the reference cards follow it. */}
       <SubStageTable
         rows={sortedRows}
         people={people}
@@ -301,7 +359,11 @@ export default async function ProjectDetailPage({
         todayIso={todayIso}
         totalCount={allRows.length}
       />
+        </>
+      )}
 
+      {tab === "updates" && (
+        <>
       {/* the status update card is narrower now; the approved notes and action items from emails sit beside it */}
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start", marginTop: 4 }}>
       <details open style={{ flex: "3 1 440px", minWidth: 0 }}>
@@ -358,45 +420,31 @@ export default async function ProjectDetailPage({
         />
       </details>
       </div>
-      {/* The reference cards below start closed. */}
-      <details style={{ marginTop: 4 }}>
-        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Project profile</summary>
-        <ProjectProfileCard
-          projectId={project.id}
-          initial={profile}
-          people={people}
-          contractReading={Boolean(process.env.ANTHROPIC_API_KEY)}
-          uploadMode={uploadMode()}
-          contractSigned={contractSigned}
-          linked={linkedValues(
-            project.phases.flatMap((phase) =>
-              phase.subStages.map((s) => ({
-                phaseName: phase.name,
-                name: s.name,
-                status: s.status,
-                completedAt: s.completedAt ? toDateInputValue(s.completedAt) : null,
-              })),
-            ),
-          )}
-        />
-      </details>
-
-      <details>
-        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
-          Shipments{shipments.length > 0 ? ` (${shipments.length})` : ""}
-        </summary>
-        <ShipmentsCard projectId={project.id} shipments={shipments} />
-      </details>
-
-      {payments && (
-        <details>
-          <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Payments</summary>
-          <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />
-        </details>
+        </>
       )}
 
-      <details>
-        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Warranty</summary>
+      {tab === "shipments" && (
+        <>
+          {/* A manager's decision: it only appears when the shipments say a Delivery item is complete (the tab carries a badge then). */}
+          <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
+          <h2 style={{ margin: "4px 0 0", fontSize: 17, color: NAVY }}>Shipments{shipments.length > 0 ? ` (${shipments.length})` : ""}</h2>
+          <ShipmentsCard projectId={project.id} shipments={shipments} />
+        </>
+      )}
+
+      {tab === "payments" &&
+        (payments ? (
+          <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />
+        ) : (
+          <div style={{ ...cardStyle, padding: 20, color: TEXT_MUTED }}>
+            No payment information for this project yet.{" "}
+            <Link href={`/payments/${project.id}`} style={{ color: NAVY, fontWeight: 700 }}>
+              Open in Payments
+            </Link>
+          </div>
+        ))}
+
+      {tab === "warranty" && (
       <WarrantyCard
         projectId={project.id}
         structuralYears={project.warrantyStructuralYears}
@@ -410,7 +458,7 @@ export default async function ProjectDetailPage({
           todayIso,
         ).map((l) => ({ ...l, leftText: l.daysLeft === null || !l.expiresOn ? null : describeLeft(l.daysLeft, todayIso, l.expiresOn) }))}
       />
-      </details>
+      )}
     </main>
   );
 }

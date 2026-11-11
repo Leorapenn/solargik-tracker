@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { removeSortHref, type SortState } from "@/lib/sort";
+import { hrefWith, removeSortHref, type SortState } from "@/lib/sort";
 import { canonicalQuery } from "@/lib/savedViews";
 import { SavedViews } from "@/components/SavedViews";
 import { NAVY, ROW_DIVIDER, TEXT_MUTED } from "@/lib/theme";
@@ -49,7 +49,12 @@ export function SortSummary({
         </span>
       ))}
       <span>· Shift+click another column heading to sort by more than one</span>
-      <SavedViews basePath={basePath} query={canonicalQuery(params)} />
+      {/* a page with tabs (?tab=) is not part of a saved view; "Main view" stays on the same tab */}
+      <SavedViews
+        basePath={basePath}
+        query={canonicalQuery(Object.fromEntries(Object.entries(params).filter(([k]) => k !== "tab")))}
+        mainHref={params.tab ? hrefWith(basePath, {}, { tab: Array.isArray(params.tab) ? params.tab[0] : params.tab }) : undefined}
+      />
     </div>
   );
 }

@@ -36,7 +36,7 @@ function readRaw(): string {
 
 // "My views" for a table page. A view is the page's current sort and filters under a name; it is saved
 // in this browser only, so it is private to whoever uses it and never changes the main view for anyone.
-export function SavedViews({ basePath, query }: { basePath: string; query: string }) {
+export function SavedViews({ basePath, query, mainHref }: { basePath: string; query: string; mainHref?: string }) {
   const router = useRouter();
   const scope = scopeFor(basePath);
   const raw = useSyncExternalStore(subscribe, readRaw, () => "");
@@ -88,7 +88,7 @@ export function SavedViews({ basePath, query }: { basePath: string; query: strin
           const picked = event.target.value;
           if (picked === "__unsaved") return;
           const view = views.find((v) => v.name === picked);
-          router.push(hrefForView(basePath, view ? view.query : ""));
+          router.push(view ? hrefForView(basePath, view.query) : (mainHref ?? basePath));
         }}
       >
         <option value="">Main view</option>
