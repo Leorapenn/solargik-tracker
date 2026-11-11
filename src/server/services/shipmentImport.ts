@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { toDateInputValue, todayInAppTz } from "@/lib/dates";
 import { MAX_SHIPMENTS, cleanShipment, findShipment, type CleanShipment, type ShipmentInput } from "@/lib/shipments";
 import { itemProjectNumber, shipmentFromMonday, trackedProjectNumber, type MondayShipmentItem, type ShipmentImport } from "@/lib/shipmentFromMonday";
+import { mergeFiles } from "@/lib/shipmentFiles";
 import { listShipments, shipmentData, type ShipmentView } from "@/server/services/shipments";
 
 // Bringing the monday.com shipping board (read-only) into the projects' Shipments: for the project numbers asked for, every item of
@@ -109,7 +110,8 @@ export async function planShipmentImport(items: MondayShipmentItem[], projectNum
       if (match) {
         const { merged, filled } = fillEmpty(match, imp);
         const cleaned = cleanShipment(merged, today);
-        actions.push({ kind: kind === "link" ? "link" : "refresh", item, imp, shipmentId: match.id, filled, clean: cleaned.ok ? cleaned.value : null });
+        // the links already on the shipment stay (a file moved to SharePoint is not turned back into a monday.com link); only new files are added
+        actions.push({ kind: kind === "link" ? "link" : "refresh", item, imp: { ...imp, files: mergeFiles(match.files, imp.files) }, shipmentId: match.id, filled, clean: cleaned.ok ? cleaned.value : null });
         continue;
       }
       if (count >= MAX_SHIPMENTS) {

@@ -40,7 +40,12 @@ type Row = Awaited<ReturnType<typeof prisma.shipment.findMany>>[number];
 // The stored Files column ([{ name, url }], written only by the import) as a safe list.
 export function filesOf(json: unknown): ShipmentFile[] {
   if (!Array.isArray(json)) return [];
-  return json.flatMap((f) => (f && typeof f === "object" && typeof (f as ShipmentFile).name === "string" && typeof (f as ShipmentFile).url === "string" && /^https:\/\//.test((f as ShipmentFile).url) ? [{ name: (f as ShipmentFile).name, url: (f as ShipmentFile).url }] : []));
+  return json.flatMap((f) => {
+    if (!f || typeof f !== "object") return [];
+    const { name, url, mondayUrl } = f as ShipmentFile;
+    if (typeof name !== "string" || typeof url !== "string" || !/^https:\/\//.test(url)) return [];
+    return [{ name, url, ...(typeof mondayUrl === "string" && /^https:\/\//.test(mondayUrl) ? { mondayUrl } : {}) }];
+  });
 }
 
 const toView = (s: Row): ShipmentView => ({

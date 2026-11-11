@@ -23,7 +23,8 @@ export const MONDAY_SHIPPING_COLUMNS = {
 
 export type MondayShipmentItem = { id: string; name: string; group: { id: string; title: string }; values: Partial<Record<keyof typeof MONDAY_SHIPPING_COLUMNS, string | null>> };
 
-export type ShipmentFile = { name: string; url: string };
+// `mondayUrl` is only there on a file that was moved to SharePoint: the monday.com address it came from (see src/lib/shipmentFiles.ts).
+export type ShipmentFile = { name: string; url: string; mondayUrl?: string };
 
 // monday.com's status -> the 360 stage. "Arrive to the site" is Delivered; arriving at a warehouse is its own stage. Anything else is
 // reported as not understood.

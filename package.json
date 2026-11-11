@@ -15,6 +15,7 @@
     "phases:sync": "tsx src/scripts/sync-phase-statuses.ts",
     "profiles:fill": "tsx src/scripts/fill-profiles.ts",
     "shipments:import": "tsx src/scripts/import-shipments.ts",
+    "shipments:files": "tsx src/scripts/save-shipment-files.ts",
     "monday:inspect-columns": "tsx src/monday/inspectColumns.ts"
   },
   "prisma": {
