@@ -343,7 +343,10 @@ export default async function ProjectDetailPage({
         />
       </details>
       </div>
-      <details open style={{ marginTop: 4 }}>
+      {/* The reference cards below start closed so the items table is not pushed far down the page; the suggestion card stays visible because it asks for a decision. */}
+      <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
+
+      <details style={{ marginTop: 4 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Project profile</summary>
         <ProjectProfileCard
           projectId={project.id}
@@ -365,16 +368,22 @@ export default async function ProjectDetailPage({
         />
       </details>
 
-      <details open>
+      <details>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>
           Shipments{shipments.length > 0 ? ` (${shipments.length})` : ""}
         </summary>
-        <DeliverySuggestions projectId={project.id} proposals={deliveryProposals} />
         <ShipmentsCard projectId={project.id} shipments={shipments} />
       </details>
 
-      {payments && <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />}
+      {payments && (
+        <details>
+          <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Payments</summary>
+          <PaymentsCard projectId={project.id} data={payments} todayIso={todayIso} />
+        </details>
+      )}
 
+      <details>
+        <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 700, fontSize: 15, marginBottom: 10 }}>Warranty</summary>
       <WarrantyCard
         projectId={project.id}
         structuralYears={project.warrantyStructuralYears}
@@ -388,6 +397,7 @@ export default async function ProjectDetailPage({
           todayIso,
         ).map((l) => ({ ...l, leftText: l.daysLeft === null || !l.expiresOn ? null : describeLeft(l.daysLeft, todayIso, l.expiresOn) }))}
       />
+      </details>
 
       <details style={{ color: TEXT_MUTED, fontSize: "0.85rem", marginTop: -6 }}>
         <summary style={{ cursor: "pointer", color: NAVY, fontWeight: 600 }}>
