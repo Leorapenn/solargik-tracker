@@ -20,6 +20,9 @@ const ORANGE = ["#FDE3CF", "#9A4B00"] as const;
 
 // A blank (null) is the default for every dropdown and shows as an empty box, never a word.
 export const SOIL_TESTS: Choice[] = [choice("SPT", "SPT", ...BLUE), choice("GPT", "GPT", ...PURPLE)];
+// A project created in 360 starts as GPT (Grid-Powered Tracker) unless its contract says SPT (Leora, 2026-11-15). Projects imported from
+// monday.com keep the field blank, so the importer's fill from the Control Table still applies.
+export const DEFAULT_TRACKER_POWER = "GPT";
 export const DESIGN_INFO: Choice[] = [choice("WORKING", "Working on it", ...AMBER), choice("ALL_RECEIVED", "All Received", ...GREEN)];
 export const GEOTECH: Choice[] = [choice("DONE", "Done", ...GREEN), choice("WORKING", "Working on it", ...AMBER), choice("STUCK", "Stuck", ...RED)];
 export const GENIO_CIVILE: Choice[] = [choice("SENT", "Sent", ...GREEN), choice("NA", "N/A", ...GRAY), choice("NEEDED", "Needed - Not Sent", ...RED)];

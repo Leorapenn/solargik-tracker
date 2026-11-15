@@ -8,7 +8,7 @@ import { cleanChangeOrder, cleanMilestone, type MilestoneInput } from "@/lib/pay
 import { MAX_CHANGE_ORDERS } from "@/server/services/payments";
 import { cleanStatusText } from "@/lib/statusUpdate";
 import { ITEM_STATUS_LABELS, KIND_LABELS, MAX_PER_REQUEST, MAX_TASKS_PER_UPDATE, SITE_INFO_FIELDS, SITE_INFO_LABELS, TASK_RESULT_PREFIX, cleanIncoming, describePayload, matchCustomer, matchProject, suggestionFingerprint, type Confidence, type Payload, type SiteInfoKey, type SuggestionKind } from "@/lib/suggestions";
-import type { ProfileInput } from "@/lib/projectProfile";
+import { DEFAULT_TRACKER_POWER, type ProfileInput } from "@/lib/projectProfile";
 import { setPhaseUpdate, setSubStageUpdate } from "@/server/services/statusUpdates";
 import { patchSubStages } from "@/server/services/subStages";
 import { createProject } from "@/server/services/createProject";
@@ -412,7 +412,8 @@ async function createFromProposal(payload: Extract<Payload, { kind: "NEW_PROJECT
   let detailsNote = "";
   const filled = Object.keys(payload.profile ?? {}).length;
   try {
-    if (filled > 0) await saveProfile(created.id, payload.profile);
+    // SPT or GPT (the tracker's power) is GPT unless the contract says otherwise (Leora, 2026-11-15); a person can change it.
+    await saveProfile(created.id, { soilTest: DEFAULT_TRACKER_POWER, ...payload.profile });
     if (payload.signedDate) {
       const data = { contractSigningDate: new Date(`${payload.signedDate}T00:00:00.000Z`) };
       await prisma.projectProfile.upsert({ where: { projectId: created.id }, create: { projectId: created.id, ...data }, update: data });

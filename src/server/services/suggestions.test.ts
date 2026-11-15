@@ -405,7 +405,7 @@ describe("suggestions", () => {
     expect(made.phases).toHaveLength(6);
     // the contract details were filled in the (empty) profile, and the signing date set
     const profile = await prisma.projectProfile.findUniqueOrThrow({ where: { projectId: made.id } });
-    expect(profile).toMatchObject({ supplyTerms: "DAP Germany", contractType: "EPC" });
+    expect(profile).toMatchObject({ supplyTerms: "DAP Germany", contractType: "EPC", soilTest: "GPT" }); // SPT or GPT starts as GPT
     expect(profile.pileDrivingStart?.toISOString().slice(0, 10)).toBe("2027-01-15");
     expect(profile.contractSigningDate?.toISOString().slice(0, 10)).toBe("2026-10-20");
     expect(made.phases.every((p) => p.subStages.length > 0)).toBe(true);
@@ -419,6 +419,7 @@ describe("suggestions", () => {
     expect(eur.paymentCurrency).toBe("EUR");
     expect(Number(eur.paymentBase)).toBe(120000);
     expect(eur.contractValue).toBeNull();
+    expect((await prisma.projectProfile.findUniqueOrThrow({ where: { projectId: eur.id } })).soilTest).toBe("GPT"); // even with no contract details
     // the same number again is refused and the proposal stays pending
     const { row: again } = await send({ ...body, id: `${RUN}-np2`, customer: `Test Customer ${RUN}` });
     await expect(approveSuggestion(again!.id, { customerId })).rejects.toThrow(/already exists/);
