@@ -10,7 +10,11 @@
 #   - Outlook is only READ: the message is found and ONE attachment is saved to a temporary file. Nothing in the
 #     mailbox is changed and Outlook is never closed.
 #   - Writes only inside <OneDrive - Solargik>\Projects - EXECUTION\<ProjectFolder>\Contracts + Legal[\Invoices | \Proof of payment].
-#     The project folder and "Contracts + Legal" must already exist; only "Invoices" and "Proof of payment" are ever created.
+#     The project folder must already exist. Older project folders have no "Contracts + Legal": then the folder that already holds
+#     their contracts is used instead ("Legal and Contracts", "Contracts and Legal" or "Contracts", in that order), with
+#     "Invoices" and "Proof of payment" inside it; a project folder with none of them gets a new "Contracts + Legal" (changed
+#     2026-11-18). Besides that, only "Invoices" and "Proof of payment" are ever created.
+#   - -ResolveOnly (for tests): says where a file would go and touches neither Outlook nor the disk.
 #   - Only a non-inline .pdf of at most 10 MB, that starts with %PDF and ends with %%EOF.
 #   - Never overwrites, renames, moves or deletes an existing file. A same-named different file gets the received date
 #     (and (2), (3)...) added to the new file's name; an identical copy is not saved again (the existing one is linked).
@@ -20,12 +24,27 @@ param(
   [Parameter(Mandatory = $true)][string]$AttachmentName,
   [Parameter(Mandatory = $true)][string]$ProjectFolder,
   [Parameter(Mandatory = $true)][ValidateSet('Contracts + Legal', 'Contracts + Legal\Invoices', 'Contracts + Legal\Proof of payment')][string]$Subfolder,
-  [Parameter(Mandatory = $true)][string]$ReceivedDate
+  [Parameter(Mandatory = $true)][string]$ReceivedDate,
+  [switch]$ResolveOnly
 )
 
 $ErrorActionPreference = 'Stop'
 $maxBytes = 10MB
 $sharePointBase = 'https://solargik.sharepoint.com/sites/Projects/Shared%20Documents/EXECUTION/'
+# Tests only: a different base folder (the task itself never sets this).
+$executionRoot = if ($env:REVALUE_EXECUTION_DIR) { $env:REVALUE_EXECUTION_DIR } else { Join-Path $env:USERPROFILE 'OneDrive - Solargik\Projects - EXECUTION' }
+
+# Where a project keeps its contracts: the standard "Contracts + Legal" if it has one, else the older folder that holds them,
+# else (nothing there) a new "Contracts + Legal" is needed.
+function Resolve-LegalFolder([string]$projectDir) {
+  foreach ($candidate in 'Contracts + Legal', 'Legal and Contracts', 'Contracts and Legal', 'Contracts') {
+    $path = Join-Path $projectDir $candidate
+    if (Test-Path -LiteralPath $path -PathType Container) {
+      return [pscustomobject]@{ name = (Get-Item -LiteralPath $path).Name; create = $false; standard = ($candidate -eq 'Contracts + Legal') }
+    }
+  }
+  return [pscustomobject]@{ name = 'Contracts + Legal'; create = $true; standard = $true }
+}
 
 function Result([string]$status, [string]$reason, [string]$path = '', [string]$link = '', [string]$fileName = '') {
   return [pscustomobject]@{ status = $status; path = $path; link = $link; fileName = $fileName; reason = $reason }
@@ -76,12 +95,18 @@ function Save-Attachment {
   if ($AttachmentName -notmatch '\.pdf$') { return Result 'failed' 'only .pdf attachments are saved' }
 
   # ---- the target folder (must already exist, except Invoices / Proof of payment) ----
-  $root = Join-Path $env:USERPROFILE 'OneDrive - Solargik\Projects - EXECUTION'
-  $projectDir = Join-Path $root $ProjectFolder
+  $projectDir = Join-Path $executionRoot $ProjectFolder
   if (-not (Test-Path -LiteralPath $projectDir -PathType Container)) { return Result 'failed' 'the project folder does not exist' }
-  $legalDir = Join-Path $projectDir 'Contracts + Legal'
-  if (-not (Test-Path -LiteralPath $legalDir -PathType Container)) { return Result 'failed' 'the project has no "Contracts + Legal" folder' }
-  $targetDir = Join-Path $projectDir $Subfolder
+  $legal = Resolve-LegalFolder $projectDir
+  # the sub-folder path with its first part named as this project names it ("Contracts + Legal" or the older folder)
+  $subRel = if ($Subfolder -eq 'Contracts + Legal') { $legal.name } else { $legal.name + $Subfolder.Substring('Contracts + Legal'.Length) }
+  $targetDir = Join-Path $projectDir $subRel
+  $note = if ($legal.standard) { '' } else { 'saved in the existing "' + $legal.name + '" folder: this project has no "Contracts + Legal"' }
+  if ($ResolveOnly) {
+    $would = if ($legal.create) { 'would create "Contracts + Legal"' } elseif (-not (Test-Path -LiteralPath $targetDir -PathType Container)) { 'would create the sub-folder' } else { 'folder exists' }
+    return Result 'resolved' ($would + '; ' + $note) $targetDir
+  }
+  if ($legal.create) { $null = New-Item -ItemType Directory -Path (Join-Path $projectDir $legal.name) }
   if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
     if ($Subfolder -eq 'Contracts + Legal') { return Result 'failed' 'the target folder does not exist' }
     $null = New-Item -ItemType Directory -Path $targetDir
@@ -118,9 +143,9 @@ function Save-Attachment {
     $fileName = ($AttachmentName -replace '[\\/:*?"<>|]', '_').Trim().TrimEnd('.')
     if ($fileName -notmatch '\.pdf$') { $fileName += '.pdf' }
     $placed = Place-Pdf $temp $targetDir $fileName $ReceivedDate
-    $segments = @($ProjectFolder) + @($Subfolder -split '\\') + @($placed.fileName)
+    $segments = @($ProjectFolder) + @($subRel -split '\\') + @($placed.fileName)
     $link = $sharePointBase + (($segments | ForEach-Object { [uri]::EscapeDataString($_) }) -join '/')
-    return Result $placed.status '' $placed.path $link $placed.fileName
+    return Result $placed.status $note $placed.path $link $placed.fileName
   } finally {
     # only the temporary folder created above
     if ($tempDir -like (Join-Path ([IO.Path]::GetTempPath()) 'revalue-attach-*')) {

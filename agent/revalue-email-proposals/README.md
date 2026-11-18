@@ -10,7 +10,7 @@ and a change made to the running task should be copied back here.
 |---|---|
 | `SKILL.md` | The agent's written instructions: what to search, how to decide what is relevant, every kind of proposal, the rules it must never break. Edit this to change how the agent behaves. |
 | `intake-mcp.js` | A small local tool server ("revalue-intake") with no dependencies. It gives the agent a few named tools: call 360's intake addresses (`https://solargik-tracker.vercel.app/api/intake/...`) and `save_attachment`. It reads `INTAKE_TOKEN` itself so the agent never sees it. |
-| `save-attachment.ps1` | Used by `save_attachment`. Reads classic Outlook (read only), saves one PDF into a project's `Contracts + Legal` folder in the synced SharePoint library, never overwrites or deletes. |
+| `save-attachment.ps1` | Used by `save_attachment`. Reads classic Outlook (read only), saves one PDF into a project's contract folder in the synced SharePoint library, never overwrites or deletes. Older project folders have no `Contracts + Legal` (122 of 357 in Nov 2026): it then uses the folder that already holds the contracts (`Legal and Contracts`, `Contracts and Legal` or `Contracts`), or creates `Contracts + Legal` if there is none. `-ResolveOnly` tells where a file would go without touching anything (for tests). |
 | `intake.ps1` | An older helper that posts to the intake addresses from PowerShell. The task now uses `intake-mcp.js` instead; kept for reference. |
 
 ## Running it on a machine
